@@ -372,8 +372,16 @@ company_data_to_be_ignored = [
 	"Salary Structure Assignment",
 	"Payroll Period",
 	"Income Tax Slab",
+<<<<<<< HEAD
+=======
+	"Leave Policy",
+>>>>>>> 9bbd3b09 (fix: add doctype list to ignore to hooks directly)
 	"Leave Period",
 	"Leave Policy Assignment",
 	"Employee Onboarding Template",
 	"Employee Separation Template",
+<<<<<<< HEAD
+=======
+	"Job Offer Term Template",
+>>>>>>> 9bbd3b09 (fix: add doctype list to ignore to hooks directly)
 ]
