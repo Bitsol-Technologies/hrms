@@ -46,7 +46,7 @@ bench get-app https://github.com/frappe/lending --branch ${BRANCH_TO_CLONE%"-hot
 bench get-app hrms "${GITHUB_WORKSPACE}"
 bench setup requirements --dev
 bench pip install firebase_admin
-
+bench pip install google-auth google-auth-oauthlib google-api-python-client
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &
 bench --site test_site reinstall --yes
