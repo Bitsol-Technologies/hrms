@@ -53,6 +53,8 @@ class TestEmployeeCheckin(FrappeTestCase):
 		frappe.db.set_single_value("HR Settings", "allow_geolocation_tracking", 1)
 
 		checkin.save()
+		checkin.reload()
+
 		self.assertEqual(
 			checkin.geolocation,
 			frappe.json.dumps(
@@ -68,6 +70,8 @@ class TestEmployeeCheckin(FrappeTestCase):
 				}
 			),
 		)
+
+		frappe.db.set_single_value("HR Settings", "allow_geolocation_tracking", 0)
 
 	def test_add_log_based_on_employee_field(self):
 		employee = make_employee("test_add_log_based_on_employee_field@example.com")
@@ -208,6 +212,9 @@ class TestEmployeeCheckin(FrappeTestCase):
 		timestamp = datetime.combine(date, get_time("08:45:00"))
 		log = make_checkin(employee, timestamp)
 		self.assertEqual(log.shift, shift1.name)
+
+		timestamp = datetime.combine(date, get_time("12:15:00"))
+		make_checkin(employee, timestamp, log_type="OUT")
 
 		timestamp = datetime.combine(date, get_time("12:45:00"))
 		log = make_checkin(employee, timestamp)
@@ -508,15 +515,15 @@ class TestEmployeeCheckin(FrappeTestCase):
 
 		timestamp = datetime.combine(add_days(date, -1), get_time("11:00:00"))
 		# allowed as it is before the shift start date
-		make_checkin(employee, timestamp, 20, 65)
+		make_checkin(employee, timestamp, latitude=20, longitude=65)
 
 		timestamp = datetime.combine(date, get_time("06:00:00"))
 		# allowed as it is before the shift start time
-		make_checkin(employee, timestamp, 20, 65)
+		make_checkin(employee, timestamp, latitude=20, longitude=65)
 
 		timestamp = datetime.combine(date, get_time("10:00:00"))
 		# allowed as distance (150m) is within checkin radius (500m)
-		make_checkin(employee, timestamp, 24.001, 72.001)
+		make_checkin(employee, timestamp, latitude=24.001, longitude=72.001)
 
 		timestamp = datetime.combine(date, get_time("10:30:00"))
 		log = frappe.get_doc(
@@ -534,7 +541,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		# to ensure that the correct shift assignment is considered
 		timestamp = datetime.combine(date, get_time("16:00:00"))
 		# allowed as distance (1506m) is within checkin radius (2000m)
-		make_checkin(employee, timestamp, 25.01, 75.01)
+		make_checkin(employee, timestamp, latitude=25.01, longitude=75.01)
 
 		timestamp = datetime.combine(date, get_time("16:30:00"))
 		log = frappe.get_doc(
