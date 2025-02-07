@@ -592,22 +592,21 @@ def make_n_checkins(employee, n, hours_to_reverse=1):
 
 
 def make_checkin(employee, time=None, log_type="IN", latitude=None, longitude=None):
-    if not time:
-        time = now_datetime()
+	if not time:
+		time = now_datetime()
 
-    log = frappe.get_doc(
-        {
-            "doctype": "Employee Checkin",
-            "employee": employee,
-            "time": time,
-            "device_id": "device1",
-            "log_type": log_type,  # Now flexible
-            "latitude": latitude,
-            "longitude": longitude,
-        }
-    ).insert()
-    return log
-
+	log = frappe.get_doc(
+		{
+			"doctype": "Employee Checkin",
+			"employee": employee,
+			"time": time,
+			"device_id": "device1",
+			"log_type": log_type,  # Now flexible
+			"latitude": latitude,
+			"longitude": longitude,
+		}
+	).insert()
+	return log
 
 
 def make_shift_location(location_name, latitude, longitude, checkin_radius=500):

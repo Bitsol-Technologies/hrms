@@ -2191,7 +2191,7 @@ def make_leave_application(
 			company=company or erpnext.get_default_company() or "_Test Company",
 			status="Approved",
 			leave_approver="test@example.com",
-			description= "Test leave reason", 
+			description="Test leave reason",
 		)
 	).insert()
 

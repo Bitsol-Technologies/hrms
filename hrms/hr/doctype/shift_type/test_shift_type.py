@@ -2,6 +2,7 @@
 # See license.txt
 from datetime import datetime, timedelta
 from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, get_time, get_year_ending, get_year_start, getdate, now_datetime
@@ -15,8 +16,9 @@ from hrms.tests.test_utils import add_date_to_holiday_list
 
 
 class TestShiftType(FrappeTestCase):
-	
 	def setUp(self):
+		frappe.db.delete("Purchase Invoice")
+		frappe.db.delete("Supplier")
 		frappe.db.delete("Shift Type")
 		frappe.db.delete("Shift Assignment")
 		frappe.db.delete("Employee Checkin")
@@ -25,6 +27,9 @@ class TestShiftType(FrappeTestCase):
 		from_date = get_year_start(getdate())
 		to_date = get_year_ending(getdate())
 		self.holiday_list = make_holiday_list(from_date=from_date, to_date=to_date)
+
+
+
 
 	def test_mark_attendance(self):
 		from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
@@ -79,7 +84,6 @@ class TestShiftType(FrappeTestCase):
 		)
 		self.assertEqual(attendance, "Present")
 
-	
 	def test_attendance_date_for_different_start_and_actual_start_date(self):
 		from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
 
@@ -109,7 +113,6 @@ class TestShiftType(FrappeTestCase):
 		)
 		self.assertEqual(attendance.status, "Present")
 		self.assertEqual(attendance.attendance_date, date)
-
 
 	def test_entry_and_exit_grace(self):
 		from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
@@ -458,15 +461,17 @@ class TestShiftType(FrappeTestCase):
 		before its actual end time
 		"""
 		from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
+
 		frappe.flags.in_test = True
 
 		try:
-
 			employee = make_employee("test_employee_checkin@example.com", company="_Test Company")
 			curr_date = getdate()
 
 			# this shift's valid checkout period (+60 mins) will be till 00:30:00 today, so it goes beyond a day
-			shift_type = setup_shift_type(shift_type="Test Absent", start_time="15:00:00", end_time="23:30:00")
+			shift_type = setup_shift_type(
+				shift_type="Test Absent", start_time="15:00:00", end_time="23:30:00"
+			)
 			shift_type.last_sync_of_checkin = datetime.combine(curr_date, get_time("00:30:00"))
 			shift_type.save()
 
