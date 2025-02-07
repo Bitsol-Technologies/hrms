@@ -142,7 +142,6 @@ def send_birthday_reminder(recipients, reminder_text, birthday_persons, message,
 		header=_("Birthday Reminder 🎂"),
 		create_notification_log=True,
 		from_users=["Administrator"],
-		email_template_name="Birthday Wish Template",
 	)
 
 
