@@ -39,26 +39,41 @@ class Interview(Document):
 
 	def after_insert(self):
 		meeting_link = get_meeting_link()
-
 		recipients = get_recipients(self.name)
-		ics_file = self.create_ics_file(recipients)
-		attachments = [{"fname": "event.ics", "fcontent": ics_file}]
-		frappe.sendmail(
-			recipients=recipients,
-			create_notification_log=True,
-			from_users=["Administrator"],
-			for_users=recipients.remove(self.job_applicant),
-			args=dict(
-				name=self.applicant_name,
-				title=self.job_title,
-				location=self.location,
-				date=self.scheduled_on,
-				time=self.from_time,
-				meeting_link=meeting_link,
-			),
-			email_template_name="Interview Scheduling Template",
-			attachments=attachments,
-		)
+		ics_file = self.create_ics_file(recipients, meeting_link)
+
+		# Create a copy of recipients list before modification
+		notification_recipients = recipients.copy()
+		if self.job_applicant in notification_recipients:
+			notification_recipients.remove(self.job_applicant)
+
+		# Create the attachment tuple as expected by Frappe
+		attachment = {
+			"fname": "event.ics",
+			"fcontent": ics_file
+		}
+		try:
+			frappe.sendmail(
+				recipients=recipients,
+				create_notification_log=True,
+				from_users=["Administrator"],
+				for_users=notification_recipients,  # Use the modified recipients list
+				args={
+					"name": self.applicant_name,
+					"title": self.job_title,
+					"location": self.location,
+					"date": self.scheduled_on,
+					"time": self.from_time[:5] if len(self.from_time) > 5 else self.from_time,
+					"meeting_link": meeting_link,
+					"resume_link": self.resume_link,
+				},
+				email_template_name="Interview Scheduling Template" if self.location == "Remote" else "Interview on site",
+				attachments=[attachment]  # Pass the attachment in a list
+			)
+		except Exception as e:
+			frappe.log_error(f"Error sending email: {e}")
+
+
 
 	def validate_duplicate_interview(self):
 		duplicate_interview = frappe.db.exists(
@@ -153,7 +168,7 @@ class Interview(Document):
 
 		frappe.msgprint(_("Interview Rescheduled successfully"), indicator="green")
 
-	def create_ics_file(self, recipients):
+	def create_ics_file(self, recipients, meeting_link):
 		event_date = datetime.strptime(self.scheduled_on, "%Y-%m-%d").date()
 		start_time_obj = datetime.strptime(self.from_time, "%H:%M:%S").time()
 		end_time_obj = datetime.strptime(self.to_time, "%H:%M:%S").time()
@@ -168,37 +183,38 @@ class Interview(Document):
 
 		# Create ICS content
 		ics_content = f"""BEGIN:VCALENDAR
-    PRODID:-//Google Inc//Google Calendar 70.9054//EN
-    VERSION:2.0
-    CALSCALE:GREGORIAN
-    METHOD:REQUEST
-    BEGIN:VTIMEZONE
-    TZID:{timezone}
-    X-LIC-LOCATION:{timezone}
-    BEGIN:STANDARD
-    TZOFFSETFROM:+0500
-    TZOFFSETTO:+0500
-    TZNAME:PKT
-    DTSTART:19700101T000000
-    END:STANDARD
-    END:VTIMEZONE
-    BEGIN:VEVENT
-    DTSTART;TZID={timezone}:{start_time.strftime('%Y%m%dT%H%M%S')}
-    DTEND;TZID={timezone}:{end_time.strftime('%Y%m%dT%H%M%S')}
-    DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}
-    ORGANIZER;CN=Mashal Farman:mailto:mashal@bitsol.tech
-    UID:{uuid.uuid4()}@google.com
-    X-GOOGLE-CONFERENCE:https://meet.google.com/txo-unkn-pes
-    CREATED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
-    DESCRIPTION:{event_description}
-    LAST-MODIFIED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
-    STATUS:CONFIRMED
-    SUMMARY:{event_name}
-    TRANSP:OPAQUE
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VTIMEZONE
+TZID:{timezone}
+X-LIC-LOCATION:{timezone}
+BEGIN:STANDARD
+TZOFFSETFROM:+0500
+TZOFFSETTO:+0500
+TZNAME:PKT
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTART;TZID={timezone}:{start_time.strftime('%Y%m%dT%H%M%S')}
+DTEND;TZID={timezone}:{end_time.strftime('%Y%m%dT%H%M%S')}
+DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}
+ORGANIZER;CN=Mashal Farman:mailto:mashal@bitsol.tech
+UID:{uuid.uuid4()}@google.com
+X-GOOGLE-CONFERENCE:{meeting_link}
+CREATED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
+DESCRIPTION:{event_description}
+LAST-MODIFIED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
+STATUS:CONFIRMED
+SUMMARY:{event_name}
+TRANSP:OPAQUE
 """
 
 		for attenndee in recipients:
-			ics_content += f"ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN={attenndee};X-NUM-GUESTS=0:mailto:{attenndee}"
+			ics_content += f"""ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=
+ TRUE;CN={attenndee};X-NUM-GUESTS=0:mailto:{attenndee}\n"""
 
 		ics_content += "END:VEVENT\nEND:VCALENDAR"
 		return ics_content
@@ -523,11 +539,12 @@ def get_events(start, end, filters=None):
 
 def get_meeting_link():
 	try:
-		import json
-
 		server_key = frappe.db.get_single_value("FCM Notification Settings", "google_service_account")
-		creds = Credentials.from_service_account_file(json.loads(server_key), scopes=SCOPES)
-		impersonated_creds = creds.with_subject("hr@bitsol.tech")
+		if isinstance(server_key, str):
+			import json
+			server_key = json.loads(server_key)
+		creds = Credentials.from_service_account_info(server_key, scopes=SCOPES)
+		impersonated_creds = creds.with_subject('hr@bitsol.tech')
 	except Exception as e:
 		frappe.msgprint(f"Error during authorization: {e}")
 		return None
@@ -536,7 +553,6 @@ def get_meeting_link():
 		client = meet_v2.SpacesServiceClient(credentials=impersonated_creds)
 		request = meet_v2.CreateSpaceRequest()
 		response = client.create_space(request=request)
-		frappe.msgprint(f"Space created: {response.meeting_uri}")
 		return response.meeting_uri
 	except Exception as e:
 		frappe.msgprint(f"Error creating space: {e}")

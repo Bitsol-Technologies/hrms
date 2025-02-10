@@ -52,6 +52,7 @@
    "fieldtype": "Data",
    "label": "Email Address",
    "options": "Email",
+   "permlevel": 1,
    "reqd": 1
   },
   {
@@ -114,7 +115,8 @@
    "fieldname": "phone_number",
    "fieldtype": "Data",
    "label": "Phone Number",
-   "options": "Phone"
+   "options": "Phone",
+   "permlevel": 1
   },
   {
    "fieldname": "country",
@@ -143,6 +145,7 @@
    "fieldtype": "Currency",
    "label": "Current Salary",
    "options": "currency",
+   "permlevel": 1,
    "precision": "0"
   },
   {
@@ -150,6 +153,7 @@
    "fieldtype": "Currency",
    "label": "Expected Salary",
    "options": "currency",
+   "permlevel": 1,
    "precision": "0"
   },
   {
@@ -160,7 +164,8 @@
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",
-   "options": "Currency"
+   "options": "Currency",
+   "permlevel": 1
   },
   {
    "fieldname": "employee_referral",
@@ -202,7 +207,7 @@
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-16 13:06:05.312255",
+ "modified": "2025-02-06 16:39:27.840947",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
