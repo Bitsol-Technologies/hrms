@@ -12,6 +12,7 @@
   "job_title",
   "designation",
   "attachment",
+  "leads",
   "column_break_5",
   "status",
   "posted_on",
@@ -256,12 +257,19 @@
    "fieldname": "attachment",
    "fieldtype": "Attach",
    "label": "Attachment"
+  },
+  {
+   "fieldname": "leads",
+   "fieldtype": "Table MultiSelect",
+   "label": "Leads",
+   "options": "HD Team Member"
   }
  ],
  "icon": "fa fa-bookmark",
  "idx": 1,
+ "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-11-05 12:41:27.981102",
+ "modified": "2025-02-06 11:43:37.833891",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Opening",
