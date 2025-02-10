@@ -1,0 +1,31 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "creation": "2025-01-29 14:41:36.582573",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "HD Ticket",
+ "enabled": 1,
+ "event": "Value Change",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "Service Request {{ doc.name }}: {{ doc.subject }} <br/>\n\n\nStatus Updated to {{ doc.status }} <br/>\n\n\nOpen Ticket for further details ",
+ "message_type": "HTML",
+ "modified": "2025-01-29 15:23:15.379123",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Service Request Updated",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "raised_by"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "Update: Service Request {{ doc.name }}",
+ "value_changed": "status"
+}

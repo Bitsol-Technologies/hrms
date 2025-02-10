@@ -2,19 +2,21 @@
 # For license information, please see license.txt
 
 
-from datetime import datetime, timedelta
-from google.oauth2.service_account import Credentials
-from google.apps import meet_v2
-import frappe
 import uuid
+from datetime import datetime, timedelta
+
+from google.apps import meet_v2
+from google.oauth2.service_account import Credentials
+
+import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Avg
 from frappe.utils import cint, cstr, get_datetime, get_link_to_form, getdate, nowtime
 
 SCOPES = [
-	'https://www.googleapis.com/auth/meetings.space.created',
-	'https://www.googleapis.com/auth/meetings.space.readonly'
+	"https://www.googleapis.com/auth/meetings.space.created",
+	"https://www.googleapis.com/auth/meetings.space.readonly",
 ]
 
 
@@ -39,12 +41,12 @@ class Interview(Document):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
 		ics_file = self.create_ics_file(recipients, meeting_link)
-		
+
 		# Create a copy of recipients list before modification
 		notification_recipients = recipients.copy()
 		if self.job_applicant in notification_recipients:
 			notification_recipients.remove(self.job_applicant)
-		
+
 		# Create the attachment tuple as expected by Frappe
 		attachment = {
 			"fname": "event.ics",
@@ -120,7 +122,6 @@ class Interview(Document):
 				"args": {"job_applicant": self.job_applicant, "status": job_applicant_status},
 			},
 		)
-
 
 	def get_job_applicant_status(self) -> str | None:
 		status_map = {"Cleared": "Accepted", "Rejected": "Rejected"}
@@ -217,6 +218,7 @@ TRANSP:OPAQUE
 
 		ics_content += "END:VEVENT\nEND:VCALENDAR"
 		return ics_content
+
 
 @frappe.whitelist()
 def get_interviewers(interview_round: str) -> list[str]:
@@ -544,7 +546,7 @@ def get_meeting_link():
 		creds = Credentials.from_service_account_info(server_key, scopes=SCOPES)
 		impersonated_creds = creds.with_subject('hr@bitsol.tech')
 	except Exception as e:
-		print(f"Error during authorization: {e}")
+		frappe.msgprint(f"Error during authorization: {e}")
 		return None
 
 	try:
@@ -553,7 +555,5 @@ def get_meeting_link():
 		response = client.create_space(request=request)
 		return response.meeting_uri
 	except Exception as e:
-		print(f"Error creating space: {e}")
+		frappe.msgprint(f"Error creating space: {e}")
 		return None
-
-

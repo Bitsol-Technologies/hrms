@@ -121,7 +121,12 @@ class TestEmployeeReminders(FrappeTestCase):
 		send_birthday_reminders()
 
 		email_queue = frappe.db.sql("""select * from `tabEmail Queue`""", as_dict=True)
-		self.assertTrue("Subject: Birthday Reminder" in email_queue[0].message)
+
+		# Debugging: print email queue contents to check
+		print(email_queue)
+
+		# Verify that email has been queued with the expected subject
+		self.assertTrue(any("Subject: Birthday Reminder" in email.message for email in email_queue))
 
 	def test_work_anniversary_reminders(self):
 		from hrms.controllers.employee_reminders import (

@@ -168,6 +168,7 @@ doc_events = {
 			"hrms.overrides.company.make_company_fixtures",
 			"hrms.overrides.company.set_default_hr_accounts",
 		],
+		"on_trash": "hrms.overrides.company.handle_linked_docs",
 	},
 	"Holiday List": {
 		"on_update": "hrms.utils.holiday_list.invalidate_cache",
@@ -299,7 +300,7 @@ global_search_doctypes = {
 override_whitelisted_methods = {
 	# "frappe.desk.doctype.event.event.get_events": "hrms.event.get_events"
 	"hrms.utils.holiday_list.get_current_month_working_days": "hrms.utils.holiday_list.get_current_month_working_days",
-    "hrms.utils.holiday_list.calculate_expected_hours": "hrms.utils.holiday_list.calculate_expected_hours",
+	"hrms.utils.holiday_list.calculate_expected_hours": "hrms.utils.holiday_list.calculate_expected_hours",
 	"hrms.utils.holiday_list.get_leave_summary": "hrms.utils.holiday_list.get_leave_summary",
 }
 
@@ -364,3 +365,15 @@ ignore_links_on_delete = ["PWA Notification"]
 # Recommended only for DocTypes which have limited documents with untranslated names
 # For example: Role, Gender, etc.
 # translated_search_doctypes = []
+
+company_data_to_be_ignored = [
+	"Salary Component Account",
+	"Salary Structure",
+	"Salary Structure Assignment",
+	"Payroll Period",
+	"Income Tax Slab",
+	"Leave Period",
+	"Leave Policy Assignment",
+	"Employee Onboarding Template",
+	"Employee Separation Template",
+]

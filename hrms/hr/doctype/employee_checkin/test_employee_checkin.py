@@ -53,6 +53,8 @@ class TestEmployeeCheckin(FrappeTestCase):
 		frappe.db.set_single_value("HR Settings", "allow_geolocation_tracking", 1)
 
 		checkin.save()
+		checkin.reload()
+
 		self.assertEqual(
 			checkin.geolocation,
 			frappe.json.dumps(
@@ -68,6 +70,8 @@ class TestEmployeeCheckin(FrappeTestCase):
 				}
 			),
 		)
+
+		frappe.db.set_single_value("HR Settings", "allow_geolocation_tracking", 0)
 
 	def test_add_log_based_on_employee_field(self):
 		employee = make_employee("test_add_log_based_on_employee_field@example.com")
@@ -208,6 +212,9 @@ class TestEmployeeCheckin(FrappeTestCase):
 		timestamp = datetime.combine(date, get_time("08:45:00"))
 		log = make_checkin(employee, timestamp)
 		self.assertEqual(log.shift, shift1.name)
+
+		timestamp = datetime.combine(date, get_time("12:15:00"))
+		make_checkin(employee, timestamp, log_type="OUT")
 
 		timestamp = datetime.combine(date, get_time("12:45:00"))
 		log = make_checkin(employee, timestamp)
@@ -508,15 +515,15 @@ class TestEmployeeCheckin(FrappeTestCase):
 
 		timestamp = datetime.combine(add_days(date, -1), get_time("11:00:00"))
 		# allowed as it is before the shift start date
-		make_checkin(employee, timestamp, 20, 65)
+		make_checkin(employee, timestamp, latitude=20, longitude=65)
 
 		timestamp = datetime.combine(date, get_time("06:00:00"))
 		# allowed as it is before the shift start time
-		make_checkin(employee, timestamp, 20, 65)
+		make_checkin(employee, timestamp, latitude=20, longitude=65)
 
 		timestamp = datetime.combine(date, get_time("10:00:00"))
 		# allowed as distance (150m) is within checkin radius (500m)
-		make_checkin(employee, timestamp, 24.001, 72.001)
+		make_checkin(employee, timestamp, latitude=24.001, longitude=72.001)
 
 		timestamp = datetime.combine(date, get_time("10:30:00"))
 		log = frappe.get_doc(
@@ -534,7 +541,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		# to ensure that the correct shift assignment is considered
 		timestamp = datetime.combine(date, get_time("16:00:00"))
 		# allowed as distance (1506m) is within checkin radius (2000m)
-		make_checkin(employee, timestamp, 25.01, 75.01)
+		make_checkin(employee, timestamp, latitude=25.01, longitude=75.01)
 
 		timestamp = datetime.combine(date, get_time("16:30:00"))
 		log = frappe.get_doc(
@@ -583,6 +590,34 @@ class TestEmployeeCheckin(FrappeTestCase):
 		# shift does not change since attendance is already marked
 		self.assertEqual(log2.shift, shift1.name)
 
+	def test_bulk_fetch_shift_if_shift_settings_change_for_the_same_shift(self):
+		emp1 = make_employee("bulkemp1@example.com", company="_Test Company")
+		emp2 = make_employee("bulkemp2@example.com", company="_Test Company")
+
+		# 8 - 12,
+		shift = setup_shift_type(shift_type="Test Bulk Shift")
+		date = getdate()
+		make_shift_assignment(shift.name, emp1, date)
+		make_shift_assignment(shift.name, emp2, date)
+
+		timestamp = datetime.combine(date, get_time("08:00:00"))
+		# shift actual start is `current date 07:00:00`
+		log1 = make_checkin(emp1, timestamp)
+		self.assertEqual(log1.shift_actual_start, datetime.combine(date, get_time("07:00:00")))
+		log2 = make_checkin(emp2, timestamp)
+		self.assertEqual(log2.shift_actual_start, datetime.combine(date, get_time("07:00:00")))
+
+		# change shift settings like check in buffer from 60 minutes to 120 minutes
+		# so now shift actual start is `current date 06:00:00`
+		shift.begin_check_in_before_shift_start_time = 120
+		shift.save()
+		bulk_fetch_shift([log1.name, log2.name])
+		# shift changes according to the new assignment
+		log1.reload()
+		self.assertEqual(log1.shift_actual_start, datetime.combine(date, get_time("06:00:00")))
+		log2.reload()
+		self.assertEqual(log2.shift_actual_start, datetime.combine(date, get_time("06:00:00")))
+
 
 def make_n_checkins(employee, n, hours_to_reverse=1):
 	logs = [make_checkin(employee, now_datetime() - timedelta(hours=hours_to_reverse, minutes=n + 1))]
@@ -591,7 +626,7 @@ def make_n_checkins(employee, n, hours_to_reverse=1):
 	return logs
 
 
-def make_checkin(employee, time=None, latitude=None, longitude=None):
+def make_checkin(employee, time=None, log_type="IN", latitude=None, longitude=None):
 	if not time:
 		time = now_datetime()
 
@@ -601,7 +636,7 @@ def make_checkin(employee, time=None, latitude=None, longitude=None):
 			"employee": employee,
 			"time": time,
 			"device_id": "device1",
-			"log_type": "IN",
+			"log_type": log_type,  # Now flexible
 			"latitude": latitude,
 			"longitude": longitude,
 		}
