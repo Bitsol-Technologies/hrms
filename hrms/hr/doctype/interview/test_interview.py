@@ -133,12 +133,9 @@ class TestInterview(FrappeTestCase):
 		interview.submit()
 		# have to manually trigger since this is updated via button
 		update_job_applicant_status({"job_applicant": interview.job_applicant, "status": "Accepted"})
-		print("Job Applicant Status Before Submit:", job_applicant.status)
-		print("Interview Status:", interview.status)
 
 		# Reload after status update
 		job_applicant.reload()
-		print("Job Applicant Status After Reload:", job_applicant.status)
 		self.assertEqual(job_applicant.status, "Accepted")
 
 	def tearDown(self):

@@ -103,7 +103,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 		employee_checkin = add_log_based_on_employee_field("3344", time_now, "mumbai_first_floor", "IN")
 		self.assertEqual(employee_checkin.employee, employee.name)
-		self.assertEqual(employee_checkin.time, time_now)
+		self.assertEqual(employee_checkin.time.strftime("%Y-%m-%d %H:%M:%S"), time_now)
 		self.assertEqual(employee_checkin.device_id, "mumbai_first_floor")
 		self.assertEqual(employee_checkin.log_type, "IN")
 
