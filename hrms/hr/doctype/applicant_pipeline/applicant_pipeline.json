@@ -2,41 +2,36 @@
  "actions": [],
  "allow_rename": 1,
  "creation": "2025-02-06 11:09:01.302924",
- "default_view": "Kanban",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "job_title",
   "applicant_name",
+  "job_title",
   "status"
  ],
  "fields": [
   {
    "fieldname": "applicant_name",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Applicant Name",
    "options": "Job Applicant"
   },
   {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Status",
-   "options": "Pending\nHR Review\nLead Review\nTelephonic Screening\nFirst Interview\nAssignment Submission\nSecond Interview\nOffer Decision\nOffer Acceptance\nBackground Check\nHired\nRejected"
-  },
-  {
-   "fetch_from": "job_id.job_title",
    "fieldname": "job_title",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Job Title",
    "options": "Job Opening"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nHR Review\nLead Review\nTelephonic Screening\nFirst Interview\nAssignment Submission\nSecond Interview\nOffer Decision\nOffer Acceptance\nBackground Check\nHired\nRejected"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-11 15:04:00.271566",
+ "modified": "2025-02-07 09:44:56.764285",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Applicant Pipeline",
