@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, flt, getdate
+from frappe.utils import add_days, flt, getdate, nowtime
 
 from hrms.hr.doctype.interview.test_interview import (
 	create_interview_and_dependencies,
@@ -16,8 +16,11 @@ class TestInterviewFeedback(FrappeTestCase):
 	def test_validation_for_skill_set(self):
 		frappe.set_user("Administrator")
 		job_applicant = create_job_applicant()
+		scheduled_on_str = add_days(getdate(), -1).strftime("%Y-%m-%d")
+		from_time = nowtime().split(".")[0]
+		to_time = nowtime().split(".")[0]
 		interview = create_interview_and_dependencies(
-			job_applicant.name, scheduled_on=add_days(getdate(), -1)
+			job_applicant.name, scheduled_on=scheduled_on_str, from_time=from_time, to_time=to_time
 		)
 		skill_ratings = get_skills_rating(interview.interview_round)
 
@@ -34,8 +37,11 @@ class TestInterviewFeedback(FrappeTestCase):
 
 	def test_average_ratings_on_feedback_submission_and_cancellation(self):
 		job_applicant = create_job_applicant()
+		scheduled_on_str = add_days(getdate(), -1).strftime("%Y-%m-%d")
+		from_time = nowtime().split(".")[0]
+		to_time = nowtime().split(".")[0]
 		interview = create_interview_and_dependencies(
-			job_applicant.name, scheduled_on=add_days(getdate(), -1)
+			job_applicant.name, scheduled_on=scheduled_on_str, from_time=from_time, to_time=to_time
 		)
 		skill_ratings = get_skills_rating(interview.interview_round)
 

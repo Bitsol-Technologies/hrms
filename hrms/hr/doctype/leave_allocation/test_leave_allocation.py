@@ -604,6 +604,7 @@ class TestLeaveAllocation(FrappeTestCase):
 				"docstatus": 1,
 				"status": "Approved",
 				"leave_approver": "test@example.com",
+				"description": "_Test Description",
 			}
 		)
 		leave_application.submit()

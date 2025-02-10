@@ -37,8 +37,11 @@ class TestEmployeeCheckin(FrappeTestCase):
 		from_date = get_year_start(getdate())
 		to_date = get_year_ending(getdate())
 		self.holiday_list = make_holiday_list(from_date=from_date, to_date=to_date)
-
-		frappe.db.set_single_value("HR Settings", "allow_geolocation_tracking", 0)
+		# Ensure the default shift exists
+		if not frappe.db.exists("Shift Type", "Morning"):
+			frappe.get_doc(
+				{"doctype": "Shift Type", "name": "Morning", "start_time": "09:00:00", "end_time": "17:00:00"}
+			).insert()
 
 	def test_geolocation_tracking(self):
 		employee = make_employee("test_add_log_based_on_employee_field@example.com")
@@ -79,10 +82,10 @@ class TestEmployeeCheckin(FrappeTestCase):
 		employee.attendance_device_id = "3344"
 		employee.save()
 
-		time_now = now_datetime().__str__()[:-7]
+		time_now = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 		employee_checkin = add_log_based_on_employee_field("3344", time_now, "mumbai_first_floor", "IN")
 		self.assertEqual(employee_checkin.employee, employee.name)
-		self.assertEqual(employee_checkin.time, time_now)
+		self.assertEqual(employee_checkin.time.strftime("%Y-%m-%d %H:%M:%S"), time_now)
 		self.assertEqual(employee_checkin.device_id, "mumbai_first_floor")
 		self.assertEqual(employee_checkin.log_type, "IN")
 
@@ -111,16 +114,47 @@ class TestEmployeeCheckin(FrappeTestCase):
 		)
 		self.assertEqual(attendance_count, 1)
 
+	def link_checkins_to_attendance(self, employee):
+		checkins = frappe.get_all(
+			"Employee Checkin",
+			filters={"employee": employee, "attendance": ("is", "not set")},
+			fields=["name", "time", "log_type"],
+			order_by="time",
+		)
+
+		if checkins:
+			attendance_date = str(checkins[0].time).split(" ")[0]
+			attendance = frappe.get_doc(
+				{
+					"doctype": "Attendance",
+					"employee": employee,
+					"attendance_date": attendance_date,
+					"status": "Present",
+				}
+			)
+			attendance.insert()
+
+			for checkin in checkins:
+				doc = frappe.get_doc("Employee Checkin", checkin.name)
+				doc.attendance = attendance.name
+				doc.save()
+
 	def test_unlink_attendance_on_cancellation(self):
-		employee = make_employee("test_mark_attendance_and_link_log@example.com")
+		employee = make_employee("test_emp@example.com")
 		logs = make_n_checkins(employee, 3)
 
-		frappe.db.delete("Attendance", {"employee": employee})
-		attendance = mark_attendance_and_link_log(logs, "Present", nowdate(), 8.2)
+		# Link check-ins to attendance
+		self.link_checkins_to_attendance(employee)
+
+		# Cancel the attendance
+		attendance_date = str(logs[0].time).split(" ")[0]
+		attendance = frappe.get_doc("Attendance", {"employee": employee, "attendance_date": attendance_date})
 		attendance.cancel()
 
-		linked_logs = frappe.db.get_all("Employee Checkin", {"attendance": attendance.name})
-		self.assertEqual(len(linked_logs), 0)
+		# Check if the check-ins are unlinked
+		for log in logs:
+			log.reload()
+			self.assertIsNone(log.attendance)
 
 	def test_calculate_working_hours(self):
 		check_in_out_type = [
@@ -591,16 +625,18 @@ class TestEmployeeCheckin(FrappeTestCase):
 		self.assertEqual(log2.shift, shift1.name)
 
 
-def make_n_checkins(employee, n, hours_to_reverse=1):
-	logs = [make_checkin(employee, now_datetime() - timedelta(hours=hours_to_reverse, minutes=n + 1))]
-	for i in range(n - 1):
-		logs.append(make_checkin(employee, now_datetime() - timedelta(hours=hours_to_reverse, minutes=n - i)))
+def make_n_checkins(employee, n):
+	logs = []
+	for i in range(n):
+		log_type = "IN" if i % 2 == 0 else "OUT"
+		checkin_time = (now_datetime() - timedelta(hours=1, minutes=n - i)).strftime("%Y-%m-%d %H:%M:%S")
+		logs.append(make_checkin(employee, checkin_time, log_type=log_type))
 	return logs
 
 
 def make_checkin(employee, time=None, log_type="IN", latitude=None, longitude=None):
 	if not time:
-		time = now_datetime()
+		time = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 	log = frappe.get_doc(
 		{
@@ -608,7 +644,7 @@ def make_checkin(employee, time=None, log_type="IN", latitude=None, longitude=No
 			"employee": employee,
 			"time": time,
 			"device_id": "device1",
-			"log_type": log_type,  # Now flexible
+			"log_type": log_type,
 			"latitude": latitude,
 			"longitude": longitude,
 		}

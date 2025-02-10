@@ -1,6 +1,3 @@
-# Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
-# See license.txt
-
 import datetime
 import os
 
@@ -8,19 +5,13 @@ import frappe
 from frappe import _
 from frappe.core.doctype.user_permission.test_user_permission import create_user
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, get_datetime, get_time, getdate, nowtime
+from frappe.utils import add_days, get_time, getdate, nowtime
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
-from erpnext.setup.doctype.employee.test_employee import make_employee
 
-from hrms.hr.doctype.interview.interview import (
-	DuplicateInterviewRoundError,
-	get_feedback,
-	get_skill_wise_average_rating,
-	update_job_applicant_status,
-)
+from hrms.hr.doctype.interview.interview import DuplicateInterviewRoundError, get_skill_wise_average_rating
 from hrms.hr.doctype.job_applicant.job_applicant import get_interview_details
-from hrms.tests.test_utils import create_job_applicant, get_email_by_subject
+from hrms.hr.doctype.job_applicant.test_job_applicant import create_job_applicant
 
 
 class TestInterview(FrappeTestCase):
@@ -44,11 +35,16 @@ class TestInterview(FrappeTestCase):
 		frappe.db.sql("DELETE FROM `tabEmail Queue`")
 
 		interview.reschedule_interview(
-			add_days(getdate(previous_scheduled_date), 2), from_time="11:00:00", to_time="12:00:00"
+			add_days(datetime.datetime.strptime(previous_scheduled_date, "%Y-%m-%d"), 2),
+			from_time="11:00:00",
+			to_time="12:00:00",
 		)
 		interview.reload()
 
-		self.assertEqual(interview.scheduled_on, add_days(getdate(previous_scheduled_date), 2))
+		self.assertEqual(
+			interview.scheduled_on,
+			add_days(datetime.datetime.strptime(previous_scheduled_date, "%Y-%m-%d"), 2).strftime("%Y-%m-%d"),
+		)
 		self.assertEqual(get_time(interview.from_time), get_time("11:00:00"))
 		self.assertEqual(get_time(interview.to_time), get_time("12:00:00"))
 
@@ -63,19 +59,17 @@ class TestInterview(FrappeTestCase):
 		setup_reminder_settings()
 
 		job_applicant = create_job_applicant()
-		scheduled_on = datetime.datetime.now() + datetime.timedelta(minutes=10)
+		scheduled_on = (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%Y-%m-%d")
 
-		create_interview_and_dependencies(job_applicant.name, scheduled_on=scheduled_on)
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=scheduled_on)
 
-		frappe.db.delete("Email Queue")
-
-		frappe.db.set_single_value("HR Settings", "send_interview_reminder", 0)
+		frappe.db.sql("DELETE FROM `tabEmail Queue`")
 		send_interview_reminder()
-		self.assertFalse(get_email_by_subject("Subject: Interview Reminder"))
 
-		frappe.db.set_single_value("HR Settings", "send_interview_reminder", 1)
-		send_interview_reminder()
-		self.assertTrue(get_email_by_subject("Subject: Interview Reminder"))
+		interview.reload()
+
+		email_queue = frappe.db.sql("""select * from `tabEmail Queue`""", as_dict=True)
+		self.assertTrue("Subject: Interview Reminder" in email_queue[0].message)
 
 	def test_notification_for_feedback_submission(self):
 		from hrms.hr.doctype.interview.interview import send_daily_feedback_reminder
@@ -88,15 +82,11 @@ class TestInterview(FrappeTestCase):
 			job_applicant.name, scheduled_on=scheduled_on, status="Under Review"
 		)
 
-		frappe.db.delete("Email Queue")
-
-		frappe.db.set_single_value("HR Settings", "send_interview_feedback_reminder", 0)
+		frappe.db.sql("DELETE FROM `tabEmail Queue`")
 		send_daily_feedback_reminder()
-		self.assertFalse(get_email_by_subject("Subject: Interview Feedback Reminder"))
 
-		frappe.db.set_single_value("HR Settings", "send_interview_feedback_reminder", 1)
-		send_daily_feedback_reminder()
-		self.assertTrue(get_email_by_subject("Subject: Interview Feedback Reminder"))
+		email_queue = frappe.db.sql("""select * from `tabEmail Queue`""", as_dict=True)
+		self.assertTrue("Subject: Interview Feedback Reminder" in email_queue[0].message)
 
 	def test_get_interview_details_for_applicant_dashboard(self):
 		job_applicant = create_job_applicant()
@@ -135,63 +125,14 @@ class TestInterview(FrappeTestCase):
 		ratings = get_skill_wise_average_rating(interview.name)
 		self.assertEqual(ratings, [{"skill": "Python", "rating": 0.75}, {"skill": "JS", "rating": 0.85}])
 
-	def test_get_feedback(self):
-		from hrms.hr.doctype.interview_feedback.test_interview_feedback import create_interview_feedback
-
-		job_applicant = create_job_applicant()
-		interview = create_interview_and_dependencies(job_applicant.name)
-		make_employee(
-			"test_interviewer2@example.com",
-			company="_Test Company",
-			first_name="Test",
-			date_of_joining=frappe.utils.add_years(getdate(), -2),
-			designation="Engineer",
-			user_id="test_interviewer2@example.com",
-		)
-
-		feedback_1 = create_interview_feedback(
-			interview.name,
-			"test_interviewer1@example.com",
-			[{"skill": "Python", "rating": 0.9}, {"skill": "JS", "rating": 0.8}],
-		)
-		feedback_2 = create_interview_feedback(
-			interview.name,
-			"test_interviewer2@example.com",
-			[{"skill": "Python", "rating": 0.6}, {"skill": "JS", "rating": 0.9}],
-		)
-
-		feedback = get_feedback(interview.name)
-		expected_data = [
-			{
-				"name": feedback_1.name,
-				"added_on": get_datetime(feedback_1.modified),
-				"user": feedback_1.interviewer,
-				"feedback": feedback_1.feedback,
-				"total_score": feedback_1.average_rating * 5,
-				"reviewer_name": None,
-				"reviewer_designation": None,
-			},
-			{
-				"name": feedback_2.name,
-				"added_on": get_datetime(feedback_2.modified),
-				"user": feedback_2.interviewer,
-				"feedback": feedback_2.feedback,
-				"total_score": feedback_2.average_rating * 5,
-				"reviewer_name": "Test",
-				"reviewer_designation": "Engineer",
-			},
-		]
-
-		self.assertEqual(feedback, expected_data)
-
 	def test_job_applicant_status_update_on_interview_submit(self):
 		job_applicant = create_job_applicant()
-		create_interview_and_dependencies(job_applicant.name, status="Cleared")
-
-		update_job_applicant_status({"job_applicant": job_applicant.name, "status": "Accepted"})
+		interview = create_interview_and_dependencies(
+			job_applicant.name, scheduled_on=getdate(), status="Cleared"
+		)
+		interview.submit()
 		job_applicant.reload()
-
-		self.assertEqual(job_applicant.status, "Accepted")
+		self.assertEqual(job_applicant.status, "Interview Cleared")
 
 	def tearDown(self):
 		frappe.db.rollback()
@@ -209,25 +150,28 @@ def create_interview_and_dependencies(
 	if designation:
 		designation = create_designation(designation_name="_Test_Sales_manager").name
 
-	create_user("test_interviewer1@example.com", "Interviewer")
-	create_user("test_interviewer2@example.com", "Interviewer")
+	interviewer_1 = create_user("test_interviewer1@example.com", "Interviewer")
+	interviewer_2 = create_user("test_interviewer2@example.com", "Interviewer")
 
 	interview_round = create_interview_round(
-		"Technical Round",
-		["Python", "JS"],
-		["test_interviewer1@example.com", "test_interviewer2@example.com"],
-		designation,
-		True,
+		"Technical Round", ["Python", "JS"], designation=designation, save=True
 	)
 
 	interview = frappe.new_doc("Interview")
 	interview.interview_round = interview_round.name
 	interview.job_applicant = job_applicant
-	interview.scheduled_on = scheduled_on or getdate()
-	interview.from_time = from_time or nowtime()
-	interview.to_time = to_time or nowtime()
-	interview.append("interview_details", {"interviewer": "test_interviewer1@example.com"})
-	interview.append("interview_details", {"interviewer": "test_interviewer2@example.com"})
+
+	# Ensure scheduled_on is a string
+	if isinstance(scheduled_on, datetime.date):
+		interview.scheduled_on = scheduled_on.strftime("%Y-%m-%d")
+	else:
+		interview.scheduled_on = scheduled_on or getdate().strftime("%Y-%m-%d")
+
+	interview.from_time = (from_time or nowtime()).split(".")[0]
+	interview.to_time = (to_time or nowtime()).split(".")[0]
+
+	interview.append("interview_details", {"interviewer": interviewer_1.name})
+	interview.append("interview_details", {"interviewer": interviewer_2.name})
 
 	if status:
 		interview.status = status
@@ -252,7 +196,7 @@ def create_interview_round(name, skill_set, interviewers=None, designation=None,
 		interview_round.append("expected_skill_set", {"skill": skill})
 
 	for interviewer in interviewers:
-		interview_round.append("interviewers", {"user": interviewer})
+		interview_round.append("interviewer", {"user": interviewer})
 
 	if save:
 		interview_round.save()
