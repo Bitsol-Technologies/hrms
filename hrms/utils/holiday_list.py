@@ -34,7 +34,7 @@ def get_current_month_working_days(company, start_date, end_date):
 
 	while current_date <= end_date:
 		if (
-				not is_holiday(holiday_list, current_date) and current_date.weekday() < 5
+			not is_holiday(holiday_list, current_date) and current_date.weekday() < 5
 		):  # Count weekdays and non-holidays as working days
 			total_working_days_count += 1
 		current_date = add_days(current_date, 1)
@@ -45,7 +45,7 @@ def get_current_month_working_days(company, start_date, end_date):
 			"employee": employee,
 			"status": ["in", ["On Leave", "Half Day"]],
 			"attendance_date": ["between", [start_date, end_date]],
-			"docstatus": 1
+			"docstatus": 1,
 		},
 		fields=["name", "employee", "status", "attendance_date"],
 	)
@@ -61,7 +61,7 @@ def get_current_month_working_days(company, start_date, end_date):
 
 	while current_date <= end_date:
 		if (
-				not is_holiday(holiday_list, current_date) and current_date.weekday() < 5
+			not is_holiday(holiday_list, current_date) and current_date.weekday() < 5
 		):  # Count weekdays and non-holidays as working days
 			working_days_till_today += 1
 		current_date = add_days(current_date, 1)
@@ -75,10 +75,10 @@ def get_current_month_working_days(company, start_date, end_date):
 
 
 def get_holiday_dates_between(
-		holiday_list: str,
-		start_date: str,
-		end_date: str,
-		skip_weekly_offs: bool = False,
+	holiday_list: str,
+	start_date: str,
+	end_date: str,
+	skip_weekly_offs: bool = False,
 ) -> list:
 	Holiday = frappe.qb.DocType("Holiday")
 	query = (
@@ -113,28 +113,28 @@ def get_leave_summary(start_date, end_date):
 
 	# Calculate the total allocated leaves for the employee within the given date range
 	total_allocated_leaves = (
-			frappe.db.sql(
-				"""
+		frappe.db.sql(
+			"""
 		SELECT SUM(total_leaves_allocated)
 		FROM `tabLeave Allocation`
 		WHERE employee = %s AND from_date >= %s AND to_date <= %s AND docstatus = 1
 	""",
-				(employee, start_date, end_date),
-			)[0][0]
-			or 0
+			(employee, start_date, end_date),
+		)[0][0]
+		or 0
 	)
 
 	# Calculate the total availed leaves (approved leave applications) within the given date range
 	availed_leaves = (
-			frappe.db.sql(
-				"""
+		frappe.db.sql(
+			"""
 		SELECT SUM(total_leave_days)
 		FROM `tabLeave Application`
 		WHERE employee = %s AND status = 'Approved' AND from_date >= %s AND to_date <= %s AND docstatus = 1
 	""",
-				(employee, start_date, end_date),
-			)[0][0]
-			or 0
+			(employee, start_date, end_date),
+		)[0][0]
+		or 0
 	)
 
 	# Calculate the remaining balance of leaves
@@ -165,16 +165,23 @@ def calculate_expected_hours(start_date=None, end_date=None):
 		end_date = f"{current_year}-12-31"
 
 	# Fetch the sum of expected_working_hours for the current user in the given date range
-	total_hours = frappe.db.sql("""
+	total_hours = (
+		frappe.db.sql(
+			"""
 		SELECT SUM(expected_working_hours) AS total_hours
 		FROM `tabAttendance`
 		WHERE docstatus = 1 AND attendance_date BETWEEN %s AND %s
 		AND employee = %s
-	""", (start_date, end_date, employee), as_dict=True)[0].total_hours or 0
+	""",
+			(start_date, end_date, employee),
+			as_dict=True,
+		)[0].total_hours
+		or 0
+	)
 
 	return {
 		"employee": employee,
 		"start_date": start_date,
 		"end_date": end_date,
-		"total_expected_working_hours": total_hours
+		"total_expected_working_hours": total_hours,
 	}

@@ -299,7 +299,7 @@ global_search_doctypes = {
 override_whitelisted_methods = {
 	# "frappe.desk.doctype.event.event.get_events": "hrms.event.get_events"
 	"hrms.utils.holiday_list.get_current_month_working_days": "hrms.utils.holiday_list.get_current_month_working_days",
-    "hrms.utils.holiday_list.calculate_expected_hours": "hrms.utils.holiday_list.calculate_expected_hours",
+	"hrms.utils.holiday_list.calculate_expected_hours": "hrms.utils.holiday_list.calculate_expected_hours",
 	"hrms.utils.holiday_list.get_leave_summary": "hrms.utils.holiday_list.get_leave_summary",
 }
 

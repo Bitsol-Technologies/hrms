@@ -132,7 +132,7 @@
    "fieldtype": "Link",
    "hidden": 1,
    "label": "Team Lead User",
-   "options": "User"
+   "options": "User",
    "ignore_user_permissions": 1,
    "read_only": 1
   }

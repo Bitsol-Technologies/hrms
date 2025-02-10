@@ -25,6 +25,7 @@ from hrms.hr.utils import (
 
 WORKING_HOURS = 8
 
+
 class DuplicateAttendanceError(frappe.ValidationError):
 	pass
 

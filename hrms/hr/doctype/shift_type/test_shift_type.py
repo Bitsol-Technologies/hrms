@@ -1,6 +1,7 @@
 # Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -16,6 +17,8 @@ from hrms.tests.test_utils import add_date_to_holiday_list
 
 class TestShiftType(FrappeTestCase):
 	def setUp(self):
+		frappe.db.delete("Purchase Invoice")
+		frappe.db.delete("Supplier")
 		frappe.db.delete("Shift Type")
 		frappe.db.delete("Shift Assignment")
 		frappe.db.delete("Employee Checkin")
@@ -93,7 +96,7 @@ class TestShiftType(FrappeTestCase):
 
 		timestamp = datetime.combine(date, get_time("10:00:00"))
 		# log out
-		make_checkin(employee, timestamp)
+		make_checkin(employee, timestamp, log_type="OUT")
 
 		shift_type.process_auto_attendance()
 
@@ -218,6 +221,7 @@ class TestShiftType(FrappeTestCase):
 		attendance = frappe.db.get_value(
 			"Attendance", {"shift": shift_type.name}, ["status", "working_hours"], as_dict=True
 		)
+		frappe.msgprint("Attendance:", attendance)
 		self.assertEqual(attendance.status, "Half Day")
 		self.assertEqual(attendance.working_hours, 1.5)
 
@@ -455,41 +459,49 @@ class TestShiftType(FrappeTestCase):
 		"""
 		from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
 
-		employee = make_employee("test_employee_checkin@example.com", company="_Test Company")
-		curr_date = getdate()
+		frappe.flags.in_test = True
 
-		# this shift's valid checkout period (+60 mins) will be till 00:30:00 today, so it goes beyond a day
-		shift_type = setup_shift_type(shift_type="Test Absent", start_time="15:00:00", end_time="23:30:00")
-		shift_type.last_sync_of_checkin = datetime.combine(curr_date, get_time("00:30:00"))
-		shift_type.save()
+		try:
+			employee = make_employee("test_employee_checkin@example.com", company="_Test Company")
+			curr_date = getdate()
 
-		# assign shift for yesterday, actual end time is today at 00:30:00
-		prev_date = add_days(getdate(), -1)
-		make_shift_assignment(shift_type.name, employee, prev_date)
+			# this shift's valid checkout period (+60 mins) will be till 00:30:00 today, so it goes beyond a day
+			shift_type = setup_shift_type(
+				shift_type="Test Absent", start_time="15:00:00", end_time="23:30:00"
+			)
+			shift_type.last_sync_of_checkin = datetime.combine(curr_date, get_time("00:30:00"))
+			shift_type.save()
 
-		# make logs
-		timestamp = datetime.combine(prev_date, get_time("15:00:00"))
-		make_checkin(employee, timestamp)
-		timestamp = datetime.combine(prev_date, get_time("23:30:00"))
-		make_checkin(employee, timestamp)
+			# assign shift for yesterday, actual end time is today at 00:30:00
+			prev_date = add_days(getdate(), -1)
+			make_shift_assignment(shift_type.name, employee, prev_date)
 
-		# last sync of checkin is 00:30:00 and the checkin logs are not applicable for attendance yet
-		# so it should not mark the employee as absent either
-		shift_type.process_auto_attendance()
-		attendance = frappe.db.get_value(
-			"Attendance", {"attendance_date": prev_date, "employee": employee}, "status"
-		)
-		self.assertIsNone(attendance)
+			# make logs
+			timestamp = datetime.combine(prev_date, get_time("15:00:00"))
+			make_checkin(employee, timestamp)
+			timestamp = datetime.combine(prev_date, get_time("23:30:00"))
+			make_checkin(employee, timestamp)
 
-		# update last sync
-		shift_type.last_sync_of_checkin = datetime.combine(curr_date, get_time("01:00:00"))
-		shift_type.save()
-		shift_type.process_auto_attendance()
-		# employee marked present considering checkins
-		attendance = frappe.db.get_value(
-			"Attendance", {"attendance_date": prev_date, "employee": employee}, "status"
-		)
-		self.assertEqual(attendance, "Present")
+			# last sync of checkin is 00:30:00 and the checkin logs are not applicable for attendance yet
+			# so it should not mark the employee as absent either
+			shift_type.process_auto_attendance()
+			attendance = frappe.db.get_value(
+				"Attendance", {"attendance_date": prev_date, "employee": employee}, "status"
+			)
+			self.assertIsNone(attendance)
+
+			# update last sync
+			shift_type.last_sync_of_checkin = datetime.combine(curr_date, get_time("01:00:00"))
+			shift_type.save()
+			shift_type.process_auto_attendance()
+			# employee marked present considering checkins
+			attendance = frappe.db.get_value(
+				"Attendance", {"attendance_date": prev_date, "employee": employee}, "status"
+			)
+			self.assertEqual(attendance, "Present")
+
+		finally:
+			frappe.flags.in_test = False
 
 	@set_holiday_list("Salary Slip Test Holiday List", "_Test Company")
 	def test_skip_marking_absent_on_a_holiday(self):
