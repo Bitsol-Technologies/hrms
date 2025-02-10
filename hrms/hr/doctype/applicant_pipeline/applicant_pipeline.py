@@ -6,12 +6,6 @@ from frappe.model.document import Document
 import requests
 import json
 
-system_settings = frappe.get_single("System Settings")
-SLACK_API_URL = system_settings.slack_api_url
-SLACK_TOKEN = system_settings.slack_token
-SLACK_POST_MESSAGE_URL =system_settings.slack_post_message_url
-
-
 class ApplicantPipeline(Document):
 	def save(self):
           job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
@@ -81,6 +75,10 @@ class ApplicantPipeline(Document):
           
 
 def get_slack_user_id(email):
+    system_settings = frappe.get_single("System Settings")
+    SLACK_API_URL = system_settings.slack_api_url
+    SLACK_TOKEN = system_settings.slack_token
+
     """Fetch Slack User ID using the email address."""
     headers = {
         "Authorization": f"Bearer {SLACK_TOKEN}",
@@ -100,6 +98,9 @@ def send_slack_message(emails, applicant_name, resume_link):
     Loop over the list of emails, fetch each user's Slack ID,
     and send them an individual message.
     """
+    system_settings = frappe.get_single("System Settings")
+    SLACK_POST_MESSAGE_URL = system_settings.slack_post_message_url
+    
     for email in emails:
         user_id = get_slack_user_id(email)
         if user_id:
