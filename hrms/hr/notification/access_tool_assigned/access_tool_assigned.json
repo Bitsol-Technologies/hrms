@@ -1,0 +1,42 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "creation": "2025-01-28 17:19:31.964523",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Access Assignment",
+ "enabled": 1,
+ "event": "Submit",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "{{ doc.tool_name }} assigned to {{ doc.employee_name }} for Project {{ doc.project_name }}\n",
+ "message_type": "Plain Text",
+ "modified": "2025-01-28 17:27:44.043454",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Access Tool Assigned",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "owner"
+  },
+  {
+   "receiver_by_document_field": "assigned_by"
+  },
+  {
+   "receiver_by_document_field": "risk_owner"
+  },
+  {
+   "receiver_by_document_field": "user"
+  },
+  {
+   "receiver_by_role": "Operation Manager"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "{{ doc.tool_name }} assigned to {{ doc.employee_name }}"
+}

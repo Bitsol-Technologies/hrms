@@ -1,0 +1,43 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "creation": "2025-01-29 10:53:37.317987",
+ "date_changed": "revoked_on",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Access Assignment",
+ "enabled": 1,
+ "event": "Days After",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "Access for {{ doc.tool_name}} has been revoked for {{doc.employee_name }}. Please Review.",
+ "message_type": "Plain Text",
+ "modified": "2025-01-30 12:24:58.152259",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Access Revoked",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "owner"
+  },
+  {
+   "receiver_by_document_field": "assigned_by"
+  },
+  {
+   "receiver_by_document_field": "risk_owner"
+  },
+  {
+   "receiver_by_document_field": "user"
+  },
+  {
+   "receiver_by_role": "Operation Manager"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "{{ doc.tool_name }} Access revoked for {{ doc.employee_name }}"
+}

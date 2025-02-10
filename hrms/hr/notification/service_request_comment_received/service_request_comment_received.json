@@ -1,0 +1,31 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "doc.reference_ticket and frappe.db.get_value(\"HD Ticket\", doc.reference_ticket, \"raised_by\")\r\n",
+ "creation": "2025-01-29 16:16:31.912307",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "HD Ticket Comment",
+ "enabled": 0,
+ "event": "Save",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "A new comment has been added to your service request {{ doc.reference_ticket }} <br/>\n\nComment: <br/>\n{{ doc.content }} \n<br/>\n\nCommented by: <br/>\n{{ doc.commented_by }}",
+ "message_type": "HTML",
+ "modified": "2025-01-29 16:37:35.181474",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Service Request Comment Received",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "condition": "reference_ticket."
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "A new comment has been added to your service request {{ doc.reference_ticket }}"
+}

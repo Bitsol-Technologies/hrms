@@ -1,0 +1,7 @@
+Service Request {{ doc.name }}: {{ doc.subject }} \n
+
+
+Status Updated to {{ doc.status }} \n
+
+
+Open Ticket for further details  \n
