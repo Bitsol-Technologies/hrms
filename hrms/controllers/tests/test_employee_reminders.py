@@ -20,6 +20,22 @@ class TestEmployeeReminders(FrappeTestCase):
 		super().setUpClass()
 		from erpnext.setup.doctype.holiday_list.test_holiday_list import make_holiday_list
 
+		cls.create_email_template(
+        "Birthday Wish Template",
+        "Happy Birthday, {{birthday_person.name}} ?",
+    	)
+    
+		cls.create_email_template(
+			"Anniversary Wish Email",
+			"Happy Work Anniversary, {{anniversary_person.name}} ?",
+		)
+
+		# Attach templates to HR settings
+		hr_settings = frappe.get_doc("HR Settings", "HR Settings")
+		hr_settings.birthday_reminder_email_template = "Birthday Wish Template"
+		hr_settings.work_anniversary_email_template = "Anniversary Wish Email"
+		hr_settings.save()
+
 		# Create a test holiday list
 		test_holiday_dates = cls.get_test_holiday_dates()
 		test_holiday_list = make_holiday_list(
@@ -63,6 +79,19 @@ class TestEmployeeReminders(FrappeTestCase):
 
 		cls.test_employee_2 = test_employee_2
 		cls.holiday_list_2 = test_holiday_list
+
+	@staticmethod
+	def create_email_template(template_name, template_content):
+		"""Ensure an Email Template exists or create one if it doesn't."""
+		if not frappe.db.exists("Email Template", template_name):
+			email_template = frappe.get_doc({
+				"doctype": "Email Template",
+				"name": template_name,
+				"subject": template_content,
+				"response": template_content,
+				"use_html": 0
+			})
+			email_template.insert(ignore_permissions=True)
 
 	@classmethod
 	def get_test_holiday_dates(cls):
@@ -122,9 +151,6 @@ class TestEmployeeReminders(FrappeTestCase):
 
 		email_queue = frappe.db.sql("""select * from `tabEmail Queue`""", as_dict=True)
 
-		# Debugging: print email queue contents to check
-		print(email_queue)
-
 		# Verify that email has been queued with the expected subject
 		self.assertTrue(any("Subject: Birthday Reminder" in email.message for email in email_queue))
 
@@ -135,7 +161,7 @@ class TestEmployeeReminders(FrappeTestCase):
 		)
 
 		make_employee(
-			"test_emp_work_anniversary@gmail.com",
+			"test_emp_work_anniversary101@gmail.com",
 			company="_Test Company",
 			date_of_joining=frappe.utils.add_years(getdate(), -2),
 		)
@@ -146,7 +172,7 @@ class TestEmployeeReminders(FrappeTestCase):
 		for entry in employees:
 			user_ids.append(entry.user_id)
 
-		self.assertTrue("test_emp_work_anniversary@gmail.com" in user_ids)
+		self.assertTrue("test_emp_work_anniversary101@gmail.com" in user_ids)
 
 		hr_settings = frappe.get_doc("HR Settings", "HR Settings")
 		hr_settings.send_work_anniversary_reminders = 1
@@ -155,7 +181,27 @@ class TestEmployeeReminders(FrappeTestCase):
 		send_work_anniversary_reminders()
 
 		email_queue = frappe.db.sql("""select * from `tabEmail Queue`""", as_dict=True)
-		self.assertTrue("Subject: Work Anniversary Reminder" in email_queue[0].message)
+		expected_subject = "Happy Work Anniversary, test_emp_work_anniversary101@gmail.com ?"
+		subject_found = False  # Flag to track if a matching subject is found
+
+		if email_queue:
+			for email in email_queue:
+				raw_message = email.get('message', '')
+				import re
+
+				# Extract subject using regex
+				match = re.search(r'Subject:\s*(.*?)\r\n', raw_message)
+				subject = match.group(1).strip() if match else None
+
+				print("Extracted Subject:", subject)
+
+				# If we find the expected subject, set flag and break loop
+				if subject and expected_subject in subject:
+					subject_found = True
+					break
+
+		# Assert after checking all emails
+		assert subject_found, "Expected subject not found in email queue!"
 
 	def test_work_anniversary_reminder_not_sent_for_0_years(self):
 		make_employee(

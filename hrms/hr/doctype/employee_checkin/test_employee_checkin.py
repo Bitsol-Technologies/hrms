@@ -123,7 +123,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		)
 
 		if checkins:
-			attendance_date = str(checkins[0].time).split(" ")[0]
+			attendance_date = getdate(checkins[0].time)
 			attendance = frappe.get_doc(
 				{
 					"doctype": "Attendance",
