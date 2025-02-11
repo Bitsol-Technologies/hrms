@@ -393,7 +393,6 @@ class TestEmployeeCheckin(FrappeTestCase):
 		# shift assigned for a single day
 		make_shift_assignment(shift_type.name, employee, date, date)
 
-		# shift not fetched in today's shift margin
 		log = make_checkin(employee, datetime.combine(date, get_time("23:30:00")))
 		self.assertIsNone(log.shift)
 
