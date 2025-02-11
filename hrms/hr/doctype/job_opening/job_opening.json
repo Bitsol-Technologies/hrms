@@ -260,9 +260,10 @@
   },
   {
    "fieldname": "leads",
-   "fieldtype": "Link",
+   "fieldtype": "Table MultiSelect",
    "label": "Leads",
-   "options": "Employee"
+   "options": "HD Team Member"
+
   }
  ],
  "icon": "fa fa-bookmark",

@@ -99,7 +99,9 @@ def send_slack_message(emails, applicant_name, resume_link):
     and send them an individual message.
     """
     system_settings = frappe.get_single("System Settings")
+
     SLACK_TOKEN = system_settings.slack_token
+
     SLACK_POST_MESSAGE_URL = system_settings.slack_post_message_url
     
     for email in emails:
