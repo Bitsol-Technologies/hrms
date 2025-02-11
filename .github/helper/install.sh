@@ -44,8 +44,7 @@ bench get-app payments --branch ${BRANCH_TO_CLONE%"-hotfix"}
 bench get-app https://github.com/Bitsol-Technologies/erpnext --branch "$BRANCH_TO_CLONE" --resolve-deps
 bench get-app https://github.com/frappe/lending --branch ${BRANCH_TO_CLONE%"-hotfix"}
 bench get-app hrms "${GITHUB_WORKSPACE}"
-bench get-app fcm_notification "${GITHUB_WORKSPACE}"
-bench get-app helpdesk "${GITHUB_WORKSPACE}"
+
 bench setup requirements --dev
 bench pip install firebase_admin
 bench pip install google-auth google-auth-oauthlib google-api-python-client google-apps-meet
@@ -55,5 +54,3 @@ bench --site test_site reinstall --yes
 
 bench --verbose --site test_site install-app lending
 bench --verbose --site test_site install-app hrms
-bench --verbose --site test_site install-app fcm_notification
-bench --verbose --site test_site install-app helpdesk

@@ -262,7 +262,7 @@
    "fieldname": "leads",
    "fieldtype": "Table MultiSelect",
    "label": "Leads",
-   "options": "HD Team Member"
+   "options": "User"
   }
  ],
  "icon": "fa fa-bookmark",
