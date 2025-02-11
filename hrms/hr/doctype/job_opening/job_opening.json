@@ -260,16 +260,16 @@
   },
   {
    "fieldname": "leads",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Link",
    "label": "Leads",
-   "options": "User"
+   "options": "Employee"
   }
  ],
  "icon": "fa fa-bookmark",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-06 11:43:37.833891",
+ "modified": "2025-02-11 14:46:16.443523",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Opening",
