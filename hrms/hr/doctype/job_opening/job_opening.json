@@ -12,7 +12,7 @@
   "job_title",
   "designation",
   "attachment",
-  "leads",
+  "cv_reviewers",
   "column_break_5",
   "status",
   "posted_on",
@@ -259,17 +259,17 @@
    "label": "Attachment"
   },
   {
-   "fieldname": "leads",
-   "fieldtype": "Table MultiSelect",
-   "label": "Leads",
-   "options": "Employee Selection"
+   "fieldname": "cv_reviewers",
+   "fieldtype": "Table",
+   "label": "CV Reviewers",
+   "options": "CV Reviewer"
   }
  ],
  "icon": "fa fa-bookmark",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-11 14:46:16.443523",
+ "modified": "2025-02-11 17:15:50.730485",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Opening",
