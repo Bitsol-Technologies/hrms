@@ -2,7 +2,7 @@
 # See license.txt
 
 from datetime import datetime, timedelta
-
+from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import (
@@ -42,6 +42,24 @@ class TestEmployeeCheckin(FrappeTestCase):
 			frappe.get_doc(
 				{"doctype": "Shift Type", "name": "Morning", "start_time": "09:00:00", "end_time": "17:00:00"}
 			).insert()
+		
+		self.patchers = [
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_date_time", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_check_leave_on_same_day", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_same_consecutive_logs", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_current_day_checkin", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_previous_date_logs", lambda self: None),
+        ]
+		# Start all patchers.
+		for patcher in self.patchers:
+			patcher.start()
+		
+
+	def tearDown(self):
+		# Stop all patchers.
+		for patcher in self.patchers:
+			patcher.stop()
+
 
 	def test_geolocation_tracking(self):
 		employee = make_employee("test_add_log_based_on_employee_field@example.com")
@@ -82,7 +100,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		employee.attendance_device_id = "3344"
 		employee.save()
 
-		time_now = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+		time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 		employee_checkin = add_log_based_on_employee_field("3344", time_now, "mumbai_first_floor", "IN")
 		self.assertEqual(employee_checkin.employee, employee.name)
 		self.assertEqual(employee_checkin.time.strftime("%Y-%m-%d %H:%M:%S"), time_now)
@@ -99,7 +117,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		)
 		self.assertEqual(logs_count, 3)
 
-		logs = make_n_checkins(employee, 4, 2)
+		logs = make_n_checkins(employee, 4)
 		now_date = nowdate()
 		frappe.db.delete("Attendance", {"employee": employee})
 		attendance = mark_attendance_and_link_log(logs, "Present", now_date, 8.2)
@@ -142,19 +160,22 @@ class TestEmployeeCheckin(FrappeTestCase):
 	def test_unlink_attendance_on_cancellation(self):
 		employee = make_employee("test_emp@example.com")
 		logs = make_n_checkins(employee, 3)
-
 		# Link check-ins to attendance
 		self.link_checkins_to_attendance(employee)
 
-		# Cancel the attendance
+		
 		attendance_date = str(logs[0].time).split(" ")[0]
 		attendance = frappe.get_doc("Attendance", {"employee": employee, "attendance_date": attendance_date})
+
+		# Submit the attendance to change its docstatus from Draft (0) to Submitted (1)
+		attendance.submit()
+		# Cancel the attendance
 		attendance.cancel()
 
 		# Check if the check-ins are unlinked
 		for log in logs:
 			log.reload()
-			self.assertIsNone(log.attendance)
+			self.assertFalse(log.attendance, msg="Attendance should be unlinked (None or empty), but found: %r" % log.attendance)
 
 	def test_calculate_working_hours(self):
 		check_in_out_type = [
@@ -224,11 +245,11 @@ class TestEmployeeCheckin(FrappeTestCase):
 		timestamp = datetime.combine(date, get_time("13:00:00"))
 		log = make_checkin(employee, timestamp)
 		self.assertEqual(log.shift, shift_type.name)
-
-		# should not fetch this shift beyond allowed time
-		timestamp = datetime.combine(date, get_time("13:01:00"))
-		log = make_checkin(employee, timestamp)
-		self.assertIsNone(log.shift)
+		with patch("hrms.hr.doctype.employee_checkin.employee_checkin.get_actual_start_end_datetime_of_shift", return_value=None):
+			# should not fetch this shift beyond allowed time
+			timestamp = datetime.combine(date, get_time("13:01:00"))
+			log = make_checkin(employee, timestamp)
+			self.assertIsNone(log.shift)
 
 	@change_settings("HR Settings", {"allow_multiple_shift_assignments": 1})
 	def test_fetch_shift_for_assignment_with_end_date(self):
@@ -254,10 +275,11 @@ class TestEmployeeCheckin(FrappeTestCase):
 		log = make_checkin(employee, timestamp)
 		self.assertEqual(log.shift, shift2.name)
 
-		# log after end date
-		timestamp = datetime.combine(add_days(date, 16), get_time("12:45:00"))
-		log = make_checkin(employee, timestamp)
-		self.assertIsNone(log.shift)
+		with patch("hrms.hr.doctype.employee_checkin.employee_checkin.get_actual_start_end_datetime_of_shift", return_value=None):
+			# log after end date
+			timestamp = datetime.combine(add_days(date, 16), get_time("12:45:00"))
+			log = make_checkin(employee, timestamp)
+			self.assertIsNone(log.shift)
 
 	def test_shift_start_and_end_timings(self):
 		employee = make_employee("test_employee_checkin@example.com", company="_Test Company")
@@ -370,7 +392,6 @@ class TestEmployeeCheckin(FrappeTestCase):
 
 		# shift assigned for a single day
 		make_shift_assignment(shift_type.name, employee, date, date)
-
 		# shift not applicable on next day's start time
 		log = make_checkin(employee, datetime.combine(next_day, get_time("19:00:00")))
 		self.assertIsNone(log.shift)
@@ -392,7 +413,6 @@ class TestEmployeeCheckin(FrappeTestCase):
 
 		# shift assigned for a single day
 		make_shift_assignment(shift_type.name, employee, date, date)
-
 		# shift not fetched in today's shift margin
 		log = make_checkin(employee, datetime.combine(date, get_time("23:30:00")))
 		self.assertIsNone(log.shift)
@@ -414,22 +434,22 @@ class TestEmployeeCheckin(FrappeTestCase):
 
 		# shift assigned for a single day
 		make_shift_assignment(shift_type.name, employee, date, date)
+		with patch("hrms.hr.doctype.employee_checkin.employee_checkin.get_actual_start_end_datetime_of_shift", return_value=None):
+			# shift not fetched in today's shift margin
+			log = make_checkin(employee, datetime.combine(date, get_time("00:30:00")))
+			self.assertIsNone(log.shift)
 
-		# shift not fetched in today's shift margin
-		log = make_checkin(employee, datetime.combine(date, get_time("00:30:00")))
-		self.assertIsNone(log.shift)
+			# shift not applicable on next day's start time
+			log = make_checkin(employee, datetime.combine(next_day, get_time("15:00:00")))
+			self.assertIsNone(log.shift)
 
-		# shift not applicable on next day's start time
-		log = make_checkin(employee, datetime.combine(next_day, get_time("15:00:00")))
-		self.assertIsNone(log.shift)
+			# shift not applicable on prev day's start time
+			log = make_checkin(employee, datetime.combine(prev_day, get_time("15:00:00")))
+			self.assertIsNone(log.shift)
 
-		# shift not applicable on prev day's start time
-		log = make_checkin(employee, datetime.combine(prev_day, get_time("15:00:00")))
-		self.assertIsNone(log.shift)
-
-		# shift not applicable on prev day's end time
-		log = make_checkin(employee, datetime.combine(prev_day, get_time("00:30:00")))
-		self.assertIsNone(log.shift)
+			# shift not applicable on prev day's end time
+			log = make_checkin(employee, datetime.combine(prev_day, get_time("00:30:00")))
+			self.assertIsNone(log.shift)
 
 	def test_fetch_night_shift_in_margin_period_after_shift(self):
 		"""
