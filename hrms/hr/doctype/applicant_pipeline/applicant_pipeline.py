@@ -10,9 +10,9 @@ class ApplicantPipeline(Document):
 	def save(self):
           job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
           applicant_data = frappe.db.get_value("Job Applicant", self.applicant_name, ["applicant_name", "resume_link"], as_dict=True)
-          leads = [lead.user for lead in job_opening_doc.leads]
+          leads_email = [lead.email for lead in job_opening_doc.cv_reviewers]
           if self.status == "Lead Review":
-               send_slack_message(leads, applicant_data.get("applicant_name"), applicant_data.get("resume_link"))
+               send_slack_message(leads_email, applicant_data.get("applicant_name"), applicant_data.get("resume_link"))
           if self.status == "First Interview":
                frappe.sendmail(
                          recipients=[self.applicant_name],
@@ -22,7 +22,7 @@ class ApplicantPipeline(Document):
                               "name": applicant_data.get("applicant_name"),
                               "title": job_opening_doc.get("job_title"),
                          },
-                         email_template_name="Offer Letter",
+                         email_template_name="First Interview",
                     )
           if self.status == "Second Interview":
                frappe.sendmail(
@@ -33,7 +33,7 @@ class ApplicantPipeline(Document):
                               "name": applicant_data.get("applicant_name"),
                               "title": job_opening_doc.get("job_title"),
                          },
-                         email_template_name="Offer Letter",
+                         email_template_name="Second Interview",
                     )
           if self.status == "Offer Decision":
                frappe.sendmail(
@@ -44,7 +44,7 @@ class ApplicantPipeline(Document):
                               "name": applicant_data.get("applicant_name"),
                               "title": job_opening_doc.get("job_title"),
                          },
-                         email_template_name="Offer Letter",
+                         email_template_name="Offer Decision",
                     )
           if self.status == "Offer Acceptance":
                frappe.sendmail(
@@ -63,6 +63,7 @@ class ApplicantPipeline(Document):
                          recipients=[self.applicant_name],
                          create_notification_log=True,
                          from_users=["Administrator"],
+                         for_users=["Administrator"],
                          args={
                               "name": applicant_data.get("applicant_name"),
                               "title": job_opening_doc.get("job_title"),
@@ -100,6 +101,7 @@ def send_slack_message(emails, applicant_name, resume_link):
     """
     system_settings = frappe.get_single("System Settings")
     SLACK_POST_MESSAGE_URL = system_settings.slack_post_message_url
+    SLACK_TOKEN = system_settings.slack_token
     
     for email in emails:
         user_id = get_slack_user_id(email)
