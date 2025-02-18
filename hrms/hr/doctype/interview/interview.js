@@ -80,6 +80,12 @@ frappe.ui.form.on("Interview", {
 			},
 		});
 	},
+	validate: function(frm) {
+        if (frm.doc.scheduled_on && frm.doc.scheduled_on <= frappe.datetime.get_today()) {
+            frappe.msgprint(__('Interview date must be greater than today.'));
+            frappe.validated = false;
+        }
+    },
 
 	show_reschedule_dialog: function (frm) {
 		let d = new frappe.ui.Dialog({

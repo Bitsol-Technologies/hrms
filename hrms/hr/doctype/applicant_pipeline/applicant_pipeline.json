@@ -6,8 +6,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "job_title",
   "applicant_name",
+  "job_id",
   "status"
  ],
  "fields": [
@@ -23,20 +23,25 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Pending\nHR Review\nLead Review\nTelephonic Screening\nFirst Interview\nAssignment Submission\nSecond Interview\nOffer Decision\nOffer Acceptance\nBackground Check\nHired\nRejected"
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Acceptance\nBackground Check\nOnboarding\nRejected"
   },
   {
-   "fetch_from": "job_id.job_title",
-   "fieldname": "job_title",
+   "fetch_from": "applicant_name.job_title",
+   "fieldname": "job_id",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Job Title",
-   "options": "Job Opening"
+   "label": "Job ID",
+   "options": "Job Opening",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2025-02-11 15:04:00.271566",
+ "links": [
+  {
+   "link_doctype": "Interview Feedback",
+   "link_fieldname": "interview"
+  }
+ ],
+ "modified": "2025-02-13 13:43:15.000150",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Applicant Pipeline",
@@ -57,5 +62,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }

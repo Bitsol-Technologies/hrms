@@ -19,7 +19,9 @@
   "job_title",
   "designation",
   "status",
-  "screening_status",
+  "applicant_status",
+  "section_break_lbuh",
+  "cv_reviews",
   "source_and_rating_section",
   "source",
   "source_name",
@@ -52,7 +54,6 @@
    "fieldtype": "Data",
    "label": "Email Address",
    "options": "Email",
-   "permlevel": 1,
    "reqd": 1
   },
   {
@@ -197,17 +198,27 @@
    "options": "Designation"
   },
   {
-   "fieldname": "screening_status",
+   "fieldname": "applicant_status",
    "fieldtype": "Select",
-   "label": "Screening Status",
-   "options": "Approved By HR\nApproved By Team Lead\nRejected By HR\nRejected By Team Lead"
+   "label": "Applicant Status",
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Acceptance\nBackground Check\nOnboarding\nRejected\nCV Accepted\nCV Rejected"
+  },
+  {
+   "fieldname": "section_break_lbuh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "cv_reviews",
+   "fieldtype": "Select",
+   "label": "CV Reviews",
+   "options": "Approved\nRejected"
   }
  ],
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-06 16:39:27.840947",
+ "modified": "2025-02-18 11:41:42.512402",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
