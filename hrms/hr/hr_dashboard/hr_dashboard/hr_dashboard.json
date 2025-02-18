@@ -47,6 +47,9 @@
   },
   {
    "card": "Total On-Leave(This Week)"
+  },
+  {
+   "card": "Late Entries (Yesterday)"
   }
  ],
  "charts": [
@@ -61,7 +64,7 @@
  "idx": 0,
  "is_default": 0,
  "is_standard": 1,
- "modified": "2024-09-12 14:34:56.539022",
+ "modified": "2025-02-18 15:33:49.026613",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR Dashboard",
