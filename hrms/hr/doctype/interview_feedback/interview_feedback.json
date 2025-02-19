@@ -93,7 +93,9 @@
   {
    "allow_in_quick_entry": 1,
    "fieldname": "feedback",
-   "fieldtype": "Text"
+   "fieldtype": "Text",
+   "label": "Reviews",
+   "reqd": 1
   },
   {
    "fieldname": "result",
@@ -102,7 +104,7 @@
    "in_standard_filter": 1,
    "label": "Result",
    "options": "\nCleared\nRejected",
-   "reqd": 1
+   "permlevel": 1
   },
   {
    "fieldname": "details_section",
@@ -123,7 +125,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-01-01 00:26:31.319454",
+ "modified": "2025-02-19 11:22:15.773389",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Feedback",

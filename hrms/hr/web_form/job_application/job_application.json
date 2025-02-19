@@ -22,7 +22,7 @@
  "list_columns": [],
  "login_required": 0,
  "max_attachment_size": 0,
- "modified": "2025-02-17 20:48:11.659279",
+ "modified": "2025-02-19 10:39:47.938328",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "job-application",
@@ -151,6 +151,7 @@
   },
   {
    "allow_read_on_all_link_options": 0,
+   "default": "PKR",
    "fieldname": "currency",
    "fieldtype": "Select",
    "hidden": 0,
