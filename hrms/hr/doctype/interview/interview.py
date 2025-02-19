@@ -63,7 +63,7 @@ class Interview(Document):
 					"title": self.job_title,
 					"location": self.location,
 					"date": self.scheduled_on,
-					"time": self.from_time[:5] if len(self.from_time) > 5 else self.from_time,
+					"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
 					"meeting_link": meeting_link,
 					"resume_link": self.resume_link,
 				},

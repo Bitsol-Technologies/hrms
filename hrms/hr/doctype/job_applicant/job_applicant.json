@@ -19,7 +19,9 @@
   "job_title",
   "designation",
   "status",
-  "screening_status",
+  "applicant_status",
+  "section_break_lbuh",
+  "cv_reviews",
   "source_and_rating_section",
   "source",
   "source_name",
@@ -52,7 +54,6 @@
    "fieldtype": "Data",
    "label": "Email Address",
    "options": "Email",
-   "permlevel": 1,
    "reqd": 1
   },
   {
@@ -116,7 +117,7 @@
    "fieldtype": "Data",
    "label": "Phone Number",
    "options": "Phone",
-   "permlevel": 1
+   "permlevel": 2
   },
   {
    "fieldname": "country",
@@ -145,7 +146,7 @@
    "fieldtype": "Currency",
    "label": "Current Salary",
    "options": "currency",
-   "permlevel": 1,
+   "permlevel": 2,
    "precision": "0"
   },
   {
@@ -153,7 +154,7 @@
    "fieldtype": "Currency",
    "label": "Expected Salary",
    "options": "currency",
-   "permlevel": 1,
+   "permlevel": 2,
    "precision": "0"
   },
   {
@@ -165,7 +166,7 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency",
-   "permlevel": 1
+   "permlevel": 2
   },
   {
    "fieldname": "employee_referral",
@@ -197,17 +198,29 @@
    "options": "Designation"
   },
   {
-   "fieldname": "screening_status",
+   "fieldname": "applicant_status",
    "fieldtype": "Select",
-   "label": "Screening Status",
-   "options": "Approved By HR\nApproved By Team Lead\nRejected By HR\nRejected By Team Lead"
+   "label": "Applicant Status",
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Acceptance\nBackground Check\nOnboarding\nRejected\nCV Accepted\nCV Rejected",
+   "permlevel": 2
+  },
+  {
+   "fieldname": "section_break_lbuh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "cv_reviews",
+   "fieldtype": "Select",
+   "label": "CV Reviews",
+   "options": "\nApproved\nRejected",
+   "permlevel": 1
   }
  ],
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-06 16:39:27.840947",
+ "modified": "2025-02-19 10:59:18.352631",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",

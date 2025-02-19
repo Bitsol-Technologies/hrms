@@ -9,6 +9,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.model.naming import append_number_if_name_exists
 from frappe.utils import flt, validate_email_address
+import requests 
 
 from hrms.hr.doctype.interview.interview import get_interviewers
 
@@ -30,6 +31,40 @@ class JobApplicant(Document):
 		if frappe.db.exists("Job Applicant", self.name):
 			self.name = append_number_if_name_exists("Job Applicant", self.name)
 
+	def save(self):
+		previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=1)
+
+		# Check if 'cv_reviews' has changed
+		if self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
+			if self.cv_reviews == "Rejected":
+				self.applicant_status = "CV Rejected"
+			elif self.cv_reviews == "Approved":
+				self.applicant_status = "CV Accepted"
+		job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+		leads_email = [lead.email for lead in job_opening_doc.cv_reviewers]
+
+		if self.applicant_status == "Lead Screening":
+			send_slack_message(leads_email, self.applicant_name, self.resume_link, self.name)
+
+		if self.applicant_status == "Rejected":
+			job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+
+			try:
+				frappe.sendmail(
+						recipients=[self.email_id],
+						create_notification_log=True,
+						from_users=["Administrator"],
+						for_users=["Administrator"],
+						args={
+							"name": self.applicant_name,
+							"title": job_opening_doc.get("job_title"),
+						},
+						email_template_name="Rejection Email",
+				)
+			except Exception as e:
+					frappe.log_error(f"Error sending email: {e}")
+		super().save()
+  
 	def validate(self):
 		if self.email_id:
 			validate_email_address(self.email_id, True)
@@ -40,6 +75,7 @@ class JobApplicant(Document):
 		if not self.applicant_name and self.email_id:
 			guess = self.email_id.split("@")[0]
 			self.applicant_name = " ".join([p.capitalize() for p in guess.split(".")])
+
 
 	def before_insert(self):
 		if self.job_title:
@@ -116,3 +152,53 @@ def get_applicant_to_hire_percentage():
 		"value": flt(total_hired) / flt(total_applicants) * 100 if total_applicants else 0,
 		"fieldtype": "Percent",
 	}
+
+
+def get_slack_user_id(email):
+    system_settings = frappe.get_single("System Settings")
+    SLACK_API_URL = "https://slack.com/api/users.lookupByEmail"
+    SLACK_TOKEN = system_settings.slack_token
+
+    """Fetch Slack User ID using the email address."""
+    headers = {
+        "Authorization": f"Bearer {SLACK_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    response = requests.get(SLACK_API_URL, headers=headers, params={"email": email})
+    data = response.json()
+    
+    if data.get("ok"):
+        return data["user"]["id"]
+    else:
+        print(f"Error fetching Slack user ID for {email}: {data.get('error')}")
+        return None
+
+def send_slack_message(emails, applicant_name, resume_link, docname):
+    """
+    Loop over the list of emails, fetch each user's Slack ID,
+    and send them an individual message.
+    """
+    import json
+    system_settings = frappe.get_single("System Settings")
+    SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+    SLACK_TOKEN = system_settings.slack_token
+    
+    for email in emails:
+        user_id = get_slack_user_id(email)
+        doctype = "Job Applicant"
+        document_link = frappe.utils.get_url_to_form(doctype, docname)
+        if user_id:
+            message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nResume Link: {resume_link}\nDocument Link: {document_link}"
+            payload = {
+                "channel": user_id,
+                "text": message
+            }
+            headers = {
+                "Authorization": f"Bearer {SLACK_TOKEN}",
+                "Content-Type": "application/json"
+            }
+            response = requests.post(SLACK_POST_MESSAGE_URL, headers=headers, data=json.dumps(payload))
+            result = response.json()
+        else:
+            print(f"Could not find Slack user for {email}")
+

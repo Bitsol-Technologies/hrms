@@ -8,55 +8,12 @@ import json
 
 class ApplicantPipeline(Document):
 	def save(self):
-          job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+          job_opening_doc = frappe.get_doc("Job Opening", self.job_id)
           applicant_data = frappe.db.get_value("Job Applicant", self.applicant_name, ["applicant_name", "resume_link"], as_dict=True)
           leads_email = [lead.email for lead in job_opening_doc.cv_reviewers]
           if self.status == "Lead Review":
                send_slack_message(leads_email, applicant_data.get("applicant_name"), applicant_data.get("resume_link"))
-          if self.status == "First Interview":
-               frappe.sendmail(
-                         recipients=[self.applicant_name],
-                         create_notification_log=True,
-                         from_users=["Administrator"],
-                         args={
-                              "name": applicant_data.get("applicant_name"),
-                              "title": job_opening_doc.get("job_title"),
-                         },
-                         email_template_name="First Interview",
-                    )
-          if self.status == "Second Interview":
-               frappe.sendmail(
-                         recipients=[self.applicant_name],
-                         create_notification_log=True,
-                         from_users=["Administrator"],
-                         args={
-                              "name": applicant_data.get("applicant_name"),
-                              "title": job_opening_doc.get("job_title"),
-                         },
-                         email_template_name="Second Interview",
-                    )
-          if self.status == "Offer Decision":
-               frappe.sendmail(
-                         recipients=[self.applicant_name],
-                         create_notification_log=True,
-                         from_users=["Administrator"],
-                         args={
-                              "name": applicant_data.get("applicant_name"),
-                              "title": job_opening_doc.get("job_title"),
-                         },
-                         email_template_name="Offer Decision",
-                    )
-          if self.status == "Offer Acceptance":
-               frappe.sendmail(
-                         recipients=[self.applicant_name],
-                         create_notification_log=True,
-                         from_users=["Administrator"],
-                         args={
-                              "name": applicant_data.get("applicant_name"),
-                              "title": job_opening_doc.get("job_title"),
-                         },
-                         email_template_name="Offer Acceptance",
-                    )
+
           if self.status == "Rejected":
                try:
                     frappe.sendmail(
