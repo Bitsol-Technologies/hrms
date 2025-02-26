@@ -30,6 +30,11 @@ class JobApplicant(Document):
 		# applicant can apply more than once for a different job title or reapply
 		if frappe.db.exists("Job Applicant", self.name):
 			self.name = append_number_if_name_exists("Job Applicant", self.name)
+   
+	def before_save(self):
+		old_doc = self.get_doc_before_save()
+		if old_doc.applicant_status != self.applicant_status:
+			print("Status changed")
 
 	def save(self):
 		previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=1)
@@ -41,10 +46,27 @@ class JobApplicant(Document):
 			elif self.cv_reviews == "Approved":
 				self.applicant_status = "CV Accepted"
 		job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
-		leads_email = [lead.email for lead in job_opening_doc.cv_reviewers]
-
+		cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
+		telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
+		
 		if self.applicant_status == "Lead Screening":
-			send_slack_message(leads_email, self.applicant_name, self.resume_link, self.name)
+			send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
+   
+		if self.applicant_status == "Telephonic Screening":
+			frappe.sendmail(
+				recipients=telephonic_reviewers,
+				create_notification_log=True,
+				from_users=["Administrator"],
+				for_users=["Administrator"],
+				args={
+					"name": self.applicant_name,
+					"document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
+					"resume_link": self.resume_link,
+					"title": job_opening_doc.get("job_title"),
+				},
+				email_template_name="Telephonic Screening Email",
+			)
+			send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
 
 		if self.applicant_status == "Rejected":
 			job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
@@ -155,50 +177,54 @@ def get_applicant_to_hire_percentage():
 
 
 def get_slack_user_id(email):
-    system_settings = frappe.get_single("System Settings")
-    SLACK_API_URL = "https://slack.com/api/users.lookupByEmail"
-    SLACK_TOKEN = system_settings.slack_token
+	system_settings = frappe.get_single("System Settings")
+	SLACK_API_URL = "https://slack.com/api/users.lookupByEmail"
+	SLACK_TOKEN = system_settings.slack_token
 
-    """Fetch Slack User ID using the email address."""
-    headers = {
-        "Authorization": f"Bearer {SLACK_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    response = requests.get(SLACK_API_URL, headers=headers, params={"email": email})
-    data = response.json()
-    
-    if data.get("ok"):
-        return data["user"]["id"]
-    else:
-        print(f"Error fetching Slack user ID for {email}: {data.get('error')}")
-        return None
+	"""Fetch Slack User ID using the email address."""
+	headers = {
+		"Authorization": f"Bearer {SLACK_TOKEN}",
+		"Content-Type": "application/json"
+	}
+	response = requests.get(SLACK_API_URL, headers=headers, params={"email": email})
+	data = response.json()
+	
+	if data.get("ok"):
+		return data["user"]["id"]
+	else:
+		print(f"Error fetching Slack user ID for {email}: {data.get('error')}")
+		return None
 
-def send_slack_message(emails, applicant_name, resume_link, docname):
-    """
-    Loop over the list of emails, fetch each user's Slack ID,
-    and send them an individual message.
-    """
-    import json
-    system_settings = frappe.get_single("System Settings")
-    SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
-    SLACK_TOKEN = system_settings.slack_token
-    
-    for email in emails:
-        user_id = get_slack_user_id(email)
-        doctype = "Job Applicant"
-        document_link = frappe.utils.get_url_to_form(doctype, docname)
-        if user_id:
-            message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nResume Link: {resume_link}\nDocument Link: {document_link}"
-            payload = {
-                "channel": user_id,
-                "text": message
-            }
-            headers = {
-                "Authorization": f"Bearer {SLACK_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            response = requests.post(SLACK_POST_MESSAGE_URL, headers=headers, data=json.dumps(payload))
-            result = response.json()
-        else:
-            print(f"Could not find Slack user for {email}")
+def send_slack_message(emails, applicant_name, resume_link, docname, status):
+	"""
+	Loop over the list of emails, fetch each user's Slack ID,
+	and send them an individual message.
+	"""
+	import json
+	system_settings = frappe.get_single("System Settings")
+	SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+	SLACK_TOKEN = system_settings.slack_token
+	
+	for email in emails:
+		user_id = get_slack_user_id(email)
+		doctype = "Job Applicant"
+		message = ""
+		document_link = frappe.utils.get_url_to_form(doctype, docname)
+		if user_id:
+			if status == "Lead Screening":
+				message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nResume Link: {resume_link}\nDocument Link: {document_link}"
+			if status == "Telephonic Screening":
+				message = f"Hello <@{user_id}>, please review the Telephonic Interview of {applicant_name}.\nDocument Link: {document_link}"
+			payload = {
+				"channel": user_id,
+				"text": message
+			}
+			headers = {
+				"Authorization": f"Bearer {SLACK_TOKEN}",
+				"Content-Type": "application/json"
+			}
+			response = requests.post(SLACK_POST_MESSAGE_URL, headers=headers, data=json.dumps(payload))
+			result = response.json()
+		else:
+			print(f"Could not find Slack user for {email}")
 
