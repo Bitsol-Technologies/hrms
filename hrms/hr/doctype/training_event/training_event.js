@@ -21,6 +21,7 @@ frappe.ui.form.on("Training Event", {
 			});
 		}
 		frm.events.set_employee_query(frm);
+		frm.events.set_role_profile_employees(frm);
 	},
 
 	set_employee_query: function (frm) {
@@ -39,6 +40,44 @@ frappe.ui.form.on("Training Event", {
 			};
 		});
 	},
+	set_role_profile_employees: function(frm) {
+		if (!frm.doc.role_profile || !frm.doc.role_profile.length) return;
+		// Map all role profile values from the child table
+		let role_profile_names = frm.doc.role_profile
+        .map(rp => rp.role_profile)
+        .filter(Boolean); // Remove any falsy values
+    	if (!role_profile_names.length) return;
+		// Step 1: Fetch users with the selected role profile
+		frappe.db.get_list("User", {
+			filters: [["role_profile_name", "in", role_profile_names]],
+			fields: ["name"],
+			limit: 500,
+		}).then(userResponse => {
+			let user_ids = userResponse.map(user => user.name);
+			if (!user_ids.length) return;
+			// Step 2: Fetch employees whose user_id is in user_ids
+			frappe.db.get_list("Employee", {
+				filters: [
+				["user_id", "in", user_ids],
+				["status", "=", "Active"]
+				],
+				fields: ["name", "employee_name"],
+				limit: 500,
+			}).then(employeeResponse => {
+				let existing_employees = frm.doc.employees.map(emp => emp.employee);
+				employeeResponse.forEach(employee => {
+					if (!existing_employees.includes(employee.name)) {
+						let row = frm.add_child("employees");
+						row.employee = employee.name;
+						row.employee_name = employee.employee_name;
+					}
+				});
+				frm.refresh_field("employees");
+			});
+		});
+	}
+	
+	
 });
 
 frappe.ui.form.on("Training Event Employee", {
