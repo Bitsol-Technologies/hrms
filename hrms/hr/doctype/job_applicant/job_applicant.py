@@ -17,102 +17,109 @@ from hrms.hr.doctype.interview.interview import get_interviewers
 class DuplicationError(frappe.ValidationError):
 	pass
 
-
+previous_status = ""
 class JobApplicant(Document):
-	def onload(self):
-		job_offer = frappe.get_all("Job Offer", filters={"job_applicant": self.name})
-		if job_offer:
-			self.get("__onload").job_offer = job_offer[0].name
+    def __init__(self, *args, **kwargs):
+        self.previous_status = None
+        super().__init__(*args, **kwargs)
 
-	def autoname(self):
-		self.name = self.email_id
+    def onload(self):
+        job_offer = frappe.get_all("Job Offer", filters={"job_applicant": self.name})
+        if job_offer:
+            self.get("__onload").job_offer = job_offer[0].name
 
-		# applicant can apply more than once for a different job title or reapply
-		if frappe.db.exists("Job Applicant", self.name):
-			self.name = append_number_if_name_exists("Job Applicant", self.name)
-   
-	def before_save(self):
-		old_doc = self.get_doc_before_save()
-		if old_doc.applicant_status != self.applicant_status:
-			print("Status changed")
+    def autoname(self):
+        self.name = self.email_id
 
-	def save(self):
-		previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=1)
+        # Applicant can apply more than once for different job titles or reapply
+        if frappe.db.exists("Job Applicant", self.name):
+            self.name = append_number_if_name_exists("Job Applicant", self.name)
 
-		# Check if 'cv_reviews' has changed
-		if self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
-			if self.cv_reviews == "Rejected":
-				self.applicant_status = "CV Rejected"
-			elif self.cv_reviews == "Approved":
-				self.applicant_status = "CV Accepted"
-		job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
-		cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
-		telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
-		
-		if self.applicant_status == "Lead Screening":
-			send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
-   
-		if self.applicant_status == "Telephonic Screening":
-			frappe.sendmail(
-				recipients=telephonic_reviewers,
-				create_notification_log=True,
-				from_users=["Administrator"],
-				for_users=["Administrator"],
-				args={
-					"name": self.applicant_name,
-					"document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
-					"resume_link": self.resume_link,
-					"title": job_opening_doc.get("job_title"),
-				},
-				email_template_name="Telephonic Screening Email",
-			)
-			send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
+    def before_save(self):
+        old_doc = self.get_doc_before_save()
+        global previous_status
+        if old_doc:
+            self.previous_status = old_doc.applicant_status
+            previous_status = old_doc.applicant_status
+        else:
+            self.previous_status = None
 
-		if self.applicant_status == "Rejected":
-			job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+    def save(self):
+        previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=True) or {}
+        global previous_status
 
-			try:
-				frappe.sendmail(
-						recipients=[self.email_id],
-						create_notification_log=True,
-						from_users=["Administrator"],
-						for_users=["Administrator"],
-						args={
-							"name": self.applicant_name,
-							"title": job_opening_doc.get("job_title"),
-						},
-						email_template_name="Rejection Email",
-				)
-			except Exception as e:
-					frappe.log_error(f"Error sending email: {e}")
-		super().save()
-  
-	def validate(self):
-		if self.email_id:
-			validate_email_address(self.email_id, True)
+        if self.cv_reviews and self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
+            if self.cv_reviews == "Rejected":
+                self.applicant_status = "CV Rejected"
+            elif self.cv_reviews == "Approved":
+                self.applicant_status = "CV Accepted"
 
-		if self.employee_referral:
-			self.set_status_for_employee_referral()
+        job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+        cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
+        telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
 
-		if not self.applicant_name and self.email_id:
-			guess = self.email_id.split("@")[0]
-			self.applicant_name = " ".join([p.capitalize() for p in guess.split(".")])
+        if previous_status != "Lead Screening" and self.applicant_status == "Lead Screening":
+            send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
 
+        if previous_status != "Telephonic Screening" and self.applicant_status == "Telephonic Screening":
+            frappe.sendmail(
+                recipients=telephonic_reviewers,
+                create_notification_log=True,
+                from_users=["Administrator"],
+                for_users=["Administrator"],
+                args={
+                    "name": self.applicant_name,
+                    "document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
+                    "resume_link": self.resume_link,
+                    "title": job_opening_doc.get("job_title"),
+                },
+                email_template_name="Telephonic Screening Email",
+            )
+            send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
 
-	def before_insert(self):
-		if self.job_title:
-			job_opening_status = frappe.db.get_value("Job Opening", self.job_title, "status")
-			if job_opening_status == "Closed":
-				frappe.throw(
-					_("Cannot create a Job Applicant against a closed Job Opening"), title=_("Not Allowed")
-				)
+        if previous_status != "Rejected" and self.applicant_status == "Rejected":
+            try:
+                frappe.sendmail(
+                    recipients=[self.email_id],
+                    create_notification_log=True,
+                    from_users=["Administrator"],
+                    for_users=["Administrator"],
+                    args={
+                        "name": self.applicant_name,
+                        "title": job_opening_doc.get("job_title"),
+                    },
+                    email_template_name="Rejection Email",
+                )
+            except Exception as e:
+                frappe.log_error(f"Error sending email: {e}")
 
-	def set_status_for_employee_referral(self):
-		emp_ref = frappe.get_doc("Employee Referral", self.employee_referral)
-		if self.status in ["Open", "Replied", "Hold"]:
-			emp_ref.db_set("status", "In Process")
-		elif self.status in ["Accepted", "Rejected"]:
-			emp_ref.db_set("status", self.status)
+        super().save()  # Ensure this happens last so changes persist
+
+    def validate(self):
+        if self.email_id:
+            validate_email_address(self.email_id, True)
+
+        if self.employee_referral:
+            self.set_status_for_employee_referral()
+
+        if not self.applicant_name and self.email_id:
+            guess = self.email_id.split("@")[0]
+            self.applicant_name = " ".join([p.capitalize() for p in guess.split(".")])
+
+    def before_insert(self):
+        if self.job_title:
+            job_opening_status = frappe.db.get_value("Job Opening", self.job_title, "status")
+            if job_opening_status == "Closed":
+                frappe.throw(
+                    _("Cannot create a Job Applicant against a closed Job Opening"), title=_("Not Allowed")
+                )
+
+    def set_status_for_employee_referral(self):
+        emp_ref = frappe.get_doc("Employee Referral", self.employee_referral)
+        if self.status in ["Open", "Replied", "Hold"]:
+            emp_ref.db_set("status", "In Process")
+        elif self.status in ["Accepted", "Rejected"]:
+            emp_ref.db_set("status", self.status)
 
 
 @frappe.whitelist()
