@@ -17,7 +17,7 @@ from hrms.hr.doctype.interview.interview import get_interviewers
 class DuplicationError(frappe.ValidationError):
 	pass
 
-previous_status = ""
+
 class JobApplicant(Document):
     def __init__(self, *args, **kwargs):
         self.previous_status = None
@@ -36,64 +36,61 @@ class JobApplicant(Document):
             self.name = append_number_if_name_exists("Job Applicant", self.name)
 
     def before_save(self):
+        """
+        Send Slack message to CV Reviewers and Telephonic Interviewers
+        when the applicant status changes to Lead Screening or Telephonic Screening
+        """
         old_doc = self.get_doc_before_save()
-        global previous_status
         if old_doc:
-            self.previous_status = old_doc.applicant_status
+            previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=True) or {}
             previous_status = old_doc.applicant_status
-        else:
-            self.previous_status = None
 
-    def save(self):
-        previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=True) or {}
-        global previous_status
+            # If CV Reviews is updated, update the applicant status
+            if self.cv_reviews and self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
+                if self.cv_reviews == "Rejected":
+                    self.applicant_status = "CV Rejected"
+                elif self.cv_reviews == "Approved":
+                    self.applicant_status = "CV Accepted"
 
-        if self.cv_reviews and self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
-            if self.cv_reviews == "Rejected":
-                self.applicant_status = "CV Rejected"
-            elif self.cv_reviews == "Approved":
-                self.applicant_status = "CV Accepted"
+            job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+            cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
+            telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
 
-        job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
-        cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
-        telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
+            if previous_status != self.applicant_status and self.applicant_status == "Lead Screening":
+                send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
 
-        if previous_status != "Lead Screening" and self.applicant_status == "Lead Screening":
-            send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
-
-        if previous_status != "Telephonic Screening" and self.applicant_status == "Telephonic Screening":
-            frappe.sendmail(
-                recipients=telephonic_reviewers,
-                create_notification_log=True,
-                from_users=["Administrator"],
-                for_users=["Administrator"],
-                args={
-                    "name": self.applicant_name,
-                    "document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
-                    "resume_link": self.resume_link,
-                    "title": job_opening_doc.get("job_title"),
-                },
-                email_template_name="Telephonic Screening Email",
-            )
-            send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
-
-        if previous_status != "Rejected" and self.applicant_status == "Rejected":
-            try:
+            if previous_status != self.applicant_status and self.applicant_status == "Telephonic Screening":
                 frappe.sendmail(
-                    recipients=[self.email_id],
+                    recipients=telephonic_reviewers,
                     create_notification_log=True,
                     from_users=["Administrator"],
                     for_users=["Administrator"],
                     args={
                         "name": self.applicant_name,
+                        "document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
+                        "resume_link": self.resume_link,
                         "title": job_opening_doc.get("job_title"),
                     },
-                    email_template_name="Rejection Email",
+                    email_template_name="Telephonic Screening Email",
                 )
-            except Exception as e:
-                frappe.log_error(f"Error sending email: {e}")
+                send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
 
-        super().save()  # Ensure this happens last so changes persist
+
+            if previous_status != self.applicant_status and self.applicant_status == "Rejected":
+                try:
+                    frappe.sendmail(
+                        recipients=[self.email_id],
+                        create_notification_log=True,
+                        from_users=["Administrator"],
+                        for_users=["Administrator"],
+                        args={
+                            "name": self.applicant_name,
+                            "title": job_opening_doc.get("job_title"),
+                        },
+                        email_template_name="Rejection Email",
+                    )
+                except Exception as e:
+                    frappe.log_error(f"Error sending email: {e}")
 
     def validate(self):
         if self.email_id:
