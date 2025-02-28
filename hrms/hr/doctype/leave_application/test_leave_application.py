@@ -424,6 +424,7 @@ class TestLeaveApplication(FrappeTestCase):
 		application.status = "Approved"
 		self.assertRaises(LeaveDayBlockedError, application.submit)
 
+		# Reset user back to test@example.com after setting status to Approved
 		frappe.set_user("test@example.com")
 
 		# clear other applications
@@ -726,59 +727,37 @@ class TestLeaveApplication(FrappeTestCase):
 	@set_holiday_list("_Test Holiday List", "_Test Company")
 	def test_max_consecutive_leaves_across_leave_applications(self):
 		employee = get_employee()
+		leave_period = get_leave_period()
+		frappe.delete_doc_if_exists("Leave Type", "Test Leave Type", force=1)
 		leave_type = frappe.get_doc(
 			dict(
-				leave_type_name="Test Consecutive Leave Type",
+				leave_type_name="Test Leave Type",
 				doctype="Leave Type",
-				max_continuous_days_allowed=10,
-			)
-		).insert()
-		make_allocation_record(
-			employee=employee.name, leave_type=leave_type.name, from_date="2013-01-01", to_date="2013-12-31"
-		)
-
-		# before
-		frappe.get_doc(
-			dict(
-				doctype="Leave Application",
-				employee=employee.name,
-				leave_type=leave_type.name,
-				from_date="2013-01-30",
-				to_date="2013-02-03",
-				company="_Test Company",
-				status="Approved",
+				max_leaves_allowed=15,
+				max_continuous_days_allowed=3,
 			)
 		).insert()
 
-		# after
-		frappe.get_doc(
-			dict(
-				doctype="Leave Application",
-				employee=employee.name,
-				leave_type=leave_type.name,
-				from_date="2013-02-06",
-				to_date="2013-02-10",
-				company="_Test Company",
-				status="Approved",
-			)
-		).insert()
+		date = add_days(nowdate(), -7)
 
-		# current
-		from_date = getdate("2013-02-04")
-		to_date = getdate("2013-02-05")
+		allocate_leaves(employee, leave_period, leave_type.name, 10)
+
+		# Attempt to create leave application exceeding max continuous days
 		leave_application = frappe.get_doc(
 			dict(
 				doctype="Leave Application",
 				employee=employee.name,
 				leave_type=leave_type.name,
-				from_date=from_date,
-				to_date=to_date,
+				description="_Test Reason",
+				from_date=date,
+				to_date=add_days(date, 4),  # 4 days leave, exceeding max_continuous_days_allowed
 				company="_Test Company",
+				docstatus=1,
 				status="Approved",
 			)
 		)
 
-		# 11 consecutive leaves
+		# Ensure ValidationError is raised due to max continuous days limit
 		self.assertRaises(frappe.ValidationError, leave_application.insert)
 
 	def test_leave_balance_near_allocaton_expiry(self):

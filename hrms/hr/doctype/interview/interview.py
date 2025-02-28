@@ -41,12 +41,12 @@ class Interview(Document):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
 		ics_file = self.create_ics_file(recipients, meeting_link)
-
+		
 		# Create a copy of recipients list before modification
 		notification_recipients = recipients.copy()
 		if self.job_applicant in notification_recipients:
 			notification_recipients.remove(self.job_applicant)
-
+		
 		# Create the attachment tuple as expected by Frappe
 		attachment = {
 			"fname": "event.ics",
@@ -72,8 +72,6 @@ class Interview(Document):
 			)
 		except Exception as e:
 			frappe.log_error(f"Error sending email: {e}")
-
-
 
 	def validate_duplicate_interview(self):
 		duplicate_interview = frappe.db.exists(

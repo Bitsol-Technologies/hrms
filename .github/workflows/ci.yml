@@ -108,6 +108,12 @@ jobs:
         env:
           BRANCH_TO_CLONE: ${{ env.HR_BRANCH }}
 
+        # Add the migration step here:
+      - name: Migrate Test Site
+        run: |
+          cd ~/frappe-bench/
+          bench --site test_site migrate
+
       - name: Run Tests
         run: cd ~/frappe-bench/ && bench --site test_site run-parallel-tests --app hrms --total-builds 2 --build-number ${{ matrix.container }}
         env:

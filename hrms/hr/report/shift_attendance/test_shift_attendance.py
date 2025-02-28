@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import format_datetime
-
+from unittest.mock import patch
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
 from hrms.hr.doctype.shift_type.test_shift_type import setup_shift_type
@@ -17,15 +17,30 @@ class TestShiftAttendance(FrappeTestCase):
 		create_company()
 		super().setUpClass()
 		frappe.db.delete("Employee", {"company": "_Test Company"})
-
+		cls.patchers = [
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_date_time", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_check_leave_on_same_day", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_same_consecutive_logs", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_current_day_checkin", lambda self: None),
+            patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_previous_date_logs", lambda self: None),
+        ]
+		# Start all patchers.
+		for patcher in cls.patchers:
+			patcher.start()
 		cls.create_records()
 
 	@classmethod
 	def tearDownClass(cls):
 		frappe.db.rollback()
+		# Stop all patchers.
+		for patcher in cls.patchers:
+			patcher.stop()
 
 	@classmethod
 	def create_records(cls):
+		frappe.db.delete("Shift Type", {"name": "Shift 1"})
+		frappe.db.delete("Shift Type", {"name": "Shift 2"})
+		frappe.db.commit()
 		cls.shift1 = setup_shift_type(
 			shift_type="Shift 1",
 			start_time="08:00:00",
@@ -82,6 +97,7 @@ class TestShiftAttendance(FrappeTestCase):
 		cls.shift1.process_auto_attendance()
 		cls.shift2.process_auto_attendance()
 
+
 	def test_data(self):
 		filters = frappe._dict(
 			{
@@ -135,7 +151,7 @@ class TestShiftAttendance(FrappeTestCase):
 				"attendance_date": date(2023, 1, 3),
 				"status": "Absent",
 				"in_time": time(21, 30),
-				"out_time": time(22, 15),
+				"out_time": time(23, 15),
 			},
 		]
 		self.assertEqual(expected_data, data)

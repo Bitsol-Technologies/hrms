@@ -134,35 +134,42 @@ def validate_default_accounts(doc, method=None):
 			)
 
 
-def handle_linked_docs(doc, method=None):
-	delete_docs_with_company_field(doc)
-	clear_company_field_for_single_doctypes(doc)
+def unset_company_field(doc, method=None):
+	unset_company_field_for_single_doctype(doc)
+	unset_company_field_for_non_single_doctype(doc)
 
 
-def delete_docs_with_company_field(doc, method=None):
-	"""
-	Deletes records from linked doctypes where the 'company' field matches the company's name
-	"""
+def unset_company_field_for_single_doctype(doc):
+	for doctype in get_single_doctypes_with_company_field():
+		fields = frappe.get_meta(doctype).fields
+		if any(field.fieldname == "company" for field in fields):
+			frappe.db.sql(
+				"""
+                UPDATE `tabSingles`
+                SET value = ''
+                WHERE doctype = %s AND field = 'company' AND value = %s
+                """,
+				(doctype, doc.name),
+			)
+
+
+def unset_company_field_for_non_single_doctype(doc):
 	company_data_to_be_ignored = frappe.get_hooks("company_data_to_be_ignored") or []
 	for doctype in company_data_to_be_ignored:
-		records_to_delete = frappe.get_all(doctype, filters={"company": doc.name}, pluck="name")
-		if records_to_delete:
-			frappe.db.delete(doctype, {"name": ["in", records_to_delete]})
-
-
-def clear_company_field_for_single_doctypes(doc):
-	"""
-	Clears the 'company' value in Single doctypes where applicable
-	"""
-	single_docs = get_single_doctypes_with_company_field()
-	singles = frappe.qb.DocType("Singles")
-	(
-		frappe.qb.update(singles)
-		.set(singles.value, "")
-		.where(singles.doctype.isin(single_docs))
-		.where(singles.field == "company")
-		.where(singles.value == doc.name)
-	).run()
+		company_field = frappe.get_all(
+			"DocField",
+			filters={"parent": doctype, "fieldtype": "Link", "options": "Company"},
+			fields=["fieldname"],
+		)
+		if company_field:
+			frappe.db.sql(
+				f"""
+                UPDATE `tab{doctype}`
+                SET company = ''
+                WHERE company = %s
+                """,
+				(doc.name,),
+			)
 
 
 def get_single_doctypes_with_company_field():

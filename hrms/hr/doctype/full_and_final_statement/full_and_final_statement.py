@@ -7,7 +7,6 @@ from frappe.model.document import Document
 from frappe.utils import flt, get_link_to_form, today
 
 from hrms.hr.doctype.full_and_final_statement.full_and_final_statement_loan_utils import (
-	cancel_loan_repayment,
 	process_loan_accrual,
 )
 
@@ -32,7 +31,6 @@ class FullandFinalStatement(Document):
 
 	def on_cancel(self):
 		self.ignore_linked_doctypes = ("GL Entry",)
-		cancel_loan_repayment(self)
 
 	def validate_relieving_date(self):
 		if not self.relieving_date:
