@@ -22,7 +22,7 @@
  "list_columns": [],
  "login_required": 0,
  "max_attachment_size": 0,
- "modified": "2025-02-19 10:39:47.938328",
+ "modified": "2025-02-26 16:38:35.629959",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "job-application",
@@ -121,7 +121,7 @@
    "max_length": 0,
    "max_value": 0,
    "read_only": 0,
-   "reqd": 1,
+   "reqd": 0,
    "show_in_filter": 0
   },
   {
@@ -134,7 +134,7 @@
    "max_value": 0,
    "precision": "",
    "read_only": 0,
-   "reqd": 0,
+   "reqd": 1,
    "show_in_filter": 0
   },
   {
@@ -363,10 +363,11 @@
    "fieldname": "resume_attachment",
    "fieldtype": "Attach",
    "hidden": 0,
-   "label": "Resume Attachment",
+   "label": "Resume Attachment (PDF, DOC, DOCX)",
    "max_length": 0,
    "max_value": 0,
    "precision": "",
+   "options": "pdf, doc, docx",
    "read_only": 0,
    "reqd": 0,
    "show_in_filter": 0

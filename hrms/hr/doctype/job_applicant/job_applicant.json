@@ -22,6 +22,10 @@
   "applicant_status",
   "section_break_lbuh",
   "cv_reviews",
+  "telephonic_interviewers",
+  "telephonic_reviews",
+  "scoring",
+  "final_result",
   "source_and_rating_section",
   "source",
   "source_name",
@@ -117,7 +121,7 @@
    "fieldtype": "Data",
    "label": "Phone Number",
    "options": "Phone",
-   "permlevel": 2
+   "permlevel": 1
   },
   {
    "fieldname": "country",
@@ -214,13 +218,40 @@
    "label": "CV Reviews",
    "options": "\nApproved\nRejected",
    "permlevel": 1
+  },
+  {
+   "fieldname": "telephonic_interviewers",
+   "fieldtype": "Table",
+   "label": "Telephonic Screening Interviewers",
+   "options": "CV Reviewer"
+  },
+  {
+   "fieldname": "telephonic_reviews",
+   "fieldtype": "Select",
+   "label": "Telephonic Screening Reviews",
+   "options": "\nApproved\nRejected",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
+   "fieldname": "scoring",
+   "fieldtype": "Table",
+   "label": "Scoring",
+   "options": "Scoring"
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
+   "fieldname": "final_result",
+   "fieldtype": "Select",
+   "label": "Final Result",
+   "options": "\nApproved\nRejected"
   }
  ],
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-19 10:59:18.352631",
+ "modified": "2025-02-26 17:50:21.690241",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
