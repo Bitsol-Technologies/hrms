@@ -7,7 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "feedback",
-  "marks"
+  "marks",
+  "assignee"
  ],
  "fields": [
   {
@@ -25,12 +26,20 @@
    "non_negative": 1,
    "precision": "2",
    "reqd": 1
+  },
+  {
+   "fieldname": "assignee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Assignee",
+   "options": "Employee",
+   "reqd": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-02-26 17:16:08.930115",
+ "modified": "2025-03-10 10:18:27.610594",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Scoring",

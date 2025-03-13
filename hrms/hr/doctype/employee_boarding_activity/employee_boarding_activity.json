@@ -7,18 +7,19 @@
  "field_order": [
   "activity_name",
   "user",
-  "role",
   "begin_on",
   "duration",
   "column_break_3",
   "task",
   "task_weight",
   "required_for_employee_creation",
+  "notification_sent",
   "section_break_6",
   "description"
  ],
  "fields": [
   {
+   "allow_on_submit": 1,
    "columns": 3,
    "fieldname": "activity_name",
    "fieldtype": "Data",
@@ -27,21 +28,13 @@
    "reqd": 1
   },
   {
+   "allow_on_submit": 1,
    "columns": 2,
-   "depends_on": "eval:!doc.role",
    "fieldname": "user",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "User",
+   "label": "Assignee",
    "options": "User"
-  },
-  {
-   "columns": 1,
-   "depends_on": "eval:!doc.user",
-   "fieldname": "role",
-   "fieldtype": "Link",
-   "label": "Role",
-   "options": "Role"
   },
   {
    "fieldname": "column_break_3",
@@ -78,6 +71,7 @@
    "label": "Description"
   },
   {
+   "allow_on_submit": 1,
    "columns": 2,
    "fieldname": "duration",
    "fieldtype": "Int",
@@ -85,16 +79,24 @@
    "label": "Duration (Days)"
   },
   {
+   "allow_on_submit": 1,
    "columns": 2,
    "fieldname": "begin_on",
-   "fieldtype": "Int",
+   "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Begin On (Days)"
+  },
+  {
+   "default": "0",
+   "fieldname": "notification_sent",
+   "fieldtype": "Check",
+   "label": "Notification Sent",
+   "read_only": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2022-01-29 14:05:00.543122",
+ "modified": "2025-03-13 09:46:00.477649",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Boarding Activity",

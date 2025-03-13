@@ -44,6 +44,7 @@ class JobApplicant(Document):
         if old_doc:
             previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=True) or {}
             previous_status = old_doc.applicant_status
+            previous_telephonic_reviewers = {lead.email for lead in old_doc.telephonic_interviewers} if old_doc.telephonic_interviewers else set()
 
             # If CV Reviews is updated, update the applicant status
             if self.cv_reviews and self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
@@ -55,6 +56,13 @@ class JobApplicant(Document):
             job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
             cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
             telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
+
+            # Convert both lists to sets before performing set difference
+            previous_telephonic_reviewers_set = set(previous_telephonic_reviewers) if previous_telephonic_reviewers else set()
+            current_telephonic_reviewers_set = set(telephonic_reviewers) if telephonic_reviewers else set()
+
+            # Identify new interviewers who were not in the previous list
+            new_telephonic_reviewers = list(current_telephonic_reviewers_set - previous_telephonic_reviewers_set)
 
             if previous_status != self.applicant_status and self.applicant_status == "Lead Screening":
                 send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
@@ -75,6 +83,22 @@ class JobApplicant(Document):
                 )
                 send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
 
+			# Notify only newly added Telephonic Interviewers
+            if new_telephonic_reviewers and self.applicant_status == "Telephonic Screening":
+                frappe.sendmail(
+					recipients=new_telephonic_reviewers,
+					create_notification_log=True,
+					from_users=["Administrator"],
+					for_users=["Administrator"],
+					args={
+						"name": self.applicant_name,
+						"document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
+						"resume_link": self.resume_link,
+						"title": job_opening_doc.get("job_title"),
+					},
+					email_template_name="Telephonic Screening Email",
+					)
+                send_slack_message(new_telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
 
             if previous_status != self.applicant_status and self.applicant_status == "Rejected":
                 try:
@@ -139,9 +163,11 @@ def create_interview(doc, interview_round):
 	interview = frappe.new_doc("Interview")
 	interview.interview_round = interview_round
 	interview.job_applicant = doc.name
+	interview.applicant_name = doc.applicant_name
 	interview.designation = doc.designation
 	interview.resume_link = doc.resume_link
 	interview.job_opening = doc.job_title
+	interview.job_title = doc.title
 
 	interviewers = get_interviewers(interview_round)
 	for d in interviewers:

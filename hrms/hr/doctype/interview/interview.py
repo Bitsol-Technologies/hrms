@@ -74,18 +74,27 @@ class Interview(Document):
 			frappe.log_error(f"Error sending email: {e}")
 
 	def validate_duplicate_interview(self):
+
 		duplicate_interview = frappe.db.exists(
 			"Interview",
-			{"job_applicant": self.job_applicant, "interview_round": self.interview_round, "docstatus": 1},
+			{
+				"job_applicant": self.job_applicant, 
+				"interview_round": self.interview_round,  
+				"job_opening": self.job_opening,
+				"docstatus": ["in", [0, 1]],
+				"name": ["!=", self.name],
+			},
 		)
 
 		if duplicate_interview:
 			frappe.throw(
 				_(
-					"Job Applicants are not allowed to appear twice for the same Interview round. Interview {0} already scheduled for Job Applicant {1}"
+					"Job Applicants are not allowed to appear twice for the same Interview round. Interview {0} already scheduled for Job Applicant {1} for Job Opening {2} againt ID {3}"
 				).format(
 					frappe.bold(get_link_to_form("Interview", duplicate_interview)),
 					frappe.bold(self.job_applicant),
+					frappe.bold(self.job_opening),
+					frappe.bold(self.name)
 				)
 			)
 
@@ -122,7 +131,7 @@ class Interview(Document):
 		)
 
 	def get_job_applicant_status(self) -> str | None:
-		status_map = {"Cleared": "Accepted", "Rejected": "Rejected"}
+		status_map = {"Cleared": "Active", "Rejected": "Rejected"}
 		return status_map.get(self.status, None)
 
 	@frappe.whitelist()
@@ -166,10 +175,18 @@ class Interview(Document):
 
 		frappe.msgprint(_("Interview Rescheduled successfully"), indicator="green")
 
+	def parse_time(self,time_str):
+		try:
+			# Try to parse with microseconds
+			return datetime.strptime(time_str, "%H:%M:%S.%f").time()
+		except ValueError:
+			# Fall back to format without microseconds
+			return datetime.strptime(time_str, "%H:%M:%S").time()
+		
 	def create_ics_file(self, recipients, meeting_link):
 		event_date = datetime.strptime(self.scheduled_on, "%Y-%m-%d").date()
-		start_time_obj = datetime.strptime(self.from_time, "%H:%M:%S").time()
-		end_time_obj = datetime.strptime(self.to_time, "%H:%M:%S").time()
+		start_time_obj = self.parse_time(self.from_time)
+		end_time_obj = self.parse_time(self.to_time)
 
 		start_time = datetime.combine(event_date, start_time_obj)
 		end_time = datetime.combine(event_date, end_time_obj)

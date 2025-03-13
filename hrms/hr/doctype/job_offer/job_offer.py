@@ -10,6 +10,7 @@ from frappe.utils import cint, flt, get_link_to_form
 
 
 class JobOffer(Document):
+
 	def onload(self):
 		employee = frappe.db.get_value("Employee", {"job_applicant": self.job_applicant}, "name") or ""
 		self.set_onload("employee", employee)
@@ -22,7 +23,7 @@ class JobOffer(Document):
 		if job_offer and job_offer != self.name:
 			frappe.throw(
 				_("Job Offer: {0} is already for Job Applicant: {1}").format(
-					frappe.bold(job_offer), frappe.bold(self.job_applicant)
+					frappe.bold(get_link_to_form("Job Offer", job_offer)), frappe.bold(self.job_applicant)
 				)
 			)
 
@@ -56,8 +57,9 @@ class JobOffer(Document):
 
 
 def update_job_applicant(status, job_applicant):
-	if status in ("Accepted", "Rejected"):
-		frappe.set_value("Job Applicant", job_applicant, "status", status)
+	status_map = {"Accepted": "Active", "Rejected": "Rejected"}
+	if status in status_map:
+		frappe.db.set_value("Job Applicant", job_applicant, "status", status_map[status])
 
 
 def get_staffing_plan_detail(designation, company, offer_date):
@@ -123,3 +125,40 @@ def get_offer_acceptance_rate(company=None, department=None):
 		"value": flt(total_accepted) / flt(total_offers) * 100 if total_offers else 0,
 		"fieldtype": "Percent",
 	}
+
+@frappe.whitelist()
+def send_offer_letter(docname, recipients):
+    doc = frappe.get_doc("Job Offer", docname)
+    
+    # Prepare the context for the email template
+    context = {
+        "name": doc.applicant_name,
+        "title": doc.job_title,  
+    }
+    
+    # Fetch the "Offer Letter" email template (assumes content is in response_html)
+    email_template = frappe.db.get_value("Email Template", "Offer Letter", "response_html")
+    if not email_template:
+        frappe.throw(_("Email template 'Offer Letter' not found."))
+    
+    # Render the email message using the template and context
+    message = frappe.render_template(email_template, context)
+    
+    # Split the recipients string (comma-separated) into a list and trim whitespace
+    recipient_list = [r.strip() for r in recipients.split(",") if r.strip()]
+    
+    frappe.sendmail(
+        recipients=recipient_list,
+        subject=_("Offer Letter from Bitsol Technologies"),
+        message=message,
+        reference_doctype="Job Offer",
+        reference_name=doc.name,
+    )
+    
+    # Add a comment to the Job Offer indicating that the email was sent
+    doc.add_comment("Comment", _("Offer letter email sent to {0}").format(recipient_list))
+    
+    # Mark the email as sent so it won't be sent again
+    doc.db_set("offer_email_sent", 1)
+    
+    return "sent"
