@@ -46,7 +46,6 @@ class Interview(Document):
 		notification_recipients = recipients.copy()
 		if self.job_applicant in notification_recipients:
 			notification_recipients.remove(self.job_applicant)
-		
 		# Create the attachment tuple as expected by Frappe
 		attachment = {
 			"fname": "event.ics",
@@ -70,6 +69,7 @@ class Interview(Document):
 				email_template_name="Interview Scheduling Template" if self.location == "Remote" else "Interview on site",
 				attachments=[attachment]  # Pass the attachment in a list
 			)
+			print("Email sent successfully")
 		except Exception as e:
 			frappe.log_error(f"Error sending email: {e}")
 
