@@ -40,6 +40,7 @@ class Interview(Document):
 	def after_insert(self):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
+		print("Recipients for Interview", recipients)
 		ics_file = self.create_ics_file(recipients, meeting_link)
 		
 		# Create a copy of recipients list before modification
@@ -242,17 +243,30 @@ def get_interviewers(interview_round: str) -> list[str]:
 
 def get_recipients(name, for_feedback=0):
 	interview = frappe.get_doc("Interview", name)
-	interviewers = [d.interviewer for d in interview.interview_details]
+	# Get interviewers from the Interview Details table (explicit entries)
+	details = [d.interviewer for d in interview.interview_details if d.interviewer]
+
+	# Get interviewers from the Interview Round linked field (even if not explicitly added)
+	round_list = frappe.get_all(
+		"Interviewer", 
+		filters={"parent": interview.interview_round}, 
+		fields=["user as interviewer"]
+	)
+	round_list = [d.get("interviewer") for d in round_list if d.get("interviewer")]
+
+
+	# Combine both lists and remove duplicates
+	recipients = list(set(details + round_list))
 
 	if for_feedback:
 		feedback_given_interviewers = frappe.get_all(
 			"Interview Feedback", filters={"interview": name, "docstatus": 1}, pluck="interviewer"
 		)
-		recipients = [d for d in interviewers if d not in feedback_given_interviewers]
+		recipients = [d for d in recipients if d not in feedback_given_interviewers]
 	else:
-		recipients = interviewers
 		recipients.append(frappe.db.get_value("Job Applicant", interview.job_applicant, "email_id"))
 
+	print("Final recipients for Interview", recipients)
 	return recipients
 
 

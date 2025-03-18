@@ -3,36 +3,7 @@ from frappe.model.document import Document
 from frappe.utils import format_datetime, today, getdate
 
 class EmployeeBoardingActivity(Document):
-    def on_trash(self):
-        # Proceed only if the activity had an assigned user
-        if self.get("user"):
-            # Fetch the user document and extract first name (fallback to the user ID if not set)
-            user_doc = frappe.get_doc("User", self.get("user"))
-            user_first_name = user_doc.first_name or self.get("user")
-            
-            # Optional: Format a date if needed (here we assume 'begin_on' exists)
-            formatted_date = format_datetime(self.get("begin_on")) if self.get("begin_on") else ""
-            
-            # Get the parent document to retrieve context such as the job applicant/employee
-            parent_doc = frappe.get_doc("Employee Onboarding", self.parent)
-            subject = "Task Cancellation Notification for Employee: {}".format(parent_doc.job_applicant)
-            message = (
-                "Hello, {}<br><br>"
-                "You have been removed from the onboarding task for employee <strong>{}</strong>.<br>"
-                "The task <b>{}</b> (scheduled for {}) has been cancelled.<br><br>"
-                "Regards,<br>HR Team"
-            ).format(
-                user_first_name,
-                parent_doc.job_applicant,
-                self.get("activity_name"),
-                formatted_date
-            )
-            
-            frappe.sendmail(
-                recipients=[self.get("user")],
-                subject=subject,
-                message=message,
-            )
+    pass
 
 def send_onboarding_reminder():
     """Sends a reminder email to assignees for onboarding tasks scheduled for today."""

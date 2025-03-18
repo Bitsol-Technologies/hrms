@@ -192,7 +192,8 @@
    "fieldname": "interview_details",
    "fieldtype": "Table",
    "label": "Interviewers",
-   "options": "Interview Detail"
+   "options": "Interview Detail",
+   "reqd": 1
   },
   {
    "fetch_from": "job_applicant.applicant_name",
@@ -211,7 +212,8 @@
    "fieldname": "location",
    "fieldtype": "Select",
    "label": "Location",
-   "options": "Onsite\nRemote"
+   "options": "Onsite\nRemote",
+   "reqd": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -222,7 +224,7 @@
    "link_fieldname": "interview"
   }
  ],
- "modified": "2025-03-12 10:10:41.452292",
+ "modified": "2025-03-18 08:42:55.993674",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview",

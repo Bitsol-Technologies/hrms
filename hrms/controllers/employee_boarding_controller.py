@@ -167,7 +167,6 @@ def get_onboarding_details(parent, parenttype):
 
 @frappe.whitelist()
 def reset_and_notify(child_name, parent, subject_prefix=""):
-	print("CALLING reset_and_notify")
 	# Reset the notification flag and send the notification email
 	parent_doc = frappe.get_doc("Employee Onboarding", parent)
 	for activity in parent_doc.activities:

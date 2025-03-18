@@ -206,9 +206,6 @@ doc_events = {
 		"on_trash": "hrms.overrides.employee_master.update_employee_transfer",
 		"after_delete": "hrms.overrides.employee_master.publish_update",
 	},
-       "Employee Boarding Activity": {
-        "on_trash": "hrms.hr.doctype.employee_boarding_activity.employee_boarding_activity.on_trash"
-    },
 	"Project": {"validate": "hrms.controllers.employee_boarding_controller.update_employee_boarding_status"},
 	"Task": {"on_update": "hrms.controllers.employee_boarding_controller.update_task"},
 }
