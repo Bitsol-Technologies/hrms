@@ -258,20 +258,3 @@ def send_slack_message(emails, applicant_name, resume_link, docname, status):
 		else:
 			print(f"Could not find Slack user for {email}")
 
-@frappe.whitelist()
-def get_all_job_applicant_attachments(docname):
-	"""
-    Fetch all attachments (public and private) for a Job Applicant.
-    Ensure that only users with proper permission (e.g., HR Manager) can access this.
-    """
-
-	attachments = frappe.get_all(
-		"File",
-		filters={
-			"attached_to_doctype": "Job Applicant",
-			"attached_to_name": docname
-		},
-		fields=["name", "file_name", "file_url", "is_private"],
-		ignore_permissions=True  # Bypass default permission check
-	)
-	return attachments 

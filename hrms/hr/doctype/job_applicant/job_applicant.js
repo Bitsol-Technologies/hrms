@@ -131,25 +131,6 @@ frappe.ui.form.on("Job Applicant", {
 			},
 		});
 	},
-	refresh_attachments: function(frm) {
-		// Call our custom server-side API to fetch all attachments (public and private)
-		frappe.call({
-			method: "hrms.hr.doctype.job_applicant.job_applicant.get_all_job_applicant_attachments",
-			args: { docname: frm.doc.name },
-			callback: function(r) {
-				if(r.message) {
-					if (!frm.attachments) {
-						frm.attachments = {};
-					}
-					// Update the form's attachments data and refresh the attachments section
-					frm.attachments.data = r.message;
-					if(frm.dashboard && frm.dashboard.data.frm.attachments) {
-						frm.dashboard.data.frm.attachments.refresh();
-					}
-				}
-			}
-		});
-	}
 });
 
 frappe.ui.form.on("CV Reviewer", {

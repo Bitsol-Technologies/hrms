@@ -40,7 +40,6 @@ class Interview(Document):
 	def after_insert(self):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
-		print("Recipients for Interview", recipients)
 		ics_file = self.create_ics_file(recipients, meeting_link)
 		
 		# Create a copy of recipients list before modification
@@ -70,7 +69,6 @@ class Interview(Document):
 				email_template_name="Interview Scheduling Template" if self.location == "Remote" else "Interview on site",
 				attachments=[attachment]  # Pass the attachment in a list
 			)
-			print("Email sent successfully")
 		except Exception as e:
 			frappe.log_error(f"Error sending email: {e}")
 
