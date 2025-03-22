@@ -72,7 +72,7 @@ class EmployeeCheckin(Document):
 
 			# Check if the last log type is the same as the current log type and on the same day
 			if self.log_type.lower() == last_log_type.lower() and last_log_date == frappe.utils.getdate(
-				frappe.utils.nowdate()
+					frappe.utils.nowdate()
 			):
 				frappe.throw(
 					_(
@@ -135,18 +135,18 @@ class EmployeeCheckin(Document):
 	@frappe.whitelist()
 	def fetch_shift(self):
 		if not (
-			shift_actual_timings := get_actual_start_end_datetime_of_shift(
-				self.employee, get_datetime(self.time), True
-			)
+				shift_actual_timings := get_actual_start_end_datetime_of_shift(
+					self.employee, get_datetime(self.time), True
+				)
 		):
 			self.shift = None
 			return
 
 		if (
-			shift_actual_timings.shift_type.determine_check_in_and_check_out
-			== "Strictly based on Log Type in Employee Checkin"
-			and not self.log_type
-			and not self.skip_auto_attendance
+				shift_actual_timings.shift_type.determine_check_in_and_check_out
+				== "Strictly based on Log Type in Employee Checkin"
+				and not self.log_type
+				and not self.skip_auto_attendance
 		):
 			frappe.throw(
 				_("Log Type is required for check-ins falling in the shift: {0}.").format(
@@ -198,12 +198,12 @@ class EmployeeCheckin(Document):
 
 @frappe.whitelist()
 def add_log_based_on_employee_field(
-	employee_field_value,
-	timestamp,
-	device_id=None,
-	log_type=None,
-	skip_auto_attendance=0,
-	employee_fieldname="attendance_device_id",
+		employee_field_value,
+		timestamp,
+		device_id=None,
+		log_type=None,
+		skip_auto_attendance=0,
+		employee_fieldname="attendance_device_id",
 ):
 	"""Finds the relevant Employee using the employee field value and creates a Employee Checkin.
 
@@ -258,15 +258,15 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 
 
 def mark_attendance_and_link_log(
-	logs,
-	attendance_status,
-	attendance_date,
-	working_hours=None,
-	late_entry=False,
-	early_exit=False,
-	in_time=None,
-	out_time=None,
-	shift=None,
+		logs,
+		attendance_status,
+		attendance_date,
+		working_hours=None,
+		late_entry=False,
+		early_exit=False,
+		in_time=None,
+		out_time=None,
+		shift=None,
 ):
 	frappe.utils.logger.set_log_level("DEBUG")
 	logger = frappe.logger("checkin", allow_site=True, file_count=10)
@@ -435,6 +435,7 @@ def update_attendance_in_checkins(log_names: list, attendance_id: str):
 		.where(EmployeeCheckin.name.isin(log_names))
 	).run()
 
+
 import frappe
 import re
 import requests
@@ -442,52 +443,57 @@ import json
 from datetime import datetime, timedelta
 from frappe.utils import today, now, get_datetime
 
+
 def get_today_date_range():
-    today_str = today()  # e.g., "2025-03-18"
-    start_dt_str = f"{today_str} 00:00:00"
-    end_dt_str = f"{today_str} 23:59:59"
-    return today_str, start_dt_str, end_dt_str, get_datetime(start_dt_str), get_datetime(end_dt_str)
+	today_str = today()  # e.g., "2025-03-18"
+	start_dt_str = f"{today_str} 00:00:00"
+	end_dt_str = f"{today_str} 23:59:59"
+	return today_str, start_dt_str, end_dt_str, get_datetime(start_dt_str), get_datetime(end_dt_str)
+
 
 def get_employee_checkins(log_type):
-    today_str, start_dt_str, end_dt_str, _, _ = get_today_date_range()
-    return frappe.get_all(
-        "Employee Checkin",
-        filters={"time": ["between", [start_dt_str, end_dt_str]], "log_type": log_type},
-        fields=[ "name" , "employee", "time"]
-    )
+	today_str, start_dt_str, end_dt_str, _, _ = get_today_date_range()
+	return frappe.get_all(
+		"Employee Checkin",
+		filters={"time": ["between", [start_dt_str, end_dt_str]], "log_type": log_type},
+		fields=["name", "employee", "time"]
+	)
+
 
 def get_default_workspace_id(custom_api_key):
-    """
-    Fetches all workspaces accessible by the API key and returns the first workspace's ID.
-    """
-    headers = {"X-Api-Key": custom_api_key}
-    url = "https://api.clockify.me/api/v1/workspaces"
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        workspaces = response.json()
-        if workspaces:
-            return [ws.get("id") for ws in workspaces if ws.get("id")]
-    except Exception as e:
-        frappe.log_error(f"Error fetching workspaces: {e}", "Clockify Task")
-    return []
+	"""
+	Fetches all workspaces accessible by the API key and returns the first workspace's ID.
+	"""
+	headers = {"X-Api-Key": custom_api_key}
+	url = "https://api.clockify.me/api/v1/workspaces"
+	try:
+		response = requests.get(url, headers=headers)
+		response.raise_for_status()
+		workspaces = response.json()
+		if workspaces:
+			return [ws.get("id") for ws in workspaces if ws.get("id")]
+	except Exception as e:
+		frappe.log_error(f"Error fetching workspaces: {e}", "Clockify Task")
+	return []
+
 
 def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
-    """
-    Looks up the Clockify user ID for a given email within a workspace.
-    """
-    headers = {"X-Api-Key": custom_api_key}
-    url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users"
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        users = response.json()
-        for user in users:
-            if user.get("email") == email:
-                return user.get("id")
-    except Exception as e:
-        frappe.log_error(f"Error fetching Clockify users for workspace {workspace_id}: {e}", "Clockify Task")
-    return None
+	"""
+	Looks up the Clockify user ID for a given email within a workspace.
+	"""
+	headers = {"X-Api-Key": custom_api_key}
+	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users"
+	try:
+		response = requests.get(url, headers=headers)
+		response.raise_for_status()
+		users = response.json()
+		for user in users:
+			if user.get("email") == email:
+				return user.get("id")
+	except Exception as e:
+		frappe.log_error(f"Error fetching Clockify users for workspace {workspace_id}: {e}", "Clockify Task")
+	return None
+
 
 def get_employee_clockify_details(employee_id):
 	"""
@@ -513,6 +519,7 @@ def get_employee_clockify_details(employee_id):
 
 	return (custom_api_key, custom_user_id, workspace_ids, emp, user_id)
 
+
 def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 	"""
 	Check Clockify for an active timer for the given user.
@@ -520,7 +527,7 @@ def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 	"""
 	headers = {"X-Api-Key": custom_api_key}
 	active_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries?in-progress=true"
-	
+
 	try:
 		response = requests.get(active_url, headers=headers)
 		response.raise_for_status()
@@ -530,183 +537,190 @@ def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 		frappe.log_error(f"Clockify API error for user {clockify_user_id}: {e}", "Clockify Task")
 		return False
 
+
 def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, start_dt, end_dt):
-    """
-    Fetch all Clockify time entries for the given user between start_dt and end_dt.
-    Returns a list of time entry objects.
-    """
-    headers = {"X-Api-Key": custom_api_key}
+	"""
+	Fetch all Clockify time entries for the given user between start_dt and end_dt.
+	Returns a list of time entry objects.
+	"""
+	headers = {"X-Api-Key": custom_api_key}
 	# Format in ISO 8601 with a trailing "Z" to indicate UTC timezone
-    start_str = start_dt.isoformat() + "Z"
-    end_str = end_dt.isoformat() + "Z"
-    entries_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries?start={start_str}&end={end_str}"
-    
-    try:
-        response = requests.get(entries_url, headers=headers)
-        response.raise_for_status()
-        entries = response.json()
-        return entries
-    except Exception as e:
-        frappe.log_error(f"Error fetching Clockify entries for user {clockify_user_id}: {e}", "Clockify Task")
-        return []
+	start_str = start_dt.isoformat() + "Z"
+	end_str = end_dt.isoformat() + "Z"
+	entries_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries?start={start_str}&end={end_str}"
+
+	try:
+		response = requests.get(entries_url, headers=headers)
+		response.raise_for_status()
+		entries = response.json()
+		return entries
+	except Exception as e:
+		frappe.log_error(f"Error fetching Clockify entries for user {clockify_user_id}: {e}", "Clockify Task")
+		return []
+
 
 def get_slack_user_id(email):
-    """
-    Fetch Slack User ID using the given email address.
-    """
-    system_settings = frappe.get_single("System Settings")
-    slack_api_url = "https://slack.com/api/users.lookupByEmail"
-    slack_token = system_settings.slack_token
+	"""
+	Fetch Slack User ID using the given email address.
+	"""
+	system_settings = frappe.get_single("System Settings")
+	slack_api_url = "https://slack.com/api/users.lookupByEmail"
+	slack_token = system_settings.slack_token
 
-    headers = {
-        "Authorization": f"Bearer {slack_token}",
-        "Content-Type": "application/json"
-    }
-    response = requests.get(slack_api_url, headers=headers, params={"email": email})
-    data = response.json()
-    if data.get("ok"):
-        return data["user"]["id"]
-    else:
-        frappe.log_error(f"Error fetching Slack user ID for {email}: {data.get('error')}", "Slack Notification")
-        return None
+	headers = {
+		"Authorization": f"Bearer {slack_token}",
+		"Content-Type": "application/json"
+	}
+	response = requests.get(slack_api_url, headers=headers, params={"email": email})
+	data = response.json()
+	if data.get("ok"):
+		return data["user"]["id"]
+	else:
+		frappe.log_error(f"Error fetching Slack user ID for {email}: {data.get('error')}", "Slack Notification")
+		return None
 
 
 def send_slack_message_for_employee(emails, message):
-    """
-    Loop over a list of emails, fetch each user's Slack ID, and send them a Slack message.
-    """
-    system_settings = frappe.get_single("System Settings")
-    slack_post_message_url = "https://slack.com/api/chat.postMessage"
-    slack_token = system_settings.slack_token
+	"""
+	Loop over a list of emails, fetch each user's Slack ID, and send them a Slack message.
+	"""
+	system_settings = frappe.get_single("System Settings")
+	slack_post_message_url = "https://slack.com/api/chat.postMessage"
+	slack_token = system_settings.slack_token
+	env = frappe.db.get_single_value("FCM Notification Settings", "environment")
 
-    for email in emails:
-        if "@" not in email:
-            user_id = email
-        else:
-            user_id = get_slack_user_id(email)
-            if not user_id:
-                frappe.log_error(f"Could not fetch Slack user ID for {email}", "Slack Notification")
-                continue
+	for email in emails:
+		if "@" not in email:
+			user_id = email
+		else:
+			user_id = get_slack_user_id(email)
+			if not user_id:
+				frappe.log_error(f"Could not fetch Slack user ID for {email}", "Slack Notification")
+				continue
 
-        payload = {
-            "channel": user_id,
-            "text": message
-        }
-        headers = {
-            "Authorization": f"Bearer {slack_token}",
-            "Content-Type": "application/json"
-        }
-        response = requests.post(slack_post_message_url, headers=headers, data=json.dumps(payload))
-        result = response.json()
-        if not result.get("ok"):
-            frappe.log_error(f"Error sending Slack message to {email}: {result.get('error')}", "Slack Notification")
+		payload = {
+			"channel": user_id,
+			"text": f"[{env}] {message}" if env else message
+		}
+		headers = {
+			"Authorization": f"Bearer {slack_token}",
+			"Content-Type": "application/json"
+		}
+		response = requests.post(slack_post_message_url, headers=headers, data=json.dumps(payload))
+		result = response.json()
+		if not result.get("ok"):
+			frappe.log_error(f"Error sending Slack message to {email}: {result.get('error')}", "Slack Notification")
+
 
 def check_today_checkins():
-    """
-    Scheduled task that:
-      - Retrieves all Employee Checkin records for today.
-      - For each checkin that is at least 4 hours old:
-          • Checks if there is an active Clockify timer.
-          • Checks if any time entries have been logged since the checkin.
-      - If both are false, sends a Slack reminder notification.
-    """
+	"""
+	Scheduled task that:
+	  - Retrieves all Employee Checkin records for today.
+	  - For each checkin that is at least 4 hours old:
+		  • Checks if there is an active Clockify timer.
+		  • Checks if any time entries have been logged since the checkin.
+	  - If both are false, sends a Slack reminder notification.
+	"""
 
-    checkins = get_employee_checkins("IN")
+	checkins = get_employee_checkins("IN")
 
-    for checkin in checkins:
-        checkin_dt = get_datetime(checkin["time"])
-        current_dt = get_datetime(now())
-        time_since_checkin = current_dt - checkin_dt
+	for checkin in checkins:
+		checkin_dt = get_datetime(checkin["time"])
+		current_dt = get_datetime(now())
+		time_since_checkin = current_dt - checkin_dt
 
-        if time_since_checkin < timedelta(hours=4):
+		if time_since_checkin < timedelta(hours=4):
 			# Skip checkins that are less than 4 hours old
-            continue
+			continue
 
-        # Check if the employee has checked out (log_type "OUT") after this checkin.
-        checkout_records = frappe.get_all(
-            "Employee Checkin",
-            filters={
-                "employee": checkin["employee"],
-                "log_type": "OUT",
-                "time": [">", checkin["time"]]
-            },
-            fields=["name"]
-        )
-        if checkout_records:
-            # print(f"Employee {checkin['employee']} has checked out after checkin {checkin['name']}; skipping reminder.")
-            continue
+		# Check if the employee has checked out (log_type "OUT") after this checkin.
+		checkout_records = frappe.get_all(
+			"Employee Checkin",
+			filters={
+				"employee": checkin["employee"],
+				"log_type": "OUT",
+				"time": [">", checkin["time"]]
+			},
+			fields=["name"]
+		)
+		if checkout_records:
+			# print(f"Employee {checkin['employee']} has checked out after checkin {checkin['name']}; skipping reminder.")
+			continue
 
-        custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(checkin.employee)
+		custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(checkin.employee)
 
-        if not (custom_api_key and custom_user_id and workspace_ids):
-            # msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
-            frappe.log_error(msg, "Clockify Check")
-            continue
+		if not (custom_api_key and custom_user_id and workspace_ids):
+			# msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
+			frappe.log_error(msg, "Clockify Check")
+			continue
 
-        # Check for active timer in any workspace
-        active_timer = False
-        for ws in workspace_ids:
-            if is_clockify_timer_active(custom_api_key, ws, custom_user_id):
-                active_timer = True
-                break
+		# Check for active timer in any workspace
+		active_timer = False
+		for ws in workspace_ids:
+			if is_clockify_timer_active(custom_api_key, ws, custom_user_id):
+				active_timer = True
+				break
 
-        if active_timer:
-            # print(f"Employee {emp.name} has an active Clockify timer in at least one workspace; skipping reminder.")
-            continue
+		if active_timer:
+			# print(f"Employee {emp.name} has an active Clockify timer in at least one workspace; skipping reminder.")
+			continue
 
-        # Check for time entries in any workspace
-        entries_found = False
-        for ws in workspace_ids:
-            entries = get_clockify_time_entries(custom_api_key, ws, custom_user_id, checkin_dt, current_dt)
-            if entries:
-                entries_found = True
-                break
+		# Check for time entries in any workspace
+		entries_found = False
+		for ws in workspace_ids:
+			entries = get_clockify_time_entries(custom_api_key, ws, custom_user_id, checkin_dt, current_dt)
+			if entries:
+				entries_found = True
+				break
 
-        if entries_found:
-            # print(f"Employee {emp.name} has logged time entries in at least one workspace; skipping reminder.")
-            continue
+		if entries_found:
+			# print(f"Employee {emp.name} has logged time entries in at least one workspace; skipping reminder.")
+			continue
 
-        # If no active timer and no time entries across all workspaces, send Slack reminder
-        reminder_message = (
-            "Reminder: You are checked in, but no time is logged in Clockify for the past 4 hours. "
-            "Please start your Clockify timer to ensure compliance."
-        )
-        email = emp.get("user") or emp.get("user_id")
-        if not email:
-            msg = f"Employee {emp.name} missing email for Slack notification."
-            frappe.log_error(msg, "Clockify Check")
-            continue
+		# If no active timer and no time entries across all workspaces, send Slack reminder
+		reminder_message = (
+			"Reminder: You are checked in, but no time is logged in Clockify for the past 4 hours. "
+			"Please start your Clockify timer to ensure compliance."
+		)
+		email = emp.get("user") or emp.get("user_id")
+		if not email:
+			msg = f"Employee {emp.name} missing email for Slack notification."
+			frappe.log_error(msg, "Clockify Check")
+			continue
 
-        send_slack_message_for_employee([email], reminder_message)
+		send_slack_message_for_employee([email], reminder_message)
 
-        from fcm_notification.send_notification import send_push_to_user
-        push_title = "Clockify Timer Reminder"
-        send_push_to_user(email, push_title, reminder_message)
+		from fcm_notification.send_notification import send_push_to_user
+		push_title = "Clockify Timer Reminder"
+		send_push_to_user(email, push_title, reminder_message)
+
 
 def build_compliance_report_table(non_compliant):
-    # Define fixed widths for each column (adjust as needed)
-    header = f"{'Employee':20} | {'Checkin':10} | {'Checkout':10} | {'Reason':30}\n"
-    header += "-" * 80 + "\n"
-    rows = []
-    for rec in non_compliant:
-        emp = rec["employee"]
-        checkin = rec["checkin"].strftime('%I:%M %p') if rec["checkin"] else "N/A"
-        checkout = rec["checkout"].strftime('%I:%M %p') if rec["checkout"] else "N/A"
-        reason = rec["reason"]
-        row = f"{emp:20} | {checkin:10} | {checkout:10} | {reason:30}"
-        rows.append(row)
-    table_text = header + "\n".join(rows)
-    return f"```{table_text}```"
+	# Define fixed widths for each column (adjust as needed)
+	header = f"{'Employee':20} | {'Checkin':10} | {'Checkout':10} | {'Reason':30}\n"
+	header += "-" * 80 + "\n"
+	rows = []
+	for rec in non_compliant:
+		emp = rec["employee"]
+		checkin = rec["checkin"].strftime('%I:%M %p') if rec["checkin"] else "N/A"
+		checkout = rec["checkout"].strftime('%I:%M %p') if rec["checkout"] else "N/A"
+		reason = rec["reason"]
+		row = f"{emp:20} | {checkin:10} | {checkout:10} | {reason:30}"
+		rows.append(row)
+	table_text = header + "\n".join(rows)
+	return f"```{table_text}```"
+
 
 def get_all_active_employees():
-    """
-    Fetch all active employees from the Employee Doctype.
-    """
-    return frappe.get_all(
-        "Employee",
-        filters={"status": "Active"},
-        fields=["name", "employee_name"]
-    )
+	"""
+	Fetch all active employees from the Employee Doctype.
+	"""
+	return frappe.get_all(
+		"Employee",
+		filters={"status": "Active"},
+		fields=["name", "employee_name"]
+	)
+
 
 def send_compliance_report(non_compliant, today_str):
 	if non_compliant:
@@ -714,7 +728,7 @@ def send_compliance_report(non_compliant, today_str):
 		header_text = f"📢  Daily Clockify Compliance Report – {today_str}\n"
 		header_text += f"Total Non-Compliant Employees: {len(non_compliant)}\n\n"
 		# Build the table as a code block 
-		report_message = header_text+ build_compliance_report_table(non_compliant)
+		report_message = header_text + build_compliance_report_table(non_compliant)
 	else:
 		# Build a plain text message
 		report_message = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
@@ -722,170 +736,176 @@ def send_compliance_report(non_compliant, today_str):
 	target = "C08JA26QG84"  # Management Channel
 	send_slack_message_for_employee([target], report_message)
 
+
 def parse_iso8601_duration(duration_str):
-    """
-    Parse an ISO 8601 duration string (e.g., "PT2H16M30S") and return total seconds.
-    """
-    pattern = re.compile(r'^PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?$')
-    match = pattern.match(duration_str)
-    if not match:
-        return 0
-    hours = int(match.group("hours") or 0)
-    minutes = int(match.group("minutes") or 0)
-    seconds = int(match.group("seconds") or 0)
-    return hours * 3600 + minutes * 60 + seconds
+	"""
+	Parse an ISO 8601 duration string (e.g., "PT2H16M30S") and return total seconds.
+	"""
+	pattern = re.compile(r'^PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?$')
+	match = pattern.match(duration_str)
+	if not match:
+		return 0
+	hours = int(match.group("hours") or 0)
+	minutes = int(match.group("minutes") or 0)
+	seconds = int(match.group("seconds") or 0)
+	return hours * 3600 + minutes * 60 + seconds
+
 
 def sum_clockify_durations(entries):
-    """
-    Given a list of Clockify time entries, compute the total duration in seconds.
-    Assumes the "duration" field is always provided as an ISO 8601 duration string.
-    If a "duration" field is not present, falls back to calculating the duration from the timeInterval.
-    """
-    total_seconds = 0
-    for entry in entries:
-        if entry.get("duration"):
-            total_seconds += parse_iso8601_duration(entry["duration"])
-        elif entry.get("timeInterval"):
-            interval = entry["timeInterval"]
-            start_str = interval.get("start")
-            end_str = interval.get("end")
-            if start_str and end_str:
-                start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                total_seconds += (end_dt - start_dt).total_seconds()
-    return total_seconds
+	"""
+	Given a list of Clockify time entries, compute the total duration in seconds.
+	Assumes the "duration" field is always provided as an ISO 8601 duration string.
+	If a "duration" field is not present, falls back to calculating the duration from the timeInterval.
+	"""
+	total_seconds = 0
+	for entry in entries:
+		if entry.get("duration"):
+			total_seconds += parse_iso8601_duration(entry["duration"])
+		elif entry.get("timeInterval"):
+			interval = entry["timeInterval"]
+			start_str = interval.get("start")
+			end_str = interval.get("end")
+			if start_str and end_str:
+				start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+				end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+				total_seconds += (end_dt - start_dt).total_seconds()
+	return total_seconds
+
 
 def award_energy_points(user, points, reason, reference_doctype=None, reference_name=None, rule=None):
-    energy_point = frappe.get_doc({
-        "doctype": "Energy Point Log",
-        "user": user,  # The recipient of the points
-        "points": points,  # Number of points to award
-        "reason": reason,  # Reason for awarding points
-        "rule": rule,  # Optional: Define a rule if needed
-        "reference_doctype": reference_doctype,  # Optional: Related document type
-        "reference_name": reference_name,  # Optional: Related document name
-        "type": "Auto"  # Can be 'Auto' or 'Appreciation'
-    })
-    
-    energy_point.insert(ignore_permissions=True)
-    frappe.db.commit()
-    return f"Energy points awarded to {user}!"
+	energy_point = frappe.get_doc({
+		"doctype": "Energy Point Log",
+		"user": user,  # The recipient of the points
+		"points": points,  # Number of points to award
+		"reason": reason,  # Reason for awarding points
+		"rule": rule,  # Optional: Define a rule if needed
+		"reference_doctype": reference_doctype,  # Optional: Related document type
+		"reference_name": reference_name,  # Optional: Related document name
+		"type": "Auto"  # Can be 'Auto' or 'Appreciation'
+	})
+
+	energy_point.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return f"Energy points awarded to {user}!"
+
+
 def update_employee_times(records, key, employee_times):
-    """Updates the employee_times dictionary with check-in and check-out times."""
-    for rec in records:
-        emp_id = rec.employee
-        dt = get_datetime(rec.time)
-        if emp_id not in employee_times:
-            employee_times[emp_id] = {}
-        if key == "checkin":
-            if "checkin" not in employee_times[emp_id] or dt < employee_times[emp_id]["checkin"]:
-                employee_times[emp_id]["checkin"] = dt
-        elif key == "checkout":
-            if "checkout" not in employee_times[emp_id] or dt > employee_times[emp_id]["checkout"]:
-                employee_times[emp_id]["checkout"] = dt
+	"""Updates the employee_times dictionary with check-in and check-out times."""
+	for rec in records:
+		emp_id = rec.employee
+		dt = get_datetime(rec.time)
+		if emp_id not in employee_times:
+			employee_times[emp_id] = {}
+		if key == "checkin":
+			if "checkin" not in employee_times[emp_id] or dt < employee_times[emp_id]["checkin"]:
+				employee_times[emp_id]["checkin"] = dt
+		elif key == "checkout":
+			if "checkout" not in employee_times[emp_id] or dt > employee_times[emp_id]["checkout"]:
+				employee_times[emp_id]["checkout"] = dt
+
 
 def send_daily_compliance_report():
-    """
-    End-of-Day Compliance Report (to be run at 11 PM):
-    - Checks employee check-ins and Clockify logs to determine compliance.
-    - Sends a compliance report to Slack.
-    """
-    today_str, _, _, start_dt, end_dt = get_today_date_range()
-    in_checkins = get_employee_checkins("IN")
-    out_checkins = get_employee_checkins("OUT")
+	"""
+	End-of-Day Compliance Report (to be run at 11 PM):
+	- Checks employee check-ins and Clockify logs to determine compliance.
+	- Sends a compliance report to Slack.
+	"""
+	today_str, _, _, start_dt, end_dt = get_today_date_range()
+	in_checkins = get_employee_checkins("IN")
+	out_checkins = get_employee_checkins("OUT")
 
-    employee_times = {}
-    update_employee_times(in_checkins, "checkin", employee_times)
-    update_employee_times(out_checkins, "checkout", employee_times)
+	employee_times = {}
+	update_employee_times(in_checkins, "checkin", employee_times)
+	update_employee_times(out_checkins, "checkout", employee_times)
 
-    MIN_REQUIRED_SECONDS = 4 * 3600  # 4 hours in seconds
-    non_compliant = []
+	MIN_REQUIRED_SECONDS = 4 * 3600  # 4 hours in seconds
+	non_compliant = []
 
-    for emp_id, times in employee_times.items():
-        if "checkin" not in times or "checkout" not in times:
-            continue
+	for emp_id, times in employee_times.items():
+		if "checkin" not in times or "checkout" not in times:
+			continue
 
-        custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(emp_id)
-        if not (custom_api_key and custom_user_id and workspace_ids):
-            continue
+		custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(emp_id)
+		if not (custom_api_key and custom_user_id and workspace_ids):
+			continue
 
-        # Check if an active timer is running
-        if any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
-            continue  # Assume compliance if an active timer is running.
+		# Check if an active timer is running
+		if any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
+			continue  # Assume compliance if an active timer is running.
 
-        # Fetch Clockify time entries
-        total_logged_seconds = sum(
-            sum_clockify_durations(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt))
-            for ws in workspace_ids
-        )
+		# Fetch Clockify time entries
+		total_logged_seconds = sum(
+			sum_clockify_durations(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt))
+			for ws in workspace_ids
+		)
 
-        # Determine non-compliance reason
-        reason = None
-        if total_logged_seconds == 0:
-            reason = "No Clockify logs recorded"
-        elif total_logged_seconds < MIN_REQUIRED_SECONDS:
-            hours, minutes = divmod(total_logged_seconds // 60, 60)
-            reason = f"Only {hours} hr {minutes} mins logged (< 4 hours)"
+		# Determine non-compliance reason
+		reason = None
+		if total_logged_seconds == 0:
+			reason = "No Clockify logs recorded"
+		elif total_logged_seconds < MIN_REQUIRED_SECONDS:
+			hours, minutes = divmod(total_logged_seconds // 60, 60)
+			reason = f"Only {hours} hr {minutes} mins logged (< 4 hours)"
 
-        if reason:
-            non_compliant.append({
-                "employee": emp.get("employee_name", emp.name),
-                "checkin": times["checkin"],
-                "checkout": times["checkout"],
-                "reason": reason
-            })
-            award_energy_points(user_id, -1, reason, "Employee", emp_id)
-        else:
-            award_energy_points(user_id, 1, "Compliant with work logs", "Employee", emp_id)
+		if reason:
+			non_compliant.append({
+				"employee": emp.get("employee_name", emp.name),
+				"checkin": times["checkin"],
+				"checkout": times["checkout"],
+				"reason": reason
+			})
+			award_energy_points(user_id, -1, reason, "Employee", emp_id)
+		else:
+			award_energy_points(user_id, 1, "Compliant with work logs", "Employee", emp_id)
 
-    # Scenario B: Active employees with no check-in record
-    active_emps = get_all_active_employees()
-    for emp_dict in active_emps:
-        emp_id = emp_dict["name"]
-        if emp_id in employee_times:
+	# Scenario B: Active employees with no check-in record
+	active_emps = get_all_active_employees()
+	for emp_dict in active_emps:
+		emp_id = emp_dict["name"]
+		if emp_id in employee_times:
 			# if checkin done, skip
-            continue
-        # else no checkin: check for clockify entries or active timer
-        custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(emp_id)
-        if not (custom_api_key and custom_user_id and workspace_ids):
-            print("no id found for ", user_id)
-            continue
+			continue
+		# else no checkin: check for clockify entries or active timer
+		custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(emp_id)
+		if not (custom_api_key and custom_user_id and workspace_ids):
+			print("no id found for ", user_id)
+			continue
 
-        # Check if there are any Clockify logs or active timer
-        if any(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt) for ws in workspace_ids) \
-                or any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
+		# Check if there are any Clockify logs or active timer
+		if any(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt) for ws in workspace_ids) \
+				or any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
 			#  clockify logs are present but no checkin
-            non_compliant.append({
-                "employee": emp.get("employee_name", emp.name),
-                "checkin": "",
-                "checkout": "",
-                "reason": "Clockify logs present but no check-in recorded"
-            })
-            award_energy_points(user_id, -1, "Clockify logs present but no check-in recorded", "Employee", emp_id)
-        else:
+			non_compliant.append({
+				"employee": emp.get("employee_name", emp.name),
+				"checkin": "",
+				"checkout": "",
+				"reason": "Clockify logs present but no check-in recorded"
+			})
+			award_energy_points(user_id, -1, "Clockify logs present but no check-in recorded", "Employee", emp_id)
+		else:
 			# no clockify , no checkin but employee is active 
-             # Check if the employee is on leave
-            if is_employee_on_leave(emp_id, today_str): # if on leave, compliance
-                award_energy_points(user_id, 0, "On leave", "Employee", emp_id)
-            else:
-                non_compliant.append({
-                "employee": emp.get("employee_name", emp.name),
-                "checkin": "",
-                "checkout": "",
-                "reason": "No check-in, No Clockify logs, No leave recorded"
-            })
-                award_energy_points(user_id, -1, "Absent (No check-in, No Clockify logs)", "Employee", emp_id)
+			# Check if the employee is on leave
+			if is_employee_on_leave(emp_id, today_str):  # if on leave, compliance
+				award_energy_points(user_id, 0, "On leave", "Employee", emp_id)
+			else:
+				non_compliant.append({
+					"employee": emp.get("employee_name", emp.name),
+					"checkin": "",
+					"checkout": "",
+					"reason": "No check-in, No Clockify logs, No leave recorded"
+				})
+				award_energy_points(user_id, -1, "Absent (No check-in, No Clockify logs)", "Employee", emp_id)
 
-    send_compliance_report(non_compliant, today_str)
+	send_compliance_report(non_compliant, today_str)
+
 
 def is_employee_on_leave(emp_id, date):
-    """
-    Checks the Attendance Doctype to see if the employee is marked as 'On Leave' or 'Half Day'.
-    
-    :param emp_id: Employee ID
-    :param date: The date to check leave status (YYYY-MM-DD)
-    :return: True if the employee is on leave, False otherwise.
-    """
-    attendance = frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
-    return attendance in ["On Leave", "Half Day"]
+	"""
+	Checks the Attendance Doctype to see if the employee is marked as 'On Leave' or 'Half Day'.
 
+	:param emp_id: Employee ID
+	:param date: The date to check leave status (YYYY-MM-DD)
+	:return: True if the employee is on leave, False otherwise.
+	"""
+	attendance = frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
+	return attendance in ["On Leave", "Half Day"]
