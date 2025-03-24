@@ -452,7 +452,7 @@ def get_today_date_range():
 
 
 def get_employee_checkins(log_type):
-	today_str, start_dt_str, end_dt_str, _, _ = get_today_date_range()
+	_, start_dt_str, end_dt_str, _, _ = get_today_date_range()
 	return frappe.get_all(
 		"Employee Checkin",
 		filters={"time": ["between", [start_dt_str, end_dt_str]], "log_type": log_type},
@@ -772,23 +772,6 @@ def sum_clockify_durations(entries):
 	return total_seconds
 
 
-def award_energy_points(user, points, reason, reference_doctype=None, reference_name=None, rule=None):
-	energy_point = frappe.get_doc({
-		"doctype": "Energy Point Log",
-		"user": user,  # The recipient of the points
-		"points": points,  # Number of points to award
-		"reason": reason,  # Reason for awarding points
-		"rule": rule,  # Optional: Define a rule if needed
-		"reference_doctype": reference_doctype,  # Optional: Related document type
-		"reference_name": reference_name,  # Optional: Related document name
-		"type": "Auto"  # Can be 'Auto' or 'Appreciation'
-	})
-
-	energy_point.insert(ignore_permissions=True)
-	frappe.db.commit()
-	return f"Energy points awarded to {user}!"
-
-
 def update_employee_times(records, key, employee_times):
 	"""Updates the employee_times dictionary with check-in and check-out times."""
 	for rec in records:
@@ -805,107 +788,93 @@ def update_employee_times(records, key, employee_times):
 
 
 def send_daily_compliance_report():
-	"""
-	End-of-Day Compliance Report (to be run at 11 PM):
-	- Checks employee check-ins and Clockify logs to determine compliance.
-	- Sends a compliance report to Slack.
-	"""
-	today_str, _, _, start_dt, end_dt = get_today_date_range()
-	in_checkins = get_employee_checkins("IN")
-	out_checkins = get_employee_checkins("OUT")
+    """
+    End-of-Day Compliance Report (to be run at 11 PM):
+    - Checks employee check-ins and Clockify logs to determine compliance.
+    - Sends a compliance report to Slack.
+    """
+    today_str, _, _, start_dt, end_dt = get_today_date_range()
+    today_date = datetime.strptime(today_str, "%Y-%m-%d").date()
 
-	employee_times = {}
-	update_employee_times(in_checkins, "checkin", employee_times)
-	update_employee_times(out_checkins, "checkout", employee_times)
+    if today_date.weekday() in (5, 6):  # Skip weekends
+        return
 
-	MIN_REQUIRED_SECONDS = 4 * 3600  # 4 hours in seconds
-	non_compliant = []
+    in_checkins = get_employee_checkins("IN")
+    out_checkins = get_employee_checkins("OUT")
 
-	for emp_id, times in employee_times.items():
-		if "checkin" not in times or "checkout" not in times:
-			continue
+    employee_times = {}
+    update_employee_times(in_checkins, "checkin", employee_times)
+    update_employee_times(out_checkins, "checkout", employee_times)
 
-		custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(emp_id)
-		if not (custom_api_key and custom_user_id and workspace_ids):
-			continue
+    FULL_DAY_SECONDS = 6 * 3600 
+    HALF_DAY_SECONDS = 3 * 3600 + 40 * 60
+    non_compliant = []
 
-		# Check if an active timer is running
-		if any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
-			continue  # Assume compliance if an active timer is running.
+    active_emps = {emp["name"]: emp for emp in get_all_active_employees()}  
 
-		# Fetch Clockify time entries
-		total_logged_seconds = sum(
-			sum_clockify_durations(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt))
-			for ws in workspace_ids
-		)
+    for emp_id in active_emps:
+        times = employee_times.get(emp_id, {})
+        custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(emp_id)
 
-		# Determine non-compliance reason
-		reason = None
-		if total_logged_seconds == 0:
-			reason = "No Clockify logs recorded"
-		elif total_logged_seconds < MIN_REQUIRED_SECONDS:
-			hours, minutes = divmod(total_logged_seconds // 60, 60)
-			reason = f"Only {hours} hr {minutes} mins logged (< 4 hours)"
+        if not (custom_api_key and custom_user_id and workspace_ids):
+            continue  # Skip employees without Clockify setup
 
-		if reason:
-			non_compliant.append({
-				"employee": emp.get("employee_name", emp.name),
-				"checkin": times["checkin"],
-				"checkout": times["checkout"],
-				"reason": reason
-			})
-			award_energy_points(user_id, -1, reason, "Employee", emp_id)
-		else:
-			award_energy_points(user_id, 1, "Compliant with work logs", "Employee", emp_id)
+        # Check if an active timer is running
+        if any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
+            continue
 
-	# Scenario B: Active employees with no check-in record
-	active_emps = get_all_active_employees()
-	for emp_dict in active_emps:
-		emp_id = emp_dict["name"]
-		if emp_id in employee_times:
-			# if checkin done, skip
-			continue
-		# else no checkin: check for clockify entries or active timer
-		custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(emp_id)
-		if not (custom_api_key and custom_user_id and workspace_ids):
-			print("no id found for ", user_id)
-			continue
+        # Fetch Clockify logs
+        total_logged_seconds = sum(
+            sum_clockify_durations(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt))
+            for ws in workspace_ids
+        )
+		# Get leave status (None, "Half Day", "On Leave", "Present" etc.)
+        leave_status = get_employee_leave_status(emp_id, today_str)
+        min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
 
-		# Check if there are any Clockify logs or active timer
-		if any(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt) for ws in workspace_ids) \
-				or any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
-			#  clockify logs are present but no checkin
-			non_compliant.append({
-				"employee": emp.get("employee_name", emp.name),
-				"checkin": "",
-				"checkout": "",
-				"reason": "Clockify logs present but no check-in recorded"
-			})
-			award_energy_points(user_id, -1, "Clockify logs present but no check-in recorded", "Employee", emp_id)
-		else:
-			# no clockify , no checkin but employee is active 
-			# Check if the employee is on leave
-			if is_employee_on_leave(emp_id, today_str):  # if on leave, compliance
-				award_energy_points(user_id, 0, "On leave", "Employee", emp_id)
-			else:
-				non_compliant.append({
-					"employee": emp.get("employee_name", emp.name),
-					"checkin": "",
-					"checkout": "",
-					"reason": "No check-in, No Clockify logs, No leave recorded"
-				})
-				award_energy_points(user_id, -1, "Absent (No check-in, No Clockify logs)", "Employee", emp_id)
+        # Determine non-compliance
+        reason = check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today_str)
 
-	send_compliance_report(non_compliant, today_str)
+        if reason:
+            non_compliant.append({
+                "employee": emp.get("employee_name", emp.name),
+                "checkin": times.get("checkin", ""),
+                "checkout": times.get("checkout", ""),
+                "reason": reason
+            })
+            
+
+    send_compliance_report(non_compliant, today_str)
 
 
-def is_employee_on_leave(emp_id, date):
-	"""
-	Checks the Attendance Doctype to see if the employee is marked as 'On Leave' or 'Half Day'.
+def check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today_str):
+    """
+    Determines the reason for an employee's non-compliance.
+    """
+    if "checkin" not in times:
+        if total_logged_seconds > 0:
+            return "Clockify logs present but no check-in recorded"
+        elif get_employee_leave_status(emp_id,today_str) == "On Leave":
+            return None  # On leave, so no penalty
+        else:
+            return "No check-in, No Clockify logs, No leave recorded"
 
-	:param emp_id: Employee ID
-	:param date: The date to check leave status (YYYY-MM-DD)
-	:return: True if the employee is on leave, False otherwise.
-	"""
-	attendance = frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
-	return attendance in ["On Leave", "Half Day"]
+    if total_logged_seconds == 0:
+        return "No Clockify logs recorded"
+
+    if total_logged_seconds < min_seconds:
+        hours, minutes = divmod(total_logged_seconds // 60, 60)
+        return f"Only {hours} hr {minutes} mins logged"
+
+    return None  # Employee is compliant
+
+
+def get_employee_leave_status(emp_id, date):
+    """
+    Fetches the leave status for an employee on a given date.
+
+    :param emp_id: Employee ID
+    :param date: The date to check leave status (YYYY-MM-DD)
+    :return: "On Leave", "Half Day", or None if not on leave.
+    """
+    return frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
