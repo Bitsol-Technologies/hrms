@@ -854,7 +854,7 @@ def check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today
     if "checkin" not in times:
         if total_logged_seconds > 0:
             return "Clockify logs present but no check-in recorded"
-        elif is_employee_on_leave(emp_id, today_str):
+        elif get_employee_leave_status(emp_id,today_str) == "On Leave":
             return None  # On leave, so no penalty
         else:
             return "No check-in, No Clockify logs, No leave recorded"
@@ -868,17 +868,6 @@ def check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today
 
     return None  # Employee is compliant
 
-
-def is_employee_on_leave(emp_id, date):
-	"""
-	Checks the Attendance Doctype to see if the employee is marked as 'On Leave' or 'Half Day'.
-
-	:param emp_id: Employee ID
-	:param date: The date to check leave status (YYYY-MM-DD)
-	:return: True if the employee is on leave, False otherwise.
-	"""
-	attendance = frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
-	return attendance in ["On Leave"]
 
 def get_employee_leave_status(emp_id, date):
     """
