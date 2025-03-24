@@ -215,7 +215,7 @@
    "fieldname": "applicant_status",
    "fieldtype": "Select",
    "label": "Applicant Status",
-   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Accepted\nBackground Check\nOnboarding\nRejected\nCV Accepted\nCV Rejected"
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nCV Accepted\nCV Rejected\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Accepted\nBackground Check\nOnboarding\nRejected"
   },
   {
    "fieldname": "section_break_lbuh",
@@ -272,7 +272,7 @@
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-03-12 09:53:56.039664",
+ "modified": "2025-03-24 13:10:34.942217",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",

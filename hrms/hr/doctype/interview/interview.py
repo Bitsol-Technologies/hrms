@@ -51,24 +51,49 @@ class Interview(Document):
 			"fname": "event.ics",
 			"fcontent": ics_file
 		}
+		# Convert attachment into JSON format for logging
+		notification_attachment = frappe.as_json(attachment)  # Converts dict to JSON string
+
 		try:
+			# Step 1: Dynamically select the email template
+			email_template_name = "Interview Scheduling Template" if self.location == "Remote" else "Interview on site"
+
+			# Step 2: Prepare email arguments (used for both email & notification logs)
+			email_args = {
+				"name": self.applicant_name,
+				"title": self.job_title,
+				"location": self.location,
+				"date": self.scheduled_on,
+				"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
+				"meeting_link": meeting_link if self.location == "Remote" else "N/A",
+				"resume_link": self.resume_link,
+				"interview_type": "Remote" if self.location == "Remote" else "On-Site"
+			}
+
+			# Step 3: Fetch & render the email template
+			email_template = frappe.get_doc("Email Template", email_template_name)
+			email_content = frappe.render_template(email_template.response, email_args)
+
+			# Step 4: Send the email
 			frappe.sendmail(
 				recipients=recipients,
-				create_notification_log=True,
+				create_notification_log=False,  # Disable auto-log so we can manually log
 				from_users=["Administrator"],
-				for_users=notification_recipients,  # Use the modified recipients list
-				args={
-					"name": self.applicant_name,
-					"title": self.job_title,
-					"location": self.location,
-					"date": self.scheduled_on,
-					"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
-					"meeting_link": meeting_link,
-					"resume_link": self.resume_link,
-				},
-				email_template_name="Interview Scheduling Template" if self.location == "Remote" else "Interview on site",
-				attachments=[attachment]  # Pass the attachment in a list
+				args=email_args,
+				email_template_name=email_template_name,
+				attachments=[attachment]  # Ensure it's a list
 			)
+
+			# Step 5: Manually create the notification log with the same content
+			frappe.get_doc({
+				"doctype": "Notification Log",
+				"subject": f"Interview Scheduled - {email_args['interview_type']}",
+				"email_content": email_content,  # Use the same rendered email template
+				"document_type": "Interview",
+				"document_name": self.name,
+				"for_users": notification_recipients,  # Use the same recipients
+			}).insert(ignore_permissions=True)
+
 		except Exception as e:
 			frappe.log_error(f"Error sending email: {e}")
 
