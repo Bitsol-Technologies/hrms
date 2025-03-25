@@ -442,7 +442,8 @@ import requests
 import json
 from datetime import datetime, timedelta
 from frappe.utils import today, now, get_datetime
-
+FULL_DAY_SECONDS = 6 * 3600 
+HALF_DAY_SECONDS = 3 * 3600 + 40 * 60
 
 def get_today_date_range():
 	today_str = today()  # e.g., "2025-03-18"
@@ -716,7 +717,7 @@ def build_compliance_report_table(non_compliant):
 		row = f"{emp:20} | {checkin:10} | {checkout:10} | {reason:30}"
 		rows.append(row)
 	table_text = header + "\n".join(rows)
-	return f"```{table_text}```"
+	return table_text
 
 
 def get_all_active_employees():
@@ -733,16 +734,40 @@ def get_all_active_employees():
 def send_compliance_report(non_compliant, today_str):
 	if non_compliant:
 		# Build a plain text header
-		header_text = f"📢  Daily Clockify Compliance Report – {today_str}\n"
+		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\n"
 		header_text += f"Total Non-Compliant Employees: {len(non_compliant)}\n\n"
 		# Build the table as a code block 
-		report_message = header_text + build_compliance_report_table(non_compliant)
+		report_message = build_compliance_report_table(non_compliant)
+		# Ensure message is within Slack's 4000-character limit
+		split_messages = split_long_message(header_text+ report_message)
+
 	else:
 		# Build a plain text message
-		report_message = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
+		split_messages = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
 
 	target = "C08JA26QG84"  # Management Channel
-	send_slack_message_for_employee([target], report_message)
+	for msg in split_messages:
+		send_slack_message_for_employee([target], msg)
+		
+def split_long_message(message, max_length=3800):
+	"""
+	Splits long Slack messages into multiple parts while keeping code block formatting.
+	"""
+	messages = []
+	while len(message) > max_length:
+		split_index = message[:max_length].rfind("\n")  # Split at the last newline
+		if split_index == -1:
+			split_index = max_length  # If no newline found, force split
+
+		# Ensure code block formatting stays intact
+		messages.append(f"```{message[:split_index]}```")
+		message = message[split_index:].strip()
+
+	# Add the last part
+	if message:
+		messages.append(f"```{message}```")
+
+	return messages
 
 
 def parse_iso8601_duration(duration_str):
@@ -828,8 +853,6 @@ def send_daily_compliance_report():
 	update_employee_times(in_checkins, "checkin", employee_times)
 	update_employee_times(out_checkins, "checkout", employee_times)
 
-	FULL_DAY_SECONDS = 6 * 3600 
-	HALF_DAY_SECONDS = 3 * 3600 + 40 * 60
 	non_compliant = []
 
 	active_emps = {emp["name"]: emp for emp in get_all_active_employees()}  
@@ -838,24 +861,8 @@ def send_daily_compliance_report():
 		times = employee_times.get(emp_id, {})
 		custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(emp_id)
 
-		if not (custom_api_key and custom_user_id and workspace_ids):
-			continue  # Skip employees without Clockify setup
-
-		# Check if an active timer is running
-		if any(is_clockify_timer_active(custom_api_key, ws, custom_user_id) for ws in workspace_ids):
-			continue
-
-		# Fetch Clockify logs
-		total_logged_seconds = sum(
-			sum_clockify_durations(get_clockify_time_entries(custom_api_key, ws, custom_user_id, start_dt, end_dt))
-			for ws in workspace_ids
-		)
-		# Get leave status (None, "Half Day", "On Leave", "Present" etc.)
-		leave_status = get_employee_leave_status(emp_id, today_str)
-		min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
-
 		# Determine non-compliance
-		reason = check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today_str)
+		reason = check_non_compliance(emp_id, times, custom_api_key, custom_user_id, workspace_ids, start_dt, end_dt, today_str)
 
 		if reason:
 			non_compliant.append({
@@ -868,10 +875,39 @@ def send_daily_compliance_report():
 	send_compliance_report(non_compliant, today_str)
 
 
-def check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today_str):
+def check_non_compliance(emp_id, times, api_key, user_id, workspaces, start_dt, end_dt, today_str):
 	"""
 	Determines the reason for an employee's non-compliance.
 	"""
+	# Check missing Clockify details first
+	missing_fields = [
+		field for field, value in [
+			("Clockify API Key", api_key),
+			("Clockify User ID", user_id),
+			("Clockify Workspace ID", workspaces)
+		] if not value
+	]
+
+	if missing_fields:
+		return "Missing Clockify Api Key"
+	try:
+		# Check if an active timer is running
+		if any(is_clockify_timer_active(api_key, ws, user_id) for ws in workspaces):
+			return None
+
+		# Fetch Clockify logs
+		total_logged_seconds = sum(
+			sum_clockify_durations(get_clockify_time_entries(api_key, ws, user_id, start_dt, end_dt))
+			for ws in workspaces
+		)
+	except Exception as e:
+		return "Invalid API Key in the system"
+	
+
+	# Get leave status (None, "Half Day", "On Leave", "Present" etc.)
+	leave_status = get_employee_leave_status(emp_id, today_str)
+	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
+
 	if "checkin" not in times:
 		if total_logged_seconds > 0:
 			return "Clockify logs present but no check-in recorded"
