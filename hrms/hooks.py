@@ -223,7 +223,7 @@ scheduler_events = {
 	"hourly_long": [
 		# "hrms.hr.doctype.shift_type.shift_type.process_auto_attendance_for_all_shifts",
 		"hrms.hr.doctype.shift_schedule_assignment.shift_schedule_assignment.process_auto_shift_creation",
-        "hrms.hr.doctype.employee_checkin.employee_checkin.check_today_checkins",
+		"hrms.hr.doctype.employee_checkin.employee_checkin.check_today_checkins",
 	],
 	"daily": [
 		"hrms.controllers.employee_reminders.send_birthday_reminders",
@@ -247,7 +247,7 @@ scheduler_events = {
 		"0 2 * * *": ["hrms.hr.doctype.shift_type.shift_type.process_auto_attendance_for_all_shifts"],
 		"*/15 * * * *": ["hrms.hr.doctype.shift_type.shift_type.notify_employees_to_checkin_or_checkout"],
 		"0 10 * * *": ["hrms.hr.doctype.work_from_home.work_from_home.send_wfh_feedback_forms"],
-        "0 23 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report"]
+		"0 23 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report"]
 	},
 }
 

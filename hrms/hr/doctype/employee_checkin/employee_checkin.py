@@ -453,11 +453,19 @@ def get_today_date_range():
 
 def get_employee_checkins(log_type):
 	_, start_dt_str, end_dt_str, _, _ = get_today_date_range()
-	return frappe.get_all(
+	checkins = frappe.get_all(
 		"Employee Checkin",
 		filters={"time": ["between", [start_dt_str, end_dt_str]], "log_type": log_type},
-		fields=["name", "employee", "time"]
+		fields=["name", "employee", "time"],
+		order_by="time DESC",
 	)
+	# Keep only the latest check-in per employee
+	latest_checkins = {}
+	for checkin in checkins:
+		if checkin["employee"] not in latest_checkins:
+			latest_checkins[checkin["employee"]] = checkin
+
+	return list(latest_checkins.values())  # Return only the latest check-ins
 
 
 def get_default_workspace_id(custom_api_key):
@@ -497,9 +505,9 @@ def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
 
 def get_employee_clockify_details(employee_id):
 	"""
-    Retrieves Clockify details for an employee. If workspace or user ID is missing,
-    it uses the API key to fetch a default workspace and then looks up the user by email.
-    """
+	Retrieves Clockify details for an employee. If workspace or user ID is missing,
+	it uses the API key to fetch a default workspace and then looks up the user by email.
+	"""
 	emp = frappe.get_doc("Employee", employee_id)
 	user_id = emp.get("user_id")
 	custom_api_key = emp.get("custom_clockify_api_key")
@@ -611,7 +619,7 @@ def send_slack_message_for_employee(emails, message):
 		if not result.get("ok"):
 			frappe.log_error(f"Error sending Slack message to {email}: {result.get('error')}", "Slack Notification")
 
-
+# send reminder to turn on clockify timer
 def check_today_checkins():
 	"""
 	Scheduled task that:
@@ -786,7 +794,7 @@ def update_employee_times(records, key, employee_times):
 			if "checkout" not in employee_times[emp_id] or dt > employee_times[emp_id]["checkout"]:
 				employee_times[emp_id]["checkout"] = dt
 
-
+# send compliance report to operations channel
 def send_daily_compliance_report():
 	"""
 	End-of-Day Compliance Report (to be run at 11 PM):
@@ -800,17 +808,31 @@ def send_daily_compliance_report():
 		return
 
 	in_checkins = get_employee_checkins("IN")
-	out_checkins = get_employee_checkins("OUT")
+	out_checkins = []
+	for checkin in in_checkins:
+		checkout_record = frappe.get_all(
+			"Employee Checkin",
+			filters={
+				"employee": checkin["employee"],
+				"log_type": "OUT",
+				"time": [">", checkin["time"]]  # Ensure checkout happens after check-in
+			},
+			fields=["name", "employee", "time"],
+			order_by="time DESC",  # Get the latest checkout
+			limit_page_length=1  # Fetch only one record
+		)
 
+		if checkout_record:
+			out_checkins.append(checkout_record[0])  # Add valid checkout to the list
 	employee_times = {}
 	update_employee_times(in_checkins, "checkin", employee_times)
 	update_employee_times(out_checkins, "checkout", employee_times)
 
-	FULL_DAY_SECONDS = 6 * 3600
+	FULL_DAY_SECONDS = 6 * 3600 
 	HALF_DAY_SECONDS = 3 * 3600 + 40 * 60
 	non_compliant = []
 
-	active_emps = {emp["name"]: emp for emp in get_all_active_employees()}
+	active_emps = {emp["name"]: emp for emp in get_all_active_employees()}  
 
 	for emp_id in active_emps:
 		times = employee_times.get(emp_id, {})
@@ -866,7 +888,6 @@ def check_non_compliance(emp_id, times, total_logged_seconds, min_seconds, today
 		return f"Only {hours} hr {minutes} mins logged"
 
 	return None  # Employee is compliant
-
 
 def get_employee_leave_status(emp_id, date):
 	"""
