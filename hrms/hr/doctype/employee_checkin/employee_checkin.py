@@ -451,6 +451,11 @@ def get_today_date_range():
 	end_dt_str = f"{today_str} 23:59:59"
 	return today_str, start_dt_str, end_dt_str, get_datetime(start_dt_str), get_datetime(end_dt_str)
 
+def get_system_clockify_settings():
+	settings = frappe.get_single("System Settings")
+	api_key = settings.get("clockify_api_key")
+	workspaces = [ws.strip() for ws in (settings.get("clockify_workspace_id") or "").split(",") if ws.strip()]
+	return api_key, workspaces
 
 def get_employee_checkins(log_type):
 	_, start_dt_str, end_dt_str, _, _ = get_today_date_range()
@@ -656,7 +661,7 @@ def check_today_checkins():
 			# print(f"Employee {checkin['employee']} has checked out after checkin {checkin['name']}; skipping reminder.")
 			continue
 
-		custom_api_key, custom_user_id, workspace_ids, emp, user_id = get_employee_clockify_details(checkin.employee)
+		custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
 
 		if not (custom_api_key and custom_user_id and workspace_ids):
 			# msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
@@ -722,13 +727,16 @@ def build_compliance_report_table(non_compliant):
 
 def get_all_active_employees():
 	"""
-	Fetch all active employees from the Employee Doctype.
+	Fetch all employees from ERPNext where status is 'Active'.
+	Returns a list of dictionaries with 'user_id' mapping to Clockify user ID.
 	"""
-	return frappe.get_all(
+	employees = frappe.get_all(
 		"Employee",
 		filters={"status": "Active"},
-		fields=["name", "employee_name"]
+		fields=["user_id", "name"]
 	)
+	return employees
+
 
 
 def send_compliance_report(non_compliant, today_str):
@@ -804,20 +812,42 @@ def sum_clockify_durations(entries):
 				total_seconds += (end_dt - start_dt).total_seconds()
 	return total_seconds
 
-
-def update_employee_times(records, key, employee_times):
-	"""Updates the employee_times dictionary with check-in and check-out times."""
-	for rec in records:
-		emp_id = rec.employee
-		dt = get_datetime(rec.time)
-		if emp_id not in employee_times:
-			employee_times[emp_id] = {}
-		if key == "checkin":
-			if "checkin" not in employee_times[emp_id] or dt < employee_times[emp_id]["checkin"]:
-				employee_times[emp_id]["checkin"] = dt
-		elif key == "checkout":
-			if "checkout" not in employee_times[emp_id] or dt > employee_times[emp_id]["checkout"]:
-				employee_times[emp_id]["checkout"] = dt
+def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
+	"""
+	Loops over each workspace ID and calls the Clockify API to fetch users.
+	Returns a dictionary with workspace ID as key and list of users as value.
+	"""
+	employee_records = {}
+	headers = {"X-Api-Key": api_key}
+	# Convert active_employees list into a dictionary for quick lookups
+	active_employee_map = {emp["user_id"].lower(): emp["name"] for emp in active_employees}
+	for ws in workspace_ids:
+		url = f"https://api.clockify.me/api/v1/workspaces/{ws}/users?page-size=500"
+		try:
+			response = requests.get(url, headers=headers)
+			response.raise_for_status()
+			users = response.json()
+			for user in users:
+				email = user.get("email")
+				if not email or email not in active_employee_map:
+					frappe.log_error(f"User {user.get('name')} missing email in ERPNext or Clockify workspace", "Clockify Task")
+					# print(f"User {user.get('name')} missing email")
+					continue
+				if email in employee_records:
+					if ws not in employee_records[email]["workspace_ids"]:
+						employee_records[email]["workspace_ids"].append(ws)
+				else:
+					# create a new record
+					employee_records[email] = {
+						"workspace_ids": [ws],
+						"user_id": user.get("id"),
+						"employee_name": user.get("name"),
+						"employee":active_employee_map[email]
+					}
+		except Exception as e:
+			frappe.log_error(f"Error fetching Clockify users for workspace {ws}: {e}", "Clockify Task")
+		
+	return employee_records
 
 # send compliance report to operations channel
 def send_daily_compliance_report():
@@ -831,99 +861,137 @@ def send_daily_compliance_report():
 
 	if today_date.weekday() in (5, 6):  # Skip weekends
 		return
-
-	in_checkins = get_employee_checkins("IN")
-	out_checkins = []
-	for checkin in in_checkins:
-		checkout_record = frappe.get_all(
-			"Employee Checkin",
-			filters={
-				"employee": checkin["employee"],
-				"log_type": "OUT",
-				"time": [">", checkin["time"]]  # Ensure checkout happens after check-in
-			},
-			fields=["name", "employee", "time"],
-			order_by="time DESC",  # Get the latest checkout
-			limit_page_length=1  # Fetch only one record
-		)
-
-		if checkout_record:
-			out_checkins.append(checkout_record[0])  # Add valid checkout to the list
-	employee_times = {}
-	update_employee_times(in_checkins, "checkin", employee_times)
-	update_employee_times(out_checkins, "checkout", employee_times)
+	
+	# Get system-level Clockify settings (API Key and comma-separated workspace IDs)
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+	if not custom_api_key or not workspace_ids:
+		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
+		# print("Missing Clockify API Key or Workspace IDs in System Settings")
+		return
+	
+	# Fetch active employees from ERPNext
+	active_employees = get_all_active_employees()
+	# fetch  users across all workspaces
+	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
 
 	non_compliant = []
-
-	active_emps = {emp["name"]: emp for emp in get_all_active_employees()}  
-
-	for emp_id in active_emps:
-		times = employee_times.get(emp_id, {})
-		custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(emp_id)
-
-		# Determine non-compliance
-		reason = check_non_compliance(emp_id, times, custom_api_key, custom_user_id, workspace_ids, start_dt, end_dt, today_str)
-
+	for email, emp_data in workspace_users.items():
+		checkin, checkout, reason = check_non_compliance(email, emp_data, custom_api_key, start_dt, end_dt)
 		if reason:
 			non_compliant.append({
-				"employee": emp.get("employee_name", emp.name),
-				"checkin": times.get("checkin", ""),
-				"checkout": times.get("checkout", ""),
+				"employee": emp_data["employee_name"],
+				"checkin": checkin,
+				"checkout": checkout,
 				"reason": reason
 			})
-
 	send_compliance_report(non_compliant, today_str)
 
 
-def check_non_compliance(emp_id, times, api_key, user_id, workspaces, start_dt, end_dt, today_str):
+def get_employee_checkin(emp_email, start_dt, end_dt):
 	"""
-	Determines the reason for an employee's non-compliance.
+	Fetches the check-in and check-out records for a specific employee within the given time range.
+	Returns a dictionary with keys "checkin" and "checkout". If no records are found, returns an empty dict.
+	
+	Parameters:
+		emp_email (str): The employee's email (used as user_id in ERPNext).
+		start_dt (datetime): The start of the time range.
+		end_dt (datetime): The end of the time range.
 	"""
-	# Check missing Clockify details first
-	missing_fields = [
-		field for field, value in [
-			("Clockify API Key", api_key),
-			("Clockify User ID", user_id),
-			("Clockify Workspace ID", workspaces)
-		] if not value
-	]
+	# Lookup the ERPNext Employee using the email stored as user_id
+	employee = frappe.db.get_value("Employee", {"user_id": emp_email}, "name")
+	
+	if not employee:
+		return {}  # Employee not found in ERPNext
 
-	if missing_fields:
-		return "Missing Clockify Api Key"
+	# Fetch all check-in and check-out records for this employee within the time range
+	checkin_records = frappe.get_all(
+		"Employee Checkin",
+		filters={
+			"employee": employee,
+			"time": ["between", [start_dt, end_dt]]
+		},
+		fields=["time", "log_type"],
+		order_by="time asc"
+	)
+
+	emp_checkins = {}
+	# Assuming the earliest "IN" is the check-in and the latest "OUT" is the checkout
+	for record in checkin_records:
+		if record.get("log_type") == "IN" and "checkin" not in emp_checkins:
+			emp_checkins["checkin"] = record.get("time")
+		elif record.get("log_type") == "OUT":
+			# Continuously update checkout so the last record remains as the latest checkout
+			emp_checkins["checkout"] = record.get("time")
+			
+	return emp_checkins
+
+def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
+	"""
+	Determines the reason for an employee's non-compliance based on ERPNext check-ins and Clockify logs.
+	Returns a tuple: (checkin_time, checkout_time, non_compliance_reason)
+	
+	- If an active timer is running, we consider the employee compliant (i.e. return no reason).
+	- If there is no check-in but Clockify logs exist, returns "Clockify logs present but no check-in recorded".
+	- If no check-in and no logs, returns "No check-in, No Clockify logs, No leave recorded" (unless on leave).
+	- If total logged time is below required hours, returns the underworked message.
+	"""
+	# Validate required Clockify details
+	if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
+		return None, None, "Missing Clockify API User ID or Workspace ID"
+
+	user_id = emp_data["user_id"]
+	workspaces = emp_data["workspace_ids"]
+
+	# Fetch employee check-ins (from ERPNext) using the unique identifier (email here)
+	emp_checkins = get_employee_checkin(emp_email, start_dt, end_dt)
+	checkin_time = emp_checkins.get("checkin")
+	checkout_time = emp_checkins.get("checkout")
+
+	# Check if an active timer is running in any workspace
 	try:
-		# Check if an active timer is running
 		if any(is_clockify_timer_active(api_key, ws, user_id) for ws in workspaces):
-			return None
+			# If there's an active timer, we assume the employee is compliant for now.
+			return None , None , None
+	except Exception as e:
+		# print("Error checking active timer for {emp_email}")
+		frappe.log_error(f"Error checking active timer for {emp_email}: {e}", "Clockify Compliance Check")
+		return checkin_time, checkout_time, "Invalid API Key in the system"
+		# Continue to process further if the timer check fails
 
-		# Fetch Clockify logs
+	# Fetch Clockify logs (total logged time across all workspaces)
+	try:
 		total_logged_seconds = sum(
 			sum_clockify_durations(get_clockify_time_entries(api_key, ws, user_id, start_dt, end_dt))
 			for ws in workspaces
 		)
+		hours, minutes = divmod(total_logged_seconds // 60, 60)
 	except Exception as e:
-		return "Invalid API Key in the system"
-	
+		# print("Clockify API sum log error for {emp_email}")
+		frappe.log_error(f"Clockify API error for {emp_email}: {e}", "Clockify Compliance Check")
+		return checkout_time, checkout_time, "Invalid API Key in the system"
 
-	# Get leave status (None, "Half Day", "On Leave", "Present" etc.)
-	leave_status = get_employee_leave_status(emp_id, today_str)
+	# Get leave status from ERPNext (e.g., "On Leave", "Half Day", etc.)
+	# Here, we assume get_employee_leave_status takes ERPNext Employee ID and a date
+	leave_status = get_employee_leave_status(emp_data["employee"], start_dt.date())
 	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
-
-	if "checkin" not in times:
+	half_day_message = " (Half Day)" if min_seconds == HALF_DAY_SECONDS else ""
+	# Compliance Checks
+	if not checkin_time:
 		if total_logged_seconds > 0:
-			return "Clockify logs present but no check-in recorded"
-		elif get_employee_leave_status(emp_id, today_str) == "On Leave":
-			return None  # On leave, so no penalty
+			return None, None, f"No check-in recorded. {hours} hr {minutes} mins logged{half_day_message}"
+		elif leave_status == "On Leave":
+			return None, None, None  # No non-compliance when on leave
 		else:
-			return "No check-in, No Clockify logs, No leave recorded"
+			return None, None, "No check-in, No Clockify logs, No leave recorded"
 
 	if total_logged_seconds == 0:
-		return "No Clockify logs recorded"
+		return checkin_time, checkout_time, "No Clockify logs recorded"
 
 	if total_logged_seconds < min_seconds:
-		hours, minutes = divmod(total_logged_seconds // 60, 60)
-		return f"Only {hours} hr {minutes} mins logged"
+		return checkin_time, checkout_time, f"Only {hours} hr {minutes} mins logged{half_day_message}"
 
-	return None  # Employee is compliant
+	# If all checks pass, the employee is compliant
+	return checkin_time, checkout_time, None
 
 def get_employee_leave_status(emp_id, date):
 	"""
