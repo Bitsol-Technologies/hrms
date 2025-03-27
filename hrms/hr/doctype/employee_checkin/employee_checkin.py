@@ -845,7 +845,7 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 						"employee":active_employee_map[email]
 					}
 		except Exception as e:
-			frappe.log_error(f"Error fetching Clockify users for workspace {ws} as lockify key {api_key} not in workspace", "Clockify Task")
+			frappe.log_error(f"Error fetching Clockify users for workspace {ws} as clockify key {api_key} not in workspace", "Clockify Task")
 			continue
 		
 	return employee_records
