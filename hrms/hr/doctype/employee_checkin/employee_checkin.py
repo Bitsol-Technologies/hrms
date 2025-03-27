@@ -845,7 +845,8 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 						"employee":active_employee_map[email]
 					}
 		except Exception as e:
-			frappe.log_error(f"Error fetching Clockify users for workspace {ws}: {e}", "Clockify Task")
+			frappe.log_error(f"Error fetching Clockify users for workspace {ws} as clockify key {api_key} not in workspace", "Clockify Task")
+			continue
 		
 	return employee_records
 
@@ -975,12 +976,14 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	leave_status = get_employee_leave_status(emp_data["employee"], start_dt.date())
 	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
 	half_day_message = " (Half Day)" if min_seconds == HALF_DAY_SECONDS else ""
+	
 	# Compliance Checks
+	if leave_status == "On Leave":
+		return None, None, None  # No non-compliance when on leave
+	
 	if not checkin_time:
 		if total_logged_seconds > 0:
 			return None, None, f"No check-in recorded. {hours} hr {minutes} mins logged{half_day_message}"
-		elif leave_status == "On Leave":
-			return None, None, None  # No non-compliance when on leave
 		else:
 			return None, None, "No check-in, No Clockify logs, No leave recorded"
 
