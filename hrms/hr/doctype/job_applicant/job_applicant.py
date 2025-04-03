@@ -81,7 +81,7 @@ class JobApplicant(Document):
                     },
                     email_template_name="Telephonic Screening Email",
                 )
-                send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
+                send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
 			# Notify only newly added Telephonic Interviewers
             if new_telephonic_reviewers and self.applicant_status == "Telephonic Screening":
@@ -98,7 +98,7 @@ class JobApplicant(Document):
 					},
 					email_template_name="Telephonic Screening Email",
 					)
-                send_slack_message(new_telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
+                send_slack_message(new_telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
             if previous_status != self.applicant_status and self.applicant_status == "Rejected":
                 try:
@@ -225,7 +225,7 @@ def get_slack_user_id(email):
 		print(f"Error fetching Slack user ID for {email}: {data.get('error')}")
 		return None
 
-def send_slack_message(emails, applicant_name, resume_link, docname, status):
+def send_slack_message(emails, applicant_name, resume_link, docname, status, screening_from= None, screening_to= None):
 	"""
 	Loop over the list of emails, fetch each user's Slack ID,
 	and send them an individual message.
@@ -242,9 +242,9 @@ def send_slack_message(emails, applicant_name, resume_link, docname, status):
 		document_link = frappe.utils.get_url_to_form(doctype, docname)
 		if user_id:
 			if status == "Lead Screening":
-				message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nResume Link: {resume_link}\nDocument Link: {document_link}"
+				message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nResume Link: {resume_link}\nDocument Link: {document_link}."
 			if status == "Telephonic Screening":
-				message = f"Hello <@{user_id}>, please review the Telephonic Interview of {applicant_name}.\nDocument Link: {document_link}"
+				message = f"Hello <@{user_id}>, please review the Telephonic Interview of {applicant_name}.\nDocument Link: {document_link}. \nPlease review within the duration: {screening_from} to {screening_to}."
 			payload = {
 				"channel": user_id,
 				"text": message

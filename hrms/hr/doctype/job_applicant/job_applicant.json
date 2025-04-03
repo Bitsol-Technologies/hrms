@@ -25,6 +25,8 @@
   "cv_reviews",
   "telephonic_interviewers",
   "telephonic_reviews",
+  "screening_from",
+  "screening_to",
   "scoring",
   "test_hardcopy",
   "final_result",
@@ -53,8 +55,7 @@
    "in_global_search": 1,
    "in_list_view": 1,
    "label": "Applicant Name",
-   "permlevel": 1,
-   "reqd": 1
+   "permlevel": 1
   },
   {
    "bold": 1,
@@ -63,8 +64,7 @@
    "in_list_view": 1,
    "label": "Email Address",
    "options": "Email",
-   "permlevel": 1,
-   "reqd": 1
+   "permlevel": 2
   },
   {
    "depends_on": "eval: doc.applicant_status === \"Offer Accepted\" || \r\n      doc.applicant_status === \"Background Check\" || \r\n      doc.applicant_status === \"Onboarding\" || \r\n      doc.applicant_status === \"Rejected\"\r\n",
@@ -73,8 +73,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Employment Status",
-   "options": "Open\nActive\nProbation\nIntern\nResigned\nTerminated\nRejected",
-   "reqd": 1
+   "options": "Open\nActive\nProbation\nIntern\nResigned\nTerminated\nRejected"
   },
   {
    "fieldname": "column_break_3",
@@ -94,14 +93,16 @@
    "fieldname": "source",
    "fieldtype": "Link",
    "label": "Source",
-   "options": "Job Applicant Source"
+   "options": "Job Applicant Source",
+   "permlevel": 2
   },
   {
    "depends_on": "eval: doc.source==\"Employee Referral\" ",
    "fieldname": "source_name",
    "fieldtype": "Link",
    "label": "Source Name",
-   "options": "Employee"
+   "options": "Employee",
+   "permlevel": 2
   },
   {
    "fieldname": "section_break_6",
@@ -129,7 +130,7 @@
    "fieldtype": "Data",
    "label": "Phone Number",
    "options": "Phone",
-   "permlevel": 1
+   "permlevel": 2
   },
   {
    "fieldname": "country",
@@ -147,7 +148,8 @@
    "fieldname": "applicant_rating",
    "fieldtype": "Rating",
    "in_list_view": 1,
-   "label": "Applicant Rating"
+   "label": "Applicant Rating",
+   "permlevel": 2
   },
   {
    "fieldname": "section_break_16",
@@ -186,6 +188,7 @@
    "fieldtype": "Link",
    "label": "Employee Referral",
    "options": "Employee Referral",
+   "permlevel": 2,
    "read_only": 1
   },
   {
@@ -215,7 +218,8 @@
    "fieldname": "applicant_status",
    "fieldtype": "Select",
    "label": "Applicant Status",
-   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nCV Accepted\nCV Rejected\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Accepted\nBackground Check\nOnboarding\nRejected"
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nCV Accepted\nCV Rejected\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Accepted\nBackground Check\nOnboarding\nRejected",
+   "permlevel": 1
   },
   {
    "fieldname": "section_break_lbuh",
@@ -224,41 +228,48 @@
   {
    "fieldname": "cv_reviews",
    "fieldtype": "Select",
-   "label": "CV Reviews",
-   "options": "\nApproved\nRejected"
+   "label": "CV Review Status",
+   "options": "\nApproved\nRejected",
+   "read_only_depends_on": "eval:in_list([\"Approved\",\"Rejected\"], doc.cv_reviews) && !frappe.user.has_role(\"HR Manager\") && !frappe.user.has_role(\"Administrator\")\r\n"
   },
   {
    "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
    "fieldname": "telephonic_interviewers",
    "fieldtype": "Table",
+   "ignore_user_permissions": 1,
    "label": "Telephonic Screening Interviewers",
-   "options": "CV Reviewer"
+   "options": "CV Reviewer",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
    "fieldname": "telephonic_reviews",
    "fieldtype": "Select",
-   "label": "Telephonic Screening Reviews",
-   "options": "\nApproved\nRejected"
+   "label": "Telephonic Screening Review Status",
+   "options": "\nApproved\nRejected",
+   "read_only_depends_on": "eval:in_list([\"Approved\",\"Rejected\"], doc.telephonic_reviews) && !frappe.user.has_role(\"HR Manager\") && !frappe.user.has_role(\"Administrator\")"
   },
   {
    "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
    "fieldname": "scoring",
    "fieldtype": "Table",
    "label": "Scoring",
-   "options": "Scoring"
+   "options": "Scoring",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
    "fieldname": "final_result",
    "fieldtype": "Select",
-   "label": "Final Result",
-   "options": "\nApproved\nRejected"
+   "label": "Final Score",
+   "options": "\nApproved\nRejected",
+   "permlevel": 1
   },
   {
    "fieldname": "test_hardcopy",
    "fieldtype": "Attach",
-   "label": "Test Hardcopy"
+   "label": "Test Hardcopy",
+   "permlevel": 1
   },
   {
    "fetch_from": "job_title.job_title",
@@ -266,13 +277,25 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Job Title"
+  },
+  {
+   "fieldname": "screening_from",
+   "fieldtype": "Datetime",
+   "label": "Screening From",
+   "reqd": 1
+  },
+  {
+   "fieldname": "screening_to",
+   "fieldtype": "Datetime",
+   "label": "Screening To",
+   "reqd": 1
   }
  ],
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-03-24 13:10:34.942217",
+ "modified": "2025-03-28 12:28:47.956498",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
