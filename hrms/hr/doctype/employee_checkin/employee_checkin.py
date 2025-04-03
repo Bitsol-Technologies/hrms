@@ -442,8 +442,10 @@ import requests
 import json
 from datetime import datetime, timedelta
 from frappe.utils import today, now, get_datetime
-FULL_DAY_SECONDS = 6 * 3600 
+
+FULL_DAY_SECONDS = 6 * 3600
 HALF_DAY_SECONDS = 3 * 3600 + 40 * 60
+
 
 def get_today_date_range():
 	today_str = today()  # e.g., "2025-03-18"
@@ -451,11 +453,13 @@ def get_today_date_range():
 	end_dt_str = f"{today_str} 23:59:59"
 	return today_str, start_dt_str, end_dt_str, get_datetime(start_dt_str), get_datetime(end_dt_str)
 
+
 def get_system_clockify_settings():
 	settings = frappe.get_single("System Settings")
 	api_key = settings.get("clockify_api_key")
 	workspaces = [ws.strip() for ws in (settings.get("clockify_workspace_id") or "").split(",") if ws.strip()]
 	return api_key, workspaces
+
 
 def get_employee_checkins(log_type):
 	_, start_dt_str, end_dt_str, _, _ = get_today_date_range()
@@ -625,6 +629,7 @@ def send_slack_message_for_employee(emails, message):
 		if not result.get("ok"):
 			frappe.log_error(f"Error sending Slack message to {email}: {result.get('error')}", "Slack Notification")
 
+
 # send reminder to turn on clockify timer
 def check_today_checkins():
 	"""
@@ -738,7 +743,6 @@ def get_all_active_employees():
 	return employees
 
 
-
 def send_compliance_report(non_compliant, today_str):
 	if non_compliant:
 		# Build a plain text header
@@ -747,7 +751,7 @@ def send_compliance_report(non_compliant, today_str):
 		# Build the table as a code block 
 		report_message = build_compliance_report_table(non_compliant)
 		# Ensure message is within Slack's 4000-character limit
-		split_messages = split_long_message(header_text+ report_message)
+		split_messages = split_long_message(header_text + report_message)
 
 	else:
 		# Build a plain text message
@@ -756,7 +760,8 @@ def send_compliance_report(non_compliant, today_str):
 	target = "C08JA26QG84"  # Management Channel
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
-		
+
+
 def split_long_message(message, max_length=3800):
 	"""
 	Splits long Slack messages into multiple parts while keeping code block formatting.
@@ -812,6 +817,7 @@ def sum_clockify_durations(entries):
 				total_seconds += (end_dt - start_dt).total_seconds()
 	return total_seconds
 
+
 def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 	"""
 	Loops over each workspace ID and calls the Clockify API to fetch users.
@@ -830,7 +836,6 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 			for user in users:
 				email = user.get("email")
 				if not email or email not in active_employee_map:
-					frappe.log_error(f"User {user.get('name')} missing email in ERPNext or Clockify workspace", "Clockify Task")
 					# print(f"User {user.get('name')} missing email")
 					continue
 				if email in employee_records:
@@ -842,11 +847,14 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 						"workspace_ids": [ws],
 						"user_id": user.get("id"),
 						"employee_name": user.get("name"),
-						"employee":active_employee_map[email]
+						"employee": active_employee_map[email]
 					}
 		except Exception as e:
-			frappe.log_error(f"Error fetching Clockify users for workspace {ws}: {e}", "Clockify Task")
-		
+			frappe.log_error(
+				f"Error fetching Clockify users for workspace {ws} as clockify key {api_key} not in workspace",
+				"Clockify Task")
+			continue
+
 	return employee_records
 
 def is_public_holiday(date):
@@ -874,14 +882,14 @@ def send_daily_compliance_report():
 		return
 	if today_date.weekday() in (5, 6):  # Skip weekends
 		return
-	
+
 	# Get system-level Clockify settings (API Key and comma-separated workspace IDs)
 	custom_api_key, workspace_ids = get_system_clockify_settings()
 	if not custom_api_key or not workspace_ids:
 		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
 		# print("Missing Clockify API Key or Workspace IDs in System Settings")
 		return
-	
+
 	# Fetch active employees from ERPNext
 	active_employees = get_all_active_employees()
 	# fetch  users across all workspaces
@@ -912,7 +920,7 @@ def get_employee_checkin(emp_email, start_dt, end_dt):
 	"""
 	# Lookup the ERPNext Employee using the email stored as user_id
 	employee = frappe.db.get_value("Employee", {"user_id": emp_email}, "name")
-	
+
 	if not employee:
 		return {}  # Employee not found in ERPNext
 
@@ -935,8 +943,9 @@ def get_employee_checkin(emp_email, start_dt, end_dt):
 		elif record.get("log_type") == "OUT":
 			# Continuously update checkout so the last record remains as the latest checkout
 			emp_checkins["checkout"] = record.get("time")
-			
+
 	return emp_checkins
+
 
 def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	"""
@@ -964,12 +973,12 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	try:
 		if any(is_clockify_timer_active(api_key, ws, user_id) for ws in workspaces):
 			# If there's an active timer, we assume the employee is compliant for now.
-			return None , None , None
+			return None, None, None
 	except Exception as e:
 		# print("Error checking active timer for {emp_email}")
 		frappe.log_error(f"Error checking active timer for {emp_email}: {e}", "Clockify Compliance Check")
 		return checkin_time, checkout_time, "Invalid API Key in the system"
-		# Continue to process further if the timer check fails
+	# Continue to process further if the timer check fails
 
 	# Fetch Clockify logs (total logged time across all workspaces)
 	try:
@@ -988,12 +997,14 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	leave_status = get_employee_leave_status(emp_data["employee"], start_dt.date())
 	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
 	half_day_message = " (Half Day)" if min_seconds == HALF_DAY_SECONDS else ""
+
 	# Compliance Checks
+	if leave_status == "On Leave":
+		return None, None, None  # No non-compliance when on leave
+
 	if not checkin_time:
 		if total_logged_seconds > 0:
 			return None, None, f"No check-in recorded. {hours} hr {minutes} mins logged{half_day_message}"
-		elif leave_status == "On Leave":
-			return None, None, None  # No non-compliance when on leave
 		else:
 			return None, None, "No check-in, No Clockify logs, No leave recorded"
 
@@ -1005,6 +1016,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 
 	# If all checks pass, the employee is compliant
 	return checkin_time, checkout_time, None
+
 
 def get_employee_leave_status(emp_id, date):
 	"""
