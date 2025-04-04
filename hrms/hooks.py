@@ -231,7 +231,7 @@ scheduler_events = {
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.send_summary",
 		"hrms.hr.doctype.interview.interview.send_daily_feedback_reminder",
 		"hrms.hr.doctype.job_opening.job_opening.close_expired_job_openings",
-        "hrms.hr.doctype.employee_boarding_activity.employee_boarding_activity.send_onboarding_reminder",
+		"hrms.hr.doctype.employee_boarding_activity.employee_boarding_activity.send_onboarding_reminder",
 	],
 	"daily_long": [
 		"hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry.process_expired_allocation",
