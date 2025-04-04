@@ -35,7 +35,6 @@ class Interview(Document):
 				_("Only Interviews with Cleared or Rejected status can be submitted."),
 				title=_("Not Allowed"),
 			)
-		self.show_job_applicant_update_dialog()
 
 	def after_insert(self):
 		meeting_link = get_meeting_link()
@@ -65,8 +64,7 @@ class Interview(Document):
 				"location": self.location,
 				"date": self.scheduled_on,
 				"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
-				"meeting_link": meeting_link if self.location == "Remote" else "N/A",
-				"resume_link": self.resume_link,
+				"meeting_link": meeting_link,
 				"interview_type": "Remote" if self.location == "Remote" else "On-Site"
 			}
 
