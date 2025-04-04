@@ -53,58 +53,72 @@ frappe.ui.form.on("Job Offer", {
 			});
 		}
 		if (!frm.doc.__islocal && frm.doc.status === "Accepted" && !frm.doc.offer_email_sent) {
-            frm.add_custom_button(__("Send Offer Letter Email"), function () {
-                // Build the default recipients string
-                let defaultRecipients = frm.doc.applicant_email + ", mashal@bitsol.tech, rizwan@bitsol.tech, javeed@bitsol.tech";
-                // Create a dialog to show default recipients and allow additional ones
-                let d = new frappe.ui.Dialog({
-                    title: __("Confirm Offer Email Recipients"),
-                    fields: [
-                        {
-                            fieldname: "default_recipients",
-                            fieldtype: "Read Only",
-                            label: __("Default Recipients"),
-                            default: defaultRecipients
-                        },
-						{
-                            fieldname: "additional_recipients",
-                            fieldtype: "MultiSelectPills",
-                            label: __("Additional Recipients"),
-                            reqd: false,
-                            get_data: function (txt) {
-                                return frappe.db.get_link_options("User", txt, { user_type: "System User" });
-                            }
-                        }
-						
-                    ],
-                    primary_action_label: __("Send Email"),
-                    primary_action(values) {
-                        // Combine default recipients with any additional recipients entered
-                        let recipients = defaultRecipients;
-                        if (values.additional_recipients && values.additional_recipients.length) {
-                            recipients += ", " + values.additional_recipients.join(", ");
-                        }
-                        // Call the server method to send the email
-                        frappe.call({
-                            method: "hrms.hr.doctype.job_offer.job_offer.send_offer_letter",
-                            args: {
-                                docname: frm.doc.name,
-                                recipients: recipients
-                            },
-                            callback: function (r) {
-                                if (!r.exc) {
-                                    frappe.msgprint(__("Offer letter email sent successfully."));
-									frm.reload_doc();
-                                    d.hide();
-                                }
-                            }
-                        });
-                    }
-                });
-                d.show();
-            });
+			frm.add_custom_button(__("Send Offer Letter Email"), function () {
+				// Fetch users with the HR Manager role profile
+				frappe.call({
+					method: "frappe.client.get_list",
+					args: {
+						doctype: "User",
+						filters: {
+							"role_profile_name": "HR Manager",
+							"enabled": 1
+						},
+						fields: ["email"]
+					},
+					callback: function (r) {
+						let hrEmails = (r.message || []).map(user => user.email).join(", ");
+						let defaultRecipients = frm.doc.applicant_email + (hrEmails ? `, ${hrEmails}` : "");
+		
+						// Create a dialog to show default recipients and allow additional ones
+						let d = new frappe.ui.Dialog({
+							title: __("Confirm Offer Email Recipients"),
+							fields: [
+								{
+									fieldname: "default_recipients",
+									fieldtype: "Read Only",
+									label: __("Default Recipients"),
+									default: defaultRecipients
+								},
+								{
+									fieldname: "additional_recipients",
+									fieldtype: "MultiSelectPills",
+									label: __("Additional Recipients"),
+									reqd: false,
+									get_data: function (txt) {
+										return frappe.db.get_link_options("User", txt, { user_type: "System User" });
+									}
+								}
+							],
+							primary_action_label: __("Send Email"),
+							primary_action(values) {
+								// Combine default recipients with any additional recipients entered
+								let recipients = defaultRecipients;
+								if (values.additional_recipients && values.additional_recipients.length) {
+									recipients += ", " + values.additional_recipients.join(", ");
+								}
+								// Call the server method to send the email
+								frappe.call({
+									method: "hrms.hr.doctype.job_offer.job_offer.send_offer_letter",
+									args: {
+										docname: frm.doc.name,
+										recipients: recipients
+									},
+									callback: function (r) {
+										if (!r.exc) {
+											frappe.msgprint(__("Offer letter email sent successfully."));
+											frm.reload_doc();
+											d.hide();
+										}
+									}
+								});
+							}
+						});
+						d.show();
+					}
+				});
+			});
 		}
-	},
+	}
 });
 
 erpnext.job_offer.make_employee = function (frm) {
