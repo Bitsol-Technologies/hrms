@@ -14,7 +14,6 @@
   "column_break_3",
   "status",
   "offer_date",
-  "offer_email_sent",
   "designation",
   "company",
   "section_break_4",
@@ -170,13 +169,6 @@
    "options": "Job Offer Term Template"
   },
   {
-   "allow_on_submit": 1,
-   "default": "0",
-   "fieldname": "offer_email_sent",
-   "fieldtype": "Check",
-   "label": "Offer Email Sent"
-  },
-  {
    "fetch_from": "job_applicant.title",
    "fieldname": "job_title",
    "fieldtype": "Data",
@@ -186,7 +178,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2025-03-24 13:56:51.174813",
+ "modified": "2025-04-07 12:29:04.081393",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Offer",
