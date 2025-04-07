@@ -52,7 +52,7 @@ frappe.ui.form.on("Job Offer", {
 				frappe.set_route("Form", "Employee", frm.doc.__onload.employee);
 			});
 		}
-	},
+	}
 });
 
 erpnext.job_offer.make_employee = function (frm) {

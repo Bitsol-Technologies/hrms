@@ -19,104 +19,162 @@ class DuplicationError(frappe.ValidationError):
 
 
 class JobApplicant(Document):
-    def __init__(self, *args, **kwargs):
-        self.previous_status = None
-        super().__init__(*args, **kwargs)
+	def __init__(self, *args, **kwargs):
+		self.previous_status = None
+		super().__init__(*args, **kwargs)
 
-    def onload(self):
-        job_offer = frappe.get_all("Job Offer", filters={"job_applicant": self.name})
-        if job_offer:
-            self.get("__onload").job_offer = job_offer[0].name
+	def onload(self):
+		job_offer = frappe.get_all("Job Offer", filters={"job_applicant": self.name})
+		if job_offer:
+			self.get("__onload").job_offer = job_offer[0].name
 
-    def autoname(self):
-        self.name = self.email_id
+	def autoname(self):
+		self.name = self.email_id
 
-        # Applicant can apply more than once for different job titles or reapply
-        if frappe.db.exists("Job Applicant", self.name):
-            self.name = append_number_if_name_exists("Job Applicant", self.name)
+		# Applicant can apply more than once for different job titles or reapply
+		if frappe.db.exists("Job Applicant", self.name):
+			self.name = append_number_if_name_exists("Job Applicant", self.name)
 
-    def before_save(self):
-        """
-        Send Slack message to CV Reviewers and Telephonic Interviewers
-        when the applicant status changes to Lead Screening or Telephonic Screening
-        """
-        old_doc = self.get_doc_before_save()
-        if old_doc:
-            previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=True) or {}
-            previous_status = old_doc.applicant_status
+	def before_save(self):
+		"""
+		Send Slack message to CV Reviewers and Telephonic Interviewers
+		when the applicant status changes to Lead Screening or Telephonic Screening
+		"""
+		old_doc = self.get_doc_before_save()
+		if old_doc:
+			previous_cv_reviews = frappe.db.get_value(self.doctype, self.name, 'cv_reviews', as_dict=True) or {}
+			previous_status = old_doc.applicant_status
+			previous_telephonic_reviewers = {lead.email for lead in old_doc.telephonic_interviewers} if old_doc.telephonic_interviewers else set()
 
-            # If CV Reviews is updated, update the applicant status
-            if self.cv_reviews and self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
-                if self.cv_reviews == "Rejected":
-                    self.applicant_status = "CV Rejected"
-                elif self.cv_reviews == "Approved":
-                    self.applicant_status = "CV Accepted"
+			# If CV Reviews is updated, update the applicant status
+			if self.cv_reviews and self.cv_reviews != previous_cv_reviews.get("cv_reviews"):
+				if self.cv_reviews == "Rejected":
+					self.applicant_status = "CV Rejected"
+				elif self.cv_reviews == "Approved":
+					self.applicant_status = "CV Accepted"
 
-            job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
-            cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
-            telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
+			job_opening_doc = frappe.get_doc("Job Opening", self.job_title)
+			cv_reviewers = [lead.email for lead in job_opening_doc.cv_reviewers]
+			telephonic_reviewers = [lead.email for lead in self.telephonic_interviewers]
 
-            if previous_status != self.applicant_status and self.applicant_status == "Lead Screening":
-                send_slack_message(cv_reviewers, self.applicant_name, self.resume_link, self.name, "Lead Screening")
+			# Convert both lists to sets before performing set difference
+			previous_telephonic_reviewers_set = set(previous_telephonic_reviewers) if previous_telephonic_reviewers else set()
+			current_telephonic_reviewers_set = set(telephonic_reviewers) if telephonic_reviewers else set()
 
-            if previous_status != self.applicant_status and self.applicant_status == "Telephonic Screening":
-                frappe.sendmail(
-                    recipients=telephonic_reviewers,
-                    create_notification_log=True,
-                    from_users=["Administrator"],
-                    for_users=["Administrator"],
-                    args={
-                        "name": self.applicant_name,
-                        "document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
-                        "resume_link": self.resume_link,
-                        "title": job_opening_doc.get("job_title"),
-                    },
-                    email_template_name="Telephonic Screening Email",
-                )
-                send_slack_message(telephonic_reviewers, self.applicant_name, self.resume_link, self.name, "Telephonic Screening")
+			# Identify new interviewers who were not in the previous list
+			new_telephonic_reviewers = list(current_telephonic_reviewers_set - previous_telephonic_reviewers_set)
 
+			if previous_status != self.applicant_status and self.applicant_status == "Lead Screening":
+				send_slack_message(cv_reviewers, self.applicant_name, self.name, "Lead Screening")
 
-            if previous_status != self.applicant_status and self.applicant_status == "Rejected":
-                try:
-                    frappe.sendmail(
-                        recipients=[self.email_id],
-                        create_notification_log=True,
-                        from_users=["Administrator"],
-                        for_users=["Administrator"],
-                        args={
-                            "name": self.applicant_name,
-                            "title": job_opening_doc.get("job_title"),
-                        },
-                        email_template_name="Rejection Email",
-                    )
-                except Exception as e:
-                    frappe.log_error(f"Error sending email: {e}")
+			if previous_status != self.applicant_status and self.applicant_status == "Telephonic Screening":
+				frappe.sendmail(
+					recipients=telephonic_reviewers,
+					create_notification_log=True,
+					from_users=["Administrator"],
+					for_users=["Administrator"],
+					args={
+						"name": self.applicant_name,
+						"document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
+						"title": job_opening_doc.get("job_title"),
+						"from": self.screening_from,
+						"to": self.screening_to,
+					},
+					email_template_name="Telephonic Screening Email",
+				)
+				send_slack_message(telephonic_reviewers, self.applicant_name, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
-    def validate(self):
-        if self.email_id:
-            validate_email_address(self.email_id, True)
+			# Notify only newly added Telephonic Interviewers
+			if new_telephonic_reviewers and self.applicant_status == "Telephonic Screening":
+				frappe.sendmail(
+					recipients=new_telephonic_reviewers,
+					create_notification_log=True,
+					from_users=["Administrator"],
+					for_users=["Administrator"],
+					args={
+						"name": self.applicant_name,
+						"document_link": frappe.utils.get_url_to_form("Job Applicant", self.name),
+						"title": job_opening_doc.get("job_title"),
+						"from": self.screening_from,
+						"to": self.screening_to,
+					},
+					email_template_name="Telephonic Screening Email",
+					)
+				send_slack_message(new_telephonic_reviewers, self.applicant_name, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
-        if self.employee_referral:
-            self.set_status_for_employee_referral()
+			# Notify HR Manager when status changes to "Joined"
+			if previous_status != self.applicant_status and self.applicant_status == "Joined":
+				try:
+					# Fetch HR Manager's email
+					hr_manager_emails = frappe.get_all(
+					"User",
+					filters={"enabled": 1},
+					fields=["email"],
+					or_filters={"role_profile_name": "HR Manager"}
+					)
+					hr_manager_emails = [user["email"] for user in hr_manager_emails if user["email"]]
+			
+					if hr_manager_emails:
+						# Send email notification
+						# Prepare context for the email template
+						context = {
+							"name": self.name,
+							"applicant_name": self.applicant_name,
+							"title": self.title,
+							"url":frappe.utils.get_url_to_form('Job Applicant', self.name),
+							"email": self.email_id,
+						}
 
-        if not self.applicant_name and self.email_id:
-            guess = self.email_id.split("@")[0]
-            self.applicant_name = " ".join([p.capitalize() for p in guess.split(".")])
+						# Send email using the template
+						frappe.sendmail(
+							recipients=hr_manager_emails,
+							email_template_name="Applicant Joining",
+							args=context,
+						)
+				except Exception as e:
+					frappe.log_error(f"Error sending email to HR Manager: {e}", "Applicant Joined Notification Error")
+					
+			if previous_status != self.applicant_status and self.applicant_status == "Rejected":
+				try:
+					frappe.sendmail(
+						recipients=[self.email_id],
+						create_notification_log=True,
+						from_users=["Administrator"],
+						for_users=["Administrator"],
+						args={
+							"name": self.applicant_name,
+							"title": job_opening_doc.get("job_title"),
+						},
+						email_template_name="Rejection Email",
+					)
+				except Exception as e:
+					frappe.log_error(f"Error sending email: {e}")
 
-    def before_insert(self):
-        if self.job_title:
-            job_opening_status = frappe.db.get_value("Job Opening", self.job_title, "status")
-            if job_opening_status == "Closed":
-                frappe.throw(
-                    _("Cannot create a Job Applicant against a closed Job Opening"), title=_("Not Allowed")
-                )
+	def validate(self):
+		if self.email_id:
+			validate_email_address(self.email_id, True)
 
-    def set_status_for_employee_referral(self):
-        emp_ref = frappe.get_doc("Employee Referral", self.employee_referral)
-        if self.status in ["Open", "Replied", "Hold"]:
-            emp_ref.db_set("status", "In Process")
-        elif self.status in ["Accepted", "Rejected"]:
-            emp_ref.db_set("status", self.status)
+		if self.employee_referral:
+			self.set_status_for_employee_referral()
+
+		if not self.applicant_name and self.email_id:
+			guess = self.email_id.split("@")[0]
+			self.applicant_name = " ".join([p.capitalize() for p in guess.split(".")])
+
+	def before_insert(self):
+		if self.job_title:
+			job_opening_status = frappe.db.get_value("Job Opening", self.job_title, "status")
+			if job_opening_status == "Closed":
+				frappe.throw(
+					_("Cannot create a Job Applicant against a closed Job Opening"), title=_("Not Allowed")
+				)
+
+	def set_status_for_employee_referral(self):
+		emp_ref = frappe.get_doc("Employee Referral", self.employee_referral)
+		if self.status in ["Open", "Replied", "Hold"]:
+			emp_ref.db_set("status", "In Process")
+		elif self.status in ["Accepted", "Rejected"]:
+			emp_ref.db_set("status", self.status)
 
 
 @frappe.whitelist()
@@ -139,9 +197,11 @@ def create_interview(doc, interview_round):
 	interview = frappe.new_doc("Interview")
 	interview.interview_round = interview_round
 	interview.job_applicant = doc.name
+	interview.applicant_name = doc.applicant_name
 	interview.designation = doc.designation
 	interview.resume_link = doc.resume_link
 	interview.job_opening = doc.job_title
+	interview.job_title = doc.title
 
 	interviewers = get_interviewers(interview_round)
 	for d in interviewers:
@@ -199,7 +259,7 @@ def get_slack_user_id(email):
 		print(f"Error fetching Slack user ID for {email}: {data.get('error')}")
 		return None
 
-def send_slack_message(emails, applicant_name, resume_link, docname, status):
+def send_slack_message(emails, applicant_name, docname, status, screening_from= None, screening_to= None):
 	"""
 	Loop over the list of emails, fetch each user's Slack ID,
 	and send them an individual message.
@@ -216,9 +276,9 @@ def send_slack_message(emails, applicant_name, resume_link, docname, status):
 		document_link = frappe.utils.get_url_to_form(doctype, docname)
 		if user_id:
 			if status == "Lead Screening":
-				message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nResume Link: {resume_link}\nDocument Link: {document_link}"
+				message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nDocument Link: {document_link}."
 			if status == "Telephonic Screening":
-				message = f"Hello <@{user_id}>, please review the Telephonic Interview of {applicant_name}.\nDocument Link: {document_link}"
+				message = f"Hello <@{user_id}>, please review the Telephonic Interview of {applicant_name}.\nDocument Link: {document_link}. \nPlease review within the duration: {screening_from} to {screening_to}."
 			payload = {
 				"channel": user_id,
 				"text": message

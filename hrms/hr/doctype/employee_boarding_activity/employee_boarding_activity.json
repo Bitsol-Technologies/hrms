@@ -36,14 +36,6 @@
    "options": "User"
   },
   {
-   "columns": 1,
-   "depends_on": "eval:!doc.user",
-   "fieldname": "role",
-   "fieldtype": "Link",
-   "label": "Role",
-   "options": "Role"
-  },
-  {
    "fieldname": "column_break_3",
    "fieldtype": "Column Break"
   },
@@ -75,26 +67,35 @@
   {
    "fieldname": "description",
    "fieldtype": "Text Editor",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Description"
   },
   {
    "columns": 2,
    "fieldname": "duration",
    "fieldtype": "Int",
-   "in_list_view": 1,
    "label": "Duration (Days)"
   },
   {
    "columns": 2,
    "fieldname": "begin_on",
-   "fieldtype": "Int",
+   "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Begin On (Days)"
+  },
+  {
+   "columns": 1,
+   "depends_on": "eval:!doc.user",
+   "fieldname": "role",
+   "fieldtype": "Link",
+   "label": "Role",
+   "options": "Role"
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2022-01-29 14:05:00.543122",
+ "modified": "2025-04-07 10:43:13.390265",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Boarding Activity",

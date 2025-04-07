@@ -78,16 +78,17 @@ frappe.ui.form.on("Interview", {
 				frm.events.show_feedback_dialog(frm, r.message);
 				frm.refresh();
 			},
-		});
-	},
-	validate: function(frm) {
-        if (frm.doc.scheduled_on && frm.doc.scheduled_on < frappe.datetime.get_today()) {
-            frappe.msgprint(__('Interview date must be greater than today.'));
-            frappe.validated = false;
-        }
-    },
+			});
+		},
+	
+		scheduled_on: function(frm) {
+			if (frm.doc.scheduled_on && frm.doc.scheduled_on < frappe.datetime.get_today()) {
+				frappe.msgprint(__('Interview date must be greater than today.'));
+				frm.set_value('scheduled_on', '');
+			}
+		},
 
-	show_reschedule_dialog: function (frm) {
+		show_reschedule_dialog: function (frm) {
 		let d = new frappe.ui.Dialog({
 			title: "Reschedule Interview",
 			fields: [

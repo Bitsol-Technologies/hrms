@@ -17,6 +17,7 @@
   "country",
   "column_break_3",
   "job_title",
+  "title",
   "designation",
   "status",
   "applicant_status",
@@ -24,7 +25,10 @@
   "cv_reviews",
   "telephonic_interviewers",
   "telephonic_reviews",
+  "screening_from",
+  "screening_to",
   "scoring",
+  "test_hardcopy",
   "final_result",
   "source_and_rating_section",
   "source",
@@ -49,25 +53,26 @@
    "fieldname": "applicant_name",
    "fieldtype": "Data",
    "in_global_search": 1,
+   "in_list_view": 1,
    "label": "Applicant Name",
-   "reqd": 1
+   "permlevel": 1
   },
   {
    "bold": 1,
    "fieldname": "email_id",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Email Address",
    "options": "Email",
-   "reqd": 1
+   "permlevel": 2
   },
   {
+   "depends_on": "eval: doc.applicant_status === \"Offer Accepted\" || \r\n      doc.applicant_status === \"Background Check\" || \r\n      doc.applicant_status === \"Onboarding\" || \r\n      doc.applicant_status === \"Rejected\"\r\n",
    "fieldname": "status",
    "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Status",
-   "options": "Open\nReplied\nRejected\nHold\nAccepted",
-   "reqd": 1
+   "hidden": 1,
+   "label": "Employment Status",
+   "options": "Open\nActive\nProbation\nIntern\nResigned\nTerminated\nRejected"
   },
   {
    "fieldname": "column_break_3",
@@ -80,20 +85,25 @@
    "in_list_view": 1,
    "label": "Job Opening",
    "options": "Job Opening",
+   "permlevel": 1,
    "search_index": 1
   },
   {
    "fieldname": "source",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Source",
-   "options": "Job Applicant Source"
+   "options": "Job Applicant Source",
+   "permlevel": 2
   },
   {
    "depends_on": "eval: doc.source==\"Employee Referral\" ",
    "fieldname": "source_name",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Source Name",
-   "options": "Employee"
+   "options": "Employee",
+   "permlevel": 2
   },
   {
    "fieldname": "section_break_6",
@@ -121,13 +131,14 @@
    "fieldtype": "Data",
    "label": "Phone Number",
    "options": "Phone",
-   "permlevel": 1
+   "permlevel": 2
   },
   {
    "fieldname": "country",
    "fieldtype": "Link",
    "label": "Country",
-   "options": "Country"
+   "options": "Country",
+   "permlevel": 1
   },
   {
    "fieldname": "resume_link",
@@ -138,7 +149,8 @@
    "fieldname": "applicant_rating",
    "fieldtype": "Rating",
    "in_list_view": 1,
-   "label": "Applicant Rating"
+   "label": "Applicant Rating",
+   "permlevel": 2
   },
   {
    "fieldname": "section_break_16",
@@ -175,8 +187,10 @@
   {
    "fieldname": "employee_referral",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Employee Referral",
    "options": "Employee Referral",
+   "permlevel": 2,
    "read_only": 1
   },
   {
@@ -199,14 +213,17 @@
    "fieldname": "designation",
    "fieldtype": "Link",
    "label": "Designation",
-   "options": "Designation"
+   "options": "Designation",
+   "permlevel": 1
   },
   {
    "fieldname": "applicant_status",
    "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Applicant Status",
-   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Acceptance\nBackground Check\nOnboarding\nRejected\nCV Accepted\nCV Rejected",
-   "permlevel": 2
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nCV Accepted\nCV Rejected\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Accepted\nBackground Check\nJoined\nRejected",
+   "permlevel": 1
   },
   {
    "fieldname": "section_break_lbuh",
@@ -215,43 +232,77 @@
   {
    "fieldname": "cv_reviews",
    "fieldtype": "Select",
-   "label": "CV Reviews",
+   "label": "CV Review Status",
    "options": "\nApproved\nRejected",
-   "permlevel": 1
+   "read_only_depends_on": "eval:in_list([\"Approved\",\"Rejected\"], doc.cv_reviews) && !frappe.user.has_role(\"HR Manager\") && !frappe.user.has_role(\"Administrator\")\r\n"
   },
   {
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
    "fieldname": "telephonic_interviewers",
    "fieldtype": "Table",
+   "ignore_user_permissions": 1,
    "label": "Telephonic Screening Interviewers",
-   "options": "CV Reviewer"
+   "options": "CV Reviewer",
+   "permlevel": 1
   },
   {
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
    "fieldname": "telephonic_reviews",
    "fieldtype": "Select",
-   "label": "Telephonic Screening Reviews",
+   "label": "Telephonic Screening Review Status",
    "options": "\nApproved\nRejected",
-   "permlevel": 1
+   "read_only_depends_on": "eval:in_list([\"Approved\",\"Rejected\"], doc.telephonic_reviews) && !frappe.user.has_role(\"HR Manager\") && !frappe.user.has_role(\"Administrator\")"
   },
   {
    "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
    "fieldname": "scoring",
    "fieldtype": "Table",
    "label": "Scoring",
-   "options": "Scoring"
+   "options": "Scoring",
+   "permlevel": 1
   },
   {
    "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
    "fieldname": "final_result",
    "fieldtype": "Select",
-   "label": "Final Result",
-   "options": "\nApproved\nRejected"
+   "label": "Final Score",
+   "options": "\nApproved\nRejected",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "test_hardcopy",
+   "fieldtype": "Attach",
+   "label": "Test Hardcopy",
+   "permlevel": 1
+  },
+  {
+   "fetch_from": "job_title.job_title",
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Job Title"
+  },
+  {
+   "default": "Today",
+   "fieldname": "screening_from",
+   "fieldtype": "Datetime",
+   "label": "Screening From",
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "screening_to",
+   "fieldtype": "Datetime",
+   "label": "Screening To",
+   "reqd": 1
   }
  ],
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-26 17:50:21.690241",
+ "modified": "2025-04-04 15:25:11.140406",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",

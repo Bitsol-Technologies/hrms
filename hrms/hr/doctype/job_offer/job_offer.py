@@ -10,6 +10,7 @@ from frappe.utils import cint, flt, get_link_to_form
 
 
 class JobOffer(Document):
+
 	def onload(self):
 		employee = frappe.db.get_value("Employee", {"job_applicant": self.job_applicant}, "name") or ""
 		self.set_onload("employee", employee)
@@ -22,7 +23,7 @@ class JobOffer(Document):
 		if job_offer and job_offer != self.name:
 			frappe.throw(
 				_("Job Offer: {0} is already for Job Applicant: {1}").format(
-					frappe.bold(job_offer), frappe.bold(self.job_applicant)
+					frappe.bold(get_link_to_form("Job Offer", job_offer)), frappe.bold(self.job_applicant)
 				)
 			)
 
@@ -56,8 +57,9 @@ class JobOffer(Document):
 
 
 def update_job_applicant(status, job_applicant):
-	if status in ("Accepted", "Rejected"):
-		frappe.set_value("Job Applicant", job_applicant, "status", status)
+	status_map = {"Accepted": "Active", "Rejected": "Rejected"}
+	if status in status_map:
+		frappe.db.set_value("Job Applicant", job_applicant, "status", status_map[status])
 
 
 def get_staffing_plan_detail(designation, company, offer_date):

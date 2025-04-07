@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "job_applicant",
+  "applicant_name",
   "job_offer",
   "employee_onboarding_template",
   "column_break_7",
@@ -33,6 +34,7 @@
    "fieldname": "job_applicant",
    "fieldtype": "Link",
    "label": "Job Applicant",
+   "link_filters": "[[\"Job Applicant\",\"status\",\"in\",[\"Active\",\"Probation\",\"Intern\"]]]",
    "options": "Job Applicant",
    "reqd": 1
   },
@@ -170,11 +172,20 @@
    "fieldtype": "Link",
    "label": "Holiday List",
    "options": "Holiday List"
+  },
+  {
+   "fetch_from": "job_applicant.applicant_name",
+   "fieldname": "applicant_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Applicant Name",
+   "read_only": 1
   }
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2024-02-12 19:33:57.120384",
+ "modified": "2025-03-13 12:15:50.836475",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Onboarding",
@@ -197,17 +208,17 @@
    "write": 1
   },
   {
-    "amend": 1,
-    "cancel": 1,
-    "create": 1,
-    "export": 1,
-    "print": 1,
-    "read": 1,
-    "role": "HR Manager",
-    "share": 1,
-    "submit": 1,
-    "write": 1
-   }
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
  ],
  "sort_field": "modified",
  "sort_order": "DESC",

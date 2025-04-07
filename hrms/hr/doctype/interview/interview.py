@@ -35,7 +35,6 @@ class Interview(Document):
 				_("Only Interviews with Cleared or Rejected status can be submitted."),
 				title=_("Not Allowed"),
 			)
-		self.show_job_applicant_update_dialog()
 
 	def after_insert(self):
 		meeting_link = get_meeting_link()
@@ -46,46 +45,78 @@ class Interview(Document):
 		notification_recipients = recipients.copy()
 		if self.job_applicant in notification_recipients:
 			notification_recipients.remove(self.job_applicant)
-		
 		# Create the attachment tuple as expected by Frappe
 		attachment = {
 			"fname": "event.ics",
 			"fcontent": ics_file
 		}
+		# Convert attachment into JSON format for logging
+		notification_attachment = frappe.as_json(attachment)  # Converts dict to JSON string
+
 		try:
+			# Step 1: Dynamically select the email template
+			email_template_name = "Interview Scheduling Template" if self.location == "Remote" else "Interview on site"
+
+			# Step 2: Prepare email arguments (used for both email & notification logs)
+			email_args = {
+				"name": self.applicant_name,
+				"title": self.job_title,
+				"location": self.location,
+				"date": self.scheduled_on,
+				"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
+				"meeting_link": meeting_link,
+				"interview_type": "Remote" if self.location == "Remote" else "On-Site"
+			}
+
+			# Step 3: Fetch & render the email template
+			email_template = frappe.get_doc("Email Template", email_template_name)
+			email_content = frappe.render_template(email_template.response, email_args)
+
+			# Step 4: Send the email
 			frappe.sendmail(
 				recipients=recipients,
-				create_notification_log=True,
+				create_notification_log=False,  # Disable auto-log so we can manually log
 				from_users=["Administrator"],
-				for_users=notification_recipients,  # Use the modified recipients list
-				args={
-					"name": self.applicant_name,
-					"title": self.job_title,
-					"location": self.location,
-					"date": self.scheduled_on,
-					"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
-					"meeting_link": meeting_link,
-					"resume_link": self.resume_link,
-				},
-				email_template_name="Interview Scheduling Template" if self.location == "Remote" else "Interview on site",
-				attachments=[attachment]  # Pass the attachment in a list
+				args=email_args,
+				email_template_name=email_template_name,
+				attachments=[attachment]  # Ensure it's a list
 			)
+
+			# Step 5: Manually create the notification log with the same content
+			frappe.get_doc({
+				"doctype": "Notification Log",
+				"subject": f"Interview Scheduled - {email_args['interview_type']}",
+				"email_content": email_content,  # Use the same rendered email template
+				"document_type": "Interview",
+				"document_name": self.name,
+				"for_users": notification_recipients,  # Use the same recipients
+			}).insert(ignore_permissions=True)
+
 		except Exception as e:
 			frappe.log_error(f"Error sending email: {e}")
 
 	def validate_duplicate_interview(self):
+
 		duplicate_interview = frappe.db.exists(
 			"Interview",
-			{"job_applicant": self.job_applicant, "interview_round": self.interview_round, "docstatus": 1},
+			{
+				"job_applicant": self.job_applicant, 
+				"interview_round": self.interview_round,  
+				"job_opening": self.job_opening,
+				"docstatus": ["in", [0, 1]],
+				"name": ["!=", self.name],
+			},
 		)
 
 		if duplicate_interview:
 			frappe.throw(
 				_(
-					"Job Applicants are not allowed to appear twice for the same Interview round. Interview {0} already scheduled for Job Applicant {1}"
+					"Job Applicants are not allowed to appear twice for the same Interview round. Interview {0} already scheduled for Job Applicant {1} for Job Opening {2} againt ID {3}"
 				).format(
 					frappe.bold(get_link_to_form("Interview", duplicate_interview)),
 					frappe.bold(self.job_applicant),
+					frappe.bold(self.job_opening),
+					frappe.bold(self.name)
 				)
 			)
 
@@ -122,7 +153,7 @@ class Interview(Document):
 		)
 
 	def get_job_applicant_status(self) -> str | None:
-		status_map = {"Cleared": "Accepted", "Rejected": "Rejected"}
+		status_map = {"Cleared": "Active", "Rejected": "Rejected"}
 		return status_map.get(self.status, None)
 
 	@frappe.whitelist()
@@ -166,10 +197,18 @@ class Interview(Document):
 
 		frappe.msgprint(_("Interview Rescheduled successfully"), indicator="green")
 
+	def parse_time(self,time_str):
+		try:
+			# Try to parse with microseconds
+			return datetime.strptime(time_str, "%H:%M:%S.%f").time()
+		except ValueError:
+			# Fall back to format without microseconds
+			return datetime.strptime(time_str, "%H:%M:%S").time()
+		
 	def create_ics_file(self, recipients, meeting_link):
 		event_date = datetime.strptime(self.scheduled_on, "%Y-%m-%d").date()
-		start_time_obj = datetime.strptime(self.from_time, "%H:%M:%S").time()
-		end_time_obj = datetime.strptime(self.to_time, "%H:%M:%S").time()
+		start_time_obj = self.parse_time(self.from_time)
+		end_time_obj = self.parse_time(self.to_time)
 
 		start_time = datetime.combine(event_date, start_time_obj)
 		end_time = datetime.combine(event_date, end_time_obj)
@@ -225,17 +264,30 @@ def get_interviewers(interview_round: str) -> list[str]:
 
 def get_recipients(name, for_feedback=0):
 	interview = frappe.get_doc("Interview", name)
-	interviewers = [d.interviewer for d in interview.interview_details]
+	# Get interviewers from the Interview Details table (explicit entries)
+	details = [d.interviewer for d in interview.interview_details if d.interviewer]
+
+	# Get interviewers from the Interview Round linked field (even if not explicitly added)
+	round_list = frappe.get_all(
+		"Interviewer", 
+		filters={"parent": interview.interview_round}, 
+		fields=["user as interviewer"]
+	)
+	round_list = [d.get("interviewer") for d in round_list if d.get("interviewer")]
+
+
+	# Combine both lists and remove duplicates
+	recipients = list(set(details + round_list))
 
 	if for_feedback:
 		feedback_given_interviewers = frappe.get_all(
 			"Interview Feedback", filters={"interview": name, "docstatus": 1}, pluck="interviewer"
 		)
-		recipients = [d for d in interviewers if d not in feedback_given_interviewers]
+		recipients = [d for d in recipients if d not in feedback_given_interviewers]
 	else:
-		recipients = interviewers
 		recipients.append(frappe.db.get_value("Job Applicant", interview.job_applicant, "email_id"))
 
+	print("Final recipients for Interview", recipients)
 	return recipients
 
 
@@ -490,17 +542,17 @@ def get_events(start, end, filters=None):
 	# nosemgrep: frappe-semgrep-rules.rules.frappe-using-db-sql
 	interviews = frappe.db.sql(
 		f"""
-            SELECT DISTINCT
-                `tabInterview`.name, `tabInterview`.job_applicant, `tabInterview`.interview_round,
-                `tabInterview`.scheduled_on, `tabInterview`.status, `tabInterview`.from_time as from_time,
-                `tabInterview`.to_time as to_time
-            from
-                `tabInterview`
-            where
-                (`tabInterview`.scheduled_on between %(start)s and %(end)s)
-                and docstatus != 2
-                {conditions}
-            """,
+			SELECT DISTINCT
+				`tabInterview`.name, `tabInterview`.job_applicant, `tabInterview`.interview_round,
+				`tabInterview`.scheduled_on, `tabInterview`.status, `tabInterview`.from_time as from_time,
+				`tabInterview`.to_time as to_time
+			from
+				`tabInterview`
+			where
+				(`tabInterview`.scheduled_on between %(start)s and %(end)s)
+				and docstatus != 2
+				{conditions}
+			""",
 		{"start": start, "end": end},
 		as_dict=True,
 		update={"allDay": 0},

@@ -17,8 +17,25 @@ frappe.ui.form.on("Job Applicant", {
 		});
 		frm.events.create_custom_buttons(frm);
 		frm.events.make_dashboard(frm);
+		frm.events.set_telephonic_interviewers_query(frm);
+		frm.events.refresh_attachments(frm);
 	},
-
+	set_telephonic_interviewers_query: function (frm) {
+		let emp = [];
+		for (let d in frm.doc.telephonic_interviewers) {
+			if (frm.doc.telephonic_interviewers[d].employee_id) {
+				emp.push(frm.doc.telephonic_interviewers[d].employee_id);
+			}
+		}
+		frm.set_query("employee_id", "telephonic_interviewers", function () {
+			return {
+				filters: {
+					name: ["NOT IN", emp],
+					status: "Active",
+				},
+			};
+		});
+	},
 	create_custom_buttons: function (frm) {
 		if (!frm.doc.__islocal && frm.doc.status !== "Rejected" && frm.doc.status !== "Accepted") {
 			frm.add_custom_button(
@@ -113,5 +130,11 @@ frappe.ui.form.on("Job Applicant", {
 				frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
 			},
 		});
+	},
+});
+
+frappe.ui.form.on("CV Reviewer", {
+	employee_id: function (frm) {
+		frm.events.set_telephonic_interviewers_query(frm);
 	},
 });

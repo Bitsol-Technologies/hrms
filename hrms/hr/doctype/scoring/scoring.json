@@ -7,14 +7,16 @@
  "engine": "InnoDB",
  "field_order": [
   "feedback",
-  "marks"
+  "marks",
+  "assignee"
  ],
  "fields": [
   {
    "fieldname": "feedback",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Feedback",
+   "options": "\nRecommended\nNot Recommended",
    "reqd": 1
   },
   {
@@ -25,12 +27,21 @@
    "non_negative": 1,
    "precision": "2",
    "reqd": 1
+  },
+  {
+   "fieldname": "assignee",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "label": "Assignee",
+   "options": "Employee",
+   "reqd": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-02-26 17:16:08.930115",
+ "modified": "2025-03-28 11:49:31.396462",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Scoring",

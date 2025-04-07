@@ -2,6 +2,12 @@
 {% block page_content %}
 
 <div class="py-12">
+	{%- if attachment -%}
+    <div class="d-flex justify-content-center mb-6" style="max-width: 1300px; height: 400px; overflow: hidden;">
+        <img src="{{ attachment }}" alt="Featured Image" class="img-fluid w-100 h-100" style="object-fit: cover;">
+    </div>
+{%- endif -%}
+
 	<!-- Header -->
 	<div class="row">
 		<div class="col-md-9 mb-8">
