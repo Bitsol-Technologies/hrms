@@ -116,16 +116,20 @@ class JobApplicant(Document):
 			
 					if hr_manager_emails:
 						# Send email notification
+						# Prepare context for the email template
+						context = {
+							"name": self.name,
+							"applicant_name": self.applicant_name,
+							"title": self.title,
+							"url":frappe.utils.get_url_to_form('Job Applicant', self.name),
+							"email": self.email_id,
+						}
+
+						# Send email using the template
 						frappe.sendmail(
 							recipients=hr_manager_emails,
-							subject="Applicant Joining",
-							message=f"""
-								<p>Dear HR Manager,</p>
-								<p>The applicant <b>{self.applicant_name}</b> has joined. Please begin the onboarding process.</p>
-								<p>Job Title: {self.title}</p>
-								<p>Applicant Email: {self.email_id}</p>
-								<p>Click <a href="{frappe.utils.get_url_to_form('Job Applicant', self.name)}">here</a> to view the applicant's details.</p>
-							""",
+							email_template_name="Applicant Joining",
+							args=context,
 						)
 				except Exception as e:
 					frappe.log_error(f"Error sending email to HR Manager: {e}", "Applicant Joined Notification Error")

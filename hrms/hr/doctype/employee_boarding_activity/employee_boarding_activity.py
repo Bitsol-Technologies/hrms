@@ -16,13 +16,10 @@ def send_onboarding_reminder():
 		FROM `tabEmployee Boarding Activity`
 		WHERE DATE(begin_on) = %s
 	""", (today_date_str,), as_dict=True)
-	print(activities)
 	for activity in activities:
 		if not activity.user:
-			print("no user was assingned") 
 			continue  # Skip if no user is assigned
 		
-		print("Reminder email function triggered") 
 		# Fetch the parent Employee Onboarding document
 		parent_doc = frappe.get_doc("Employee Onboarding", activity.parent)
 		
@@ -33,23 +30,18 @@ def send_onboarding_reminder():
 		# Format the date
 		formatted_date = format_datetime(activity.begin_on)
 
-		# Email subject & message
-		subject = f"Reminder: Upcoming Onboarding Task for Employee: {parent_doc.applicant_name}"
-		message = f"""
-			Hello {user_first_name},<br><br>
-			This is a friendly reminder about your upcoming onboarding task for employee <strong>{parent_doc.applicant_name}</strong> scheduled for <strong>{formatted_date}</strong>.<br><br>
-			<b>Task:</b> {activity.activity_name}<br>
-			<b>Date & Time:</b> {formatted_date}<br>
-			{activity.description}<br><br>
-			Please ensure that all necessary preparations are in place. Let us know if you have any questions or require assistance.<br><br>
-			<b>Regards,</b><br>
-			HR Team
-		"""
+		# Prepare context for the email template
+		context = {
+			"user_first_name": user_first_name,
+			"applicant_name": parent_doc.applicant_name,
+			"formatted_date": formatted_date,
+			"activity_name": activity.activity_name,
+			"description": activity.description,
+		}
 
-		# Send email
+		# Send email using the template
 		frappe.sendmail(
 			recipients=[activity.user],
-			subject=subject,
-			message=message,
+			email_template_name="Onboarding Reminder",
+			args=context,
 		)
-		print("Reminder email sent")
