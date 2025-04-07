@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.desk.form import assign_to
 from frappe.model.document import Document
-from frappe.utils import add_days, flt, unique
+from frappe.utils import add_days, flt, unique, cint
 
 from erpnext.setup.doctype.employee.employee import get_holiday_list_for_employee
 from erpnext.setup.doctype.holiday_list.holiday_list import is_holiday
@@ -49,12 +49,69 @@ class EmployeeBoardingController(Document):
 		self.create_task_and_notify_user()
 
 	def create_task_and_notify_user(self):
+		holiday_list = self.get_holiday_list()
 		# create the task for the given project and assign to the concerned person
 		if not self.get("notify_users_by_email"):
 			return
 		
 		for activity in self.activities:
+			if activity.task:
+				continue
+
+			dates = self.get_task_dates(activity, holiday_list)
+
+			task = frappe.get_doc(
+				{
+					"doctype": "Task",
+					"project": self.project,
+					"subject": activity.activity_name + " : " + self.employee_name,
+					"description": activity.description,
+					"department": self.department,
+					"company": self.company,
+					"task_weight": activity.task_weight,
+					"exp_start_date": dates[0],
+					"exp_end_date": dates[1],
+				}
+			).insert(ignore_permissions=True)
+			activity.db_set("task", task.name)
+
+			users = [activity.user] if activity.user else []
+			if activity.role:
+				user_list = frappe.db.sql_list(
+					"""
+					SELECT
+						DISTINCT(has_role.parent)
+					FROM
+						`tabHas Role` has_role
+							LEFT JOIN `tabUser` user
+								ON has_role.parent = user.name
+					WHERE
+						has_role.parenttype = 'User'
+							AND user.enabled = 1
+							AND has_role.role = %s
+				""",
+					activity.role,
+				)
+				users = unique(users + user_list)
+
+				if "Administrator" in users:
+					users.remove("Administrator")
+
+			# assign the task the users
+			if users:
+				self.assign_task_to_users(task, users)
 			send_boarding_activity_notification(activity, self.applicant_name)
+
+	def assign_task_to_users(self, task, users):
+		for user in users:
+			args = {
+				"assign_to": [user],
+				"doctype": task.doctype,
+				"name": task.name,
+				"description": task.description or task.subject,
+				"notify": self.notify_users_by_email,
+			}
+			assign_to.add(args)
 
 	def get_holiday_list(self):
 		if self.doctype == "Employee Separation":
@@ -72,14 +129,18 @@ class EmployeeBoardingController(Document):
 		start_date = end_date = None
 
 		if activity.begin_on is not None:
-			start_date = add_days(self.boarding_begins_on, activity.begin_on)
-			start_date = self.update_if_holiday(start_date, holiday_list)
+			# use the activity's begin date
+			start_date = self.update_if_holiday(activity.begin_on, holiday_list)
 
-			if activity.duration is not None:
-				end_date = add_days(self.boarding_begins_on, activity.begin_on + activity.duration)
-				end_date = self.update_if_holiday(end_date, holiday_list)
+			# ensure duration is at least 1
+			duration = cint(activity.duration) or 1
+
+			# add duration to start date to get end date
+			end_date = add_days(start_date, duration)
+			end_date = self.update_if_holiday(end_date, holiday_list)
 
 		return [start_date, end_date]
+
 
 	def update_if_holiday(self, date, holiday_list):
 		while is_holiday(holiday_list, date):
@@ -112,38 +173,24 @@ def send_boarding_activity_notification(activity, job_applicant, subject_prefix=
 	The function checks if an user exists and if the notification_sent flag is false.
 	After sending the email, it sets notification_sent to true.
 	"""
-	# Check if there's an user and notification hasn't been sent already
+	# Check if there's a user and notification hasn't been sent already
 	if activity.get("user") and not activity.get("notification_sent"):
 		user_doc = frappe.get_doc("User", activity.get("user"))
-		user_first_name = user_doc.first_name or activity.get("user")
 		
-		# Format the date using Frappe's format_datetime
-		formatted_date = format_datetime(activity.get("begin_on"))
-		
-		subject = "{}Onboarding Task Notification for Employee: {}".format(subject_prefix, job_applicant)
-		message = (
-			"Hello, {}<br><br>"
-			"You have been assigned a new onboarding task for employee <strong>{}</strong>.<br>"
-			"<b>Date:</b> {}<br>"
-			"<b>Task:</b> {}<br>"
-			"{},<br><br>"
-			"Regards,<br>HR Team"
-		).format(
-			user_first_name,
-			job_applicant,
-			formatted_date,
-			activity.get("activity_name"),
-			activity.get("duration"),
-			activity.get("description")
-		)
-			
-		# Send the email using Frappe's sendmail function
 		frappe.sendmail(
-			recipients=[activity.get("user")],
-			subject=subject,
-			message=message,
+		recipients=[activity.get("user")],
+		email_template_name="Onboarding Task Notification",
+		args={
+		"user_first_name": user_doc.first_name or activity.get("user"),
+		"job_applicant": job_applicant,
+		"formatted_date": format_datetime(activity.get("begin_on")),
+		"activity_name": activity.get("activity_name"),
+		"description": activity.get("description"),
+		},
+		reference_doctype="Job Applicant",
 		)
-		
+
+
 		# Mark the activity as notified to avoid duplicate notifications
 		activity.notification_sent = 1  # Checkbox: 1 indicates True
 		activity.db_update()
