@@ -65,7 +65,7 @@ class JobApplicant(Document):
 			new_telephonic_reviewers = list(current_telephonic_reviewers_set - previous_telephonic_reviewers_set)
 
 			if previous_status != self.applicant_status and self.applicant_status == "Lead Screening":
-				send_slack_message(cv_reviewers, self.applicant_name, self.name, "Lead Screening")
+				send_slack_message(cv_reviewers, self.applicant_name, self.title, self.name, "Lead Screening")
 
 			if previous_status != self.applicant_status and self.applicant_status == "Telephonic Screening":
 				frappe.sendmail(
@@ -82,7 +82,7 @@ class JobApplicant(Document):
 					},
 					email_template_name="Telephonic Screening Email",
 				)
-				send_slack_message(telephonic_reviewers, self.applicant_name, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
+				send_slack_message(telephonic_reviewers, self.applicant_name, self.title, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
 			# Notify only newly added Telephonic Interviewers
 			if new_telephonic_reviewers and self.applicant_status == "Telephonic Screening":
@@ -100,7 +100,7 @@ class JobApplicant(Document):
 					},
 					email_template_name="Telephonic Screening Email",
 					)
-				send_slack_message(new_telephonic_reviewers, self.applicant_name, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
+				send_slack_message(new_telephonic_reviewers, self.applicant_name, self.title, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
 			# Notify HR Manager when status changes to "Joined"
 			if previous_status != self.applicant_status and self.applicant_status == "Joined":
@@ -259,7 +259,7 @@ def get_slack_user_id(email):
 		print(f"Error fetching Slack user ID for {email}: {data.get('error')}")
 		return None
 
-def send_slack_message(emails, applicant_name, docname, status, screening_from= None, screening_to= None):
+def send_slack_message(emails, applicant_name, job_title, docname, status, screening_from= None, screening_to= None):
 	"""
 	Loop over the list of emails, fetch each user's Slack ID,
 	and send them an individual message.
@@ -276,9 +276,9 @@ def send_slack_message(emails, applicant_name, docname, status, screening_from= 
 		document_link = frappe.utils.get_url_to_form(doctype, docname)
 		if user_id:
 			if status == "Lead Screening":
-				message = f"Hello <@{user_id}>, please review the CV of {applicant_name}.\nDocument Link: {document_link}."
+				message = f"Hello <@{user_id}>, please review the CV of {applicant_name} for the position {job_title}.\nCandidate details can be accessed via\n {document_link}."
 			if status == "Telephonic Screening":
-				message = f"Hello <@{user_id}>, please review the Telephonic Interview of {applicant_name}.\nDocument Link: {document_link}. \nPlease review within the duration: {screening_from} to {screening_to}."
+				message = f"Hello <@{user_id}>, please review the profile of {applicant_name} and conduct a telephonic screening interview for the position {job_title}.\nCandidate details can be accessed via\n {document_link}. \nPlease review within the timeframe of {screening_from} to {screening_to}."
 			payload = {
 				"channel": user_id,
 				"text": message
