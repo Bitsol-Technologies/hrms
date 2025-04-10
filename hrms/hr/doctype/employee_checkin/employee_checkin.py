@@ -857,6 +857,15 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 
 	return employee_records
 
+def is_public_holiday(date):
+    """
+    Checks if the given date is a public holiday in the "Public Holidays" holiday list.
+
+    :param date: The date to check (YYYY-MM-DD)
+    :return: True if the date is a public holiday, False otherwise
+    """
+    holiday_list = "Public Holidays"  # Name of the holiday list
+    return frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": date})
 
 # send compliance report to operations channel
 def send_daily_compliance_report():
@@ -868,6 +877,9 @@ def send_daily_compliance_report():
 	today_str, _, _, start_dt, end_dt = get_today_date_range()
 	today_date = datetime.strptime(today_str, "%Y-%m-%d").date()
 
+	# Skip public holidays
+	if is_public_holiday(today_date):
+		return
 	if today_date.weekday() in (5, 6):  # Skip weekends
 		return
 
