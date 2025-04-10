@@ -4,6 +4,7 @@
  "allow_rename": 1,
  "autoname": "HR-APP-.YYYY.-.#####",
  "creation": "2013-01-29 19:25:37",
+ "default_view": "Kanban",
  "description": "Applicant for a Job",
  "doctype": "DocType",
  "document_type": "Document",
@@ -71,8 +72,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "hidden": 1,
-   "label": "Employment Status",
-   "options": "Open\nActive\nProbation\nIntern\nResigned\nTerminated\nRejected"
+   "label": "Employment Status"
   },
   {
    "fieldname": "column_break_3",
@@ -284,25 +284,23 @@
    "label": "Job Title"
   },
   {
-   "default": "Today",
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
    "fieldname": "screening_from",
    "fieldtype": "Datetime",
-   "label": "Screening From",
-   "reqd": 1
+   "label": "Screening From"
   },
   {
-   "default": "Today",
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
    "fieldname": "screening_to",
    "fieldtype": "Datetime",
-   "label": "Screening To",
-   "reqd": 1
+   "label": "Screening To"
   }
  ],
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-04 15:25:11.140406",
+ "modified": "2025-04-08 12:13:31.298634",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
@@ -324,7 +322,7 @@
  "search_fields": "applicant_name, email_id, job_title, phone_number",
  "sender_field": "email_id",
  "sort_field": "modified",
- "sort_order": "ASC",
+ "sort_order": "DESC",
  "states": [],
  "subject_field": "notes",
  "title_field": "applicant_name"

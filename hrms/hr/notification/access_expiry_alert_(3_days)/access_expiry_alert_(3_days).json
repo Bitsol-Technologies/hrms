@@ -1,0 +1,33 @@
+{
+ "attach_print": 0,
+ "channel": "System Notification",
+ "condition": "doc.status==\"Active\"",
+ "creation": "2025-01-10 10:56:01.031641",
+ "date_changed": "expiration_date",
+ "days_in_advance": 3,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Access Assignment",
+ "enabled": 1,
+ "event": "Days Before",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "Access of User {{doc.employee}} for project {{doc.project_name}} is going to expire in 3 days",
+ "message_type": "Markdown",
+ "modified": "2025-01-27 14:40:32.602420",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Access Expiry Alert (3 days)",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "user"
+  },
+  {
+   "receiver_by_document_field": "risk_owner"
+  }
+ ],
+ "send_system_notification": 0,
+ "send_to_all_assignees": 0,
+ "subject": "Access Expiry Alert"
+}

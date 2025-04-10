@@ -55,6 +55,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Shift Type",
+   "link_filters": "[[\"Shift Type\",\"process_attendance_after\",\"=\",\"2025-01-01\"]]",
    "options": "Shift Type",
    "reqd": 1,
    "search_index": 1
@@ -138,7 +139,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2024-11-13 12:59:50.928962",
+ "modified": "2025-02-19 17:00:53.568275",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Shift Assignment",

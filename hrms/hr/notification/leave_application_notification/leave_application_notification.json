@@ -1,0 +1,30 @@
+{
+ "attach_print": 0,
+ "channel": "System Notification",
+ "condition": "doc.status==\"Requested\"",
+ "creation": "2024-09-20 10:51:41.932927",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Leave Application",
+ "enabled": 1,
+ "event": "Save",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Your Email for Leave application has been recieved.</p>\n",
+ "message_type": "Markdown",
+ "modified": "2024-09-30 16:25:49.302560",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Leave Application Notification",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "owner",
+   "receiver_by_role": "Employee Self Service"
+  }
+ ],
+ "send_system_notification": 0,
+ "send_to_all_assignees": 0,
+ "subject": "Leave Application"
+}

@@ -142,6 +142,8 @@
    "description": "Attendance will be marked automatically only after this date.",
    "fieldname": "process_attendance_after",
    "fieldtype": "Date",
+   "in_filter": 1,
+   "in_standard_filter": 1,
    "label": "Process Attendance After",
    "mandatory_depends_on": "enable_auto_attendance"
   },
@@ -179,7 +181,7 @@
   }
  ],
  "links": [],
- "modified": "2024-12-18 19:03:38.278336",
+ "modified": "2025-02-18 17:41:32.791145",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Shift Type",

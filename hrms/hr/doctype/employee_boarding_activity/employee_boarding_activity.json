@@ -32,7 +32,7 @@
    "fieldname": "user",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "User",
+   "label": "Assignee",
    "options": "User"
   },
   {
