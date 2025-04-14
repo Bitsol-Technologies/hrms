@@ -89,7 +89,7 @@ class EmployeeCheckin(Document):
 				frappe.throw(_("Current log time cannot be earlier than the previous log time."))
 
 	def validate_check_leave_on_same_day(self):
-		checkin_date = self.time.split(" ")[0]
+		checkin_date = self.time.date()
 		doc = frappe.db.exists(
 			"Leave Application",
 			{
@@ -138,7 +138,7 @@ class EmployeeCheckin(Document):
 		docs = frappe.db.sql(
 			"""SELECT COUNT(log_type) FROM `tabEmployee Checkin` WHERE CAST(time as DATE)=%(time_val)s AND
 			log_type='IN' AND employee = %(employee)s""",
-			{"time_val": self.time.split(" ")[0], "employee": self.employee},
+			{"time_val": self.time.date(), "employee": self.employee},
 		)
 		if docs[0][0] < 1:
 			frappe.throw(_("Please add check-in first"))
@@ -500,8 +500,6 @@ import json
 from datetime import datetime, timedelta
 from frappe.utils import today, now, get_datetime
 
-FULL_DAY_SECONDS = 6 * 3600
-HALF_DAY_SECONDS = 3 * 3600 + 40 * 60
 
 
 def get_today_date_range():
@@ -814,7 +812,8 @@ def send_compliance_report(non_compliant, today_str):
 		# Build a plain text message
 		split_messages = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
 
-	target = "C08JA26QG84"  # Management Channel
+	# target = "C08JA26QG84"  # Management Channel
+	target = "laiba.masood@bitsol.tech"
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
 
@@ -915,14 +914,14 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 	return employee_records
 
 def is_public_holiday(date):
-    """
-    Checks if the given date is a public holiday in the "Public Holidays" holiday list.
+	"""
+	Checks if the given date is a public holiday in the "Public Holidays" holiday list.
 
-    :param date: The date to check (YYYY-MM-DD)
-    :return: True if the date is a public holiday, False otherwise
-    """
-    holiday_list = "Public Holidays"  # Name of the holiday list
-    return frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": date})
+	:param date: The date to check (YYYY-MM-DD)
+	:return: True if the date is a public holiday, False otherwise
+	"""
+	holiday_list = "Public Holidays"  # Name of the holiday list
+	return frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": date})
 
 # send compliance report to operations channel
 def send_daily_compliance_report():
@@ -979,6 +978,7 @@ def get_employee_checkin(emp_email, start_dt, end_dt):
 	employee = frappe.db.get_value("Employee", {"user_id": emp_email}, "name")
 
 	if not employee:
+		print("Employee not found in ERPNext for email:", emp_email)
 		return {}  # Employee not found in ERPNext
 
 	# Fetch all check-in and check-out records for this employee within the time range
@@ -1003,6 +1003,22 @@ def get_employee_checkin(emp_email, start_dt, end_dt):
 
 	return emp_checkins
 
+def get_employee_shift_type(employee_id):
+	"""
+	Fetches the shift type for an employee by filtering for only the Submitted shifts.
+	Returns the shift type of the first assignment found.
+	"""
+	# Query for the employee's shift assignment, filtering for only "Submitted" shifts
+	shift_assignments = frappe.get_all("Shift Assignment", filters={
+		"employee": employee_id,  # Use employee ID field from emp_data["employee"]
+		"docstatus": 1  # Ensure we're only fetching submitted shifts
+	}, fields=["shift_type"], limit=1)  # Limit to the first assignment
+
+	# If no active submitted shift assignment found, return None
+	if not shift_assignments:
+		return None
+	# Return the shift type of the first valid submitted assignment
+	return shift_assignments[0]["shift_type"]
 
 def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	"""
@@ -1014,6 +1030,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	- If no check-in and no logs, returns "No check-in, No Clockify logs, No leave recorded" (unless on leave).
 	- If total logged time is below required hours, returns the underworked message.
 	"""
+	employee_id = emp_data.get("employee")
 	# Validate required Clockify details
 	if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
 		return None, None, "Missing Clockify API User ID or Workspace ID"
@@ -1025,7 +1042,6 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	emp_checkins = get_employee_checkin(emp_email, start_dt, end_dt)
 	checkin_time = emp_checkins.get("checkin")
 	checkout_time = emp_checkins.get("checkout")
-
 	# Check if an active timer is running in any workspace
 	try:
 		if any(is_clockify_timer_active(api_key, ws, user_id) for ws in workspaces):
@@ -1036,6 +1052,26 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		frappe.log_error(f"Error checking active timer for {emp_email}: {e}", "Clockify Compliance Check")
 		return checkin_time, checkout_time, "Invalid API Key in the system"
 	# Continue to process further if the timer check fails
+
+	# Fetch Shift Type linked to the employee (using the first shift found)
+	shift_type = get_employee_shift_type(employee_id)
+	if not shift_type:
+		# If no shift assigned or no valid shift found, skip the compliance check
+		return None,None, None
+
+	# Fetch shift type thresholds
+	try:
+		shift_type_doc = frappe.get_doc("Shift Type", shift_type)
+		# Assuming only full day hours is stored,
+		# calculate half day hours by dividing the full day working hours by 2.
+		working_hours_full_day = shift_type_doc.working_hours_threshold_for_full_day
+		working_hours_half_day = working_hours_full_day / 2
+	except Exception as e:
+		frappe.log_error(f"Error fetching Shift Type data for {employee_id}: {e}", "Shift Type Fetch Error")
+		return checkin_time, checkout_time, "Error fetching Shift Type data"
+
+	FULL_DAY_SECONDS = working_hours_full_day * 3600  # Convert full day hours to seconds
+	HALF_DAY_SECONDS = working_hours_half_day * 3600      # Convert half day hours to seconds
 
 	# Fetch Clockify logs (total logged time across all workspaces)
 	try:
