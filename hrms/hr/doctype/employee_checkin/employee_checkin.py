@@ -812,8 +812,7 @@ def send_compliance_report(non_compliant, today_str):
 		# Build a plain text message
 		split_messages = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
 
-	# target = "C08JA26QG84"  # Management Channel
-	target = "laiba.masood@bitsol.tech"
+	target = "C08JA26QG84"  # Management Channel
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
 
