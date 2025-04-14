@@ -17,6 +17,7 @@ from frappe.utils import (
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
+from hrms.hr.doctype.attendance.attendance import mark_attendance
 from hrms.hr.doctype.employee_checkin.employee_checkin import (
 	CheckinRadiusExceededError,
 	add_log_based_on_employee_field,
@@ -42,7 +43,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 			frappe.get_doc(
 				{"doctype": "Shift Type", "name": "Morning", "start_time": "09:00:00", "end_time": "17:00:00"}
 			).insert()
-		
+
 		self.patchers = [
             patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_date_time", lambda self: None),
             patch("hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.validate_check_leave_on_same_day", lambda self: None),
@@ -53,7 +54,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		# Start all patchers.
 		for patcher in self.patchers:
 			patcher.start()
-		
+
 
 	def tearDown(self):
 		# Stop all patchers.
@@ -100,7 +101,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		employee.attendance_device_id = "3344"
 		employee.save()
 
-		time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		time_now = now_datetime().replace(microsecond=0)
 		employee_checkin = add_log_based_on_employee_field("3344", time_now, "mumbai_first_floor", "IN")
 		self.assertEqual(employee_checkin.employee, employee.name)
 		self.assertEqual(employee_checkin.time.strftime("%Y-%m-%d %H:%M:%S"), time_now)
@@ -163,7 +164,7 @@ class TestEmployeeCheckin(FrappeTestCase):
 		# Link check-ins to attendance
 		self.link_checkins_to_attendance(employee)
 
-		
+
 		attendance_date = str(logs[0].time).split(" ")[0]
 		attendance = frappe.get_doc("Attendance", {"employee": employee, "attendance_date": attendance_date})
 
@@ -671,6 +672,84 @@ class TestEmployeeCheckin(FrappeTestCase):
 		self.assertEqual(log1.shift_actual_start, datetime.combine(date, get_time("06:00:00")))
 		log2.reload()
 		self.assertEqual(log2.shift_actual_start, datetime.combine(date, get_time("06:00:00")))
+
+	def test_if_logs_are_marked_invalid(self):
+		# time window is 7 to 13
+		shift = setup_shift_type()
+		emp = make_employee("emp_invalid_log@example.com", company="_Test Company", default_shift=shift.name)
+
+		# checkin log outside shift time window
+		timestamp1 = datetime.combine(getdate(), get_time("06:00:00"))
+		log1 = make_checkin(emp, timestamp1)
+		self.assertTrue(log1.offshift)
+
+		# checkin log within shift time window
+		timestamp2 = datetime.combine(getdate(), get_time("07:30:00"))
+		log2 = make_checkin(emp, timestamp2)
+		self.assertFalse(log2.offshift)
+
+	def test_if_logs_are_marked_valid_again(self):
+		# time window is 7 to 13
+		shift = setup_shift_type()
+		emp = make_employee("emp_invalid_log1@example.com", company="_Test Company", default_shift=shift.name)
+
+		# checkin log outside shift time window
+		timestamp = datetime.combine(getdate(), get_time("06:30:00"))
+		log = make_checkin(emp, timestamp)
+		self.assertTrue(log.offshift)
+
+		# time window chnaged to 6 to 13, checkin log within shift time window
+		shift.begin_check_in_before_shift_start_time = 120
+		shift.save()
+		log.fetch_shift()
+		self.assertFalse(log.offshift)
+
+	def test_validate_time_change(self):
+		# 8-12 shift
+		shift = setup_shift_type()
+		emp = make_employee(
+			"emp_test_shift_start@example.com", company="_Test Company", default_shift=shift.name
+		)
+		timestamp = datetime.combine(getdate(), get_time("10:00:00"))
+		shift_start = datetime.combine(getdate(), get_time("08:00:00"))
+		log = make_checkin(emp, timestamp)
+		# when attendance is not linked, shift start changes with time
+		log.time = add_days(timestamp, 1)
+		log.save()
+		log.reload()
+		self.assertEqual(log.shift_start, add_days(shift_start, 1))
+
+		# when attendance is linked, don't allow to modify either time or shift parameters
+		mark_attendance_and_link_log([log], "Absent", add_days(timestamp, 1))
+		log.reload()
+		log.time = timestamp
+		self.assertRaises(frappe.ValidationError, log.save)
+
+	def test_modifying_half_attendance_created_from_leave(self):
+		shift = setup_shift_type()
+		emp = make_employee("testhalfday@example.com", company="_Test Company", default_shift=shift.name)
+		in_time = datetime.combine(getdate(), get_time("08:00:00"))
+		out_time = datetime.combine(getdate(), get_time("10:00:00"))
+		in_log = make_checkin(emp, in_time)
+		out_log = make_checkin(emp, out_time)
+		attendance_name = mark_attendance(
+			employee=emp, attendance_date=nowdate(), status="Half Day", half_day_status="Absent"
+		)
+		mark_attendance_and_link_log(
+			[in_log, out_log], "Half Day", nowdate(), 4, in_time=in_time, out_time=out_time, shift=shift.name
+		)
+		attendance = frappe.get_value(
+			"Attendance",
+			attendance_name,
+			["name", "status", "half_day_status", "shift", "working_hours", "in_time", "out_time"],
+			as_dict=True,
+		)
+		self.assertEqual(attendance.status, "Half Day")
+		self.assertEqual(attendance.half_day_status, "Present")
+		self.assertEqual(attendance.shift, shift.name)
+		self.assertEqual(attendance.working_hours, 4)
+		self.assertEqual(attendance.in_time, in_log.time)
+		self.assertEqual(attendance.out_time, out_log.time)
 
 
 def make_n_checkins(employee, n):

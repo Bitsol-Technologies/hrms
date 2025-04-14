@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_guest_to_view": 1,
  "allow_import": 1,
  "autoname": "HR-OPN-.YYYY.-.####",
  "creation": "2013-01-15 16:13:36",
@@ -265,11 +266,13 @@
    "options": "CV Reviewer"
   }
  ],
+ "has_web_view": 1,
  "icon": "fa fa-bookmark",
  "idx": 1,
+ "is_published_field": "publish",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-11 17:15:50.730485",
+ "modified": "2025-02-11 22:41:14.873299",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Opening",
@@ -286,10 +289,6 @@
    "role": "HR User",
    "share": 1,
    "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Guest"
   }
  ],
  "sort_field": "modified",
