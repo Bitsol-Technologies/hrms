@@ -2,80 +2,110 @@
 {% block page_content %}
 
 <div class="py-12">
-	{%- if attachment -%}
-    <div class="d-flex justify-content-center mb-6" style="max-width: 1300px; height: 400px; overflow: hidden;">
-        <img src="{{ attachment }}" alt="Featured Image" class="img-fluid w-100 h-100" style="object-fit: cover;">
-    </div>
-{%- endif -%}
+	<div
+	class="d-flex align-items-center justify-content-center text-white text-center mb-4"
+	style="
+		background-size: cover;
+		background-position: center;
+		height: 350px;
+		position: relative;
+	"
+>
+	<!-- Dark overlay -->
+	<div
+		style="
+			background-color: rgba(1, 0, 7, 0.842);
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+		"
+	></div>
 
-	<!-- Header -->
-	<div class="row">
-		<div class="col-md-9 mb-8">
-			<h1
-				class="mt-0 mb-2 mb-md-3 mx-auto mx-md-0 text-center text-md-left"
-				style="@include media-breakpoint-up(md) {font-size: 3rem}"
-			>
-				{{ job_title }}
-			</h1>
-			<div class="flex align-items-center">
-				<div class="mx-auto mx-md-0">
-					<span class="font-weight-bold">{{ company }}</span>
-					{{ " · " }}
-					{{ posted_on }}
-				</div>
-			</div>
+	<!-- Banner content -->
+	<div
+		class="container"
+		style="z-index: 1; max-width: 700px; padding: 1rem;"
+	>
+		<p class="text-white small">
+			{{ company }} &middot; {{ employment_type }}
+		</p>
+		<h1 class="font-weight-bold text-white mb-2" style="font-size: 2rem;margin-top:0">
+			{{ job_title }}
+		</h1>
+		<p class="text-white mb-3 small">
+			{{ location }} &middot; Posted {{ posted_on }}
+		</p>
+		<div class="d-flex justify-content-center mt-4 mb-4">
+			<!-- Facebook -->
+			<a href="https://www.facebook.com/sharer/sharer.php?u={{ frappe.utils.get_url() | urlencode }}"
+			target="_blank" 
+			class="d-flex align-items-center justify-content-center rounded-circle border mx-1"
+			style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.5); text-decoration: none;">
+			<i class="fab fa-facebook-f" style="font-size: 20px;"></i>
+		 </a>
+		 
+		
+			<!-- LinkedIn -->
+			<a href="https://www.linkedin.com/shareArticle?mini=true&url={{ frappe.utils.get_url() }}"
+				target="_blank"
+				class="d-flex align-items-center justify-content-center rounded-circle border mx-1"
+				style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.5);text-decoration: none;">
+				<i class="fab fa-linkedin-in" style="font-size: 20px;"></i>
+			</a>
+		
+			<!-- WhatsApp -->
+			<a href="https://wa.me/?text={{ frappe.utils.get_url() }}"
+				target="_blank"
+				class="d-flex align-items-center justify-content-center rounded-circle border mx-1"
+				style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.5);text-decoration: none;">
+				<i class="fab fa-whatsapp" style="font-size: 20px;"></i>
+			</a>
+		
+			<!-- Telegram -->
+			<a href="https://t.me/share/url?url={{ frappe.utils.get_url() }}"
+				target="_blank"
+				class="d-flex align-items-center justify-content-center rounded-circle border mx-1"
+				style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.5);text-decoration: none;">
+				<i class="fab fa-telegram-plane" style="font-size: 20px;"></i>
+			</a>
+		
+			<!-- Copy Link -->
+			<button onclick="navigator.clipboard.writeText(window.location.href)"
+				class="d-flex align-items-center justify-content-center rounded-circle border mx-1"
+				style="width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.5);text-decoration: none;">
+				<i class="fas fa-link" style="font-size: 15px;"></i>
+			</button>
 		</div>
-		<div class="col-md-3 flex">
-			<div class="ml-auto d-none d-md-block">
-				{%- if status == "Open" -%}
-					<a
-						class="btn btn-primary btn-lg"
-						href="/{{ job_application_route if job_application_route else 'job_application' }}/new?job_title={{ name }}"
-					>
-						{{ _("Apply Now") }}
-					</a>
-				{%- else -%}
-					<div
-						class="py-4 px-10 font-weight-bold text-nowrap"
-						style="background: var(--bg-gray);
-							font-size: 1.1rem;
-							border-radius: var(--border-radius)"
-					>
-						{{ _("Opening closed.") }}
-					</div>
-				{% endif %}
-			</div>
+		
+		{%- if status == "Open" -%}
+		<a
+			class="btn btn-primary btn-md btn-lg-sm mt-2"
+			href="/{{ job_application_route if job_application_route else 'job_application' }}/new?job_title={{ name }}"
+		>
+			{{ _("I'm Interested") }}
+		</a>
+		{%- else -%}
+		<div
+			class="py-2 px-3 font-weight-bold text-nowrap mt-2"
+			style="
+				background: var(--bg-gray);
+				font-size: 1rem;
+				border-radius: var(--border-radius);
+				display: inline-block;"
+		>
+			{{ _("Opening closed.") }}
 		</div>
+		{% endif %}
 	</div>
+</div>
+
+	
 
 	<!-- Job Opening Details -->
 	<div class="mb-md-4 p-md-4">
 		<div class="row">
-			{%- if location -%}
-				<div class="col-12 col-md-4 mb-6 mb-md-8">
-					<div class="flex flex-row align-items-center">
-						<div class="rounded-circle p-4" style="background: var(--purple-50)">
-							<svg
-								class="icon"
-								style="height: 28px; width: 28px"
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 16 16"
-							>
-								<g stroke="var(--purple-700)" stroke-miterlimit="10">
-								<path d="M11.467 3.458c1.958 1.957 1.958 5.088.027 7.02L7.97 14l-3.523-3.523a4.945 4.945 0 010-6.993l.026-.026a4.922 4.922 0 016.993 0zm0 0c-.026-.026-.026-.026 0 0z">
-								</path>
-								<path d="M7.971 8.259a1.305 1.305 0 100-2.61 1.305 1.305 0 000 2.61z"></path>
-								</g>
-							</svg>
-						</div>
-						<div class="ml-5">
-							<div class="text-secondary text-uppercase" style="font-size: 11px">{{ _("Location") }}</div>
-							<div class="font-weight-bold">{{ location }}</div>
-						</div>
-					</div>
-				</div>
-			{% endif %}
-
 			{%- if department -%}
 				<div class="col-12 col-md-4 mb-6 mb-md-8">
 					<div class="flex flex-row align-items-center">
@@ -129,48 +159,26 @@
 					</div>
 				</div>
 			{% endif %}
-
-			{%- if employment_type -%}
-				<div class="col-12 col-md-4 mb-6 mb-md-8">
-					<div class="flex flex-row align-items-center">
-						<div class="rounded-circle p-4" style="background: var(--yellow-50)">
-							<svg
-								class="icon"
-								style="height: 28px;
-									width: 28px;
-									--icon-stroke: var(--yellow-700)"
-							>
-								<use href="#icon-hr"></use>
-							</svg>
-						</div>
-						<div class="ml-5">
-							<div class="text-secondary text-uppercase" style="font-size: 11px">{{ _("Employment Type") }}</div>
-							<div class="font-weight-bold">{{ employment_type }}</div>
-						</div>
-					</div>
-				</div>
-			{% endif %}
-
 			{%- if publish_applications_received -%}
-				<div class="col-12 col-md-4 mb-6 mb-md-8">
-					<div class="flex flex-row align-items-center">
-						<div class="rounded-circle p-4" style="background: var(--orange-50)">
-							<svg
-								class="icon"
-								style="height: 28px;
-									width: 28px;
-									--icon-stroke: var(--orange-700)"
-							>
-								<use href="#icon-users"></use>
-							</svg>
-						</div>
-						<div class="ml-5">
-							<div class="text-secondary text-uppercase" style="font-size: 11px">{{ _("Applications Received") }}</div>
-							<div class="font-weight-bold">{{ no_of_applications }}</div>
-						</div>
+			<div class="col-12 col-md-4 mb-6 mb-md-8">
+				<div class="flex flex-row align-items-center">
+					<div class="rounded-circle p-4" style="background: var(--orange-50)">
+						<svg
+							class="icon"
+							style="height: 28px;
+								width: 28px;
+								--icon-stroke: var(--orange-700)"
+						>
+							<use href="#icon-users"></use>
+						</svg>
+					</div>
+					<div class="ml-5">
+						<div class="text-secondary text-uppercase" style="font-size: 11px">{{ _("Applications Received") }}</div>
+						<div class="font-weight-bold">{{ no_of_applications }}</div>
 					</div>
 				</div>
-			{%- endif -%}
+			</div>
+		{%- endif -%}
 
 			{%- if (status == 'Open' and closes_on) or (status == 'Closed' and closed_on) -%}
 				<div class="col-12 col-md-4 mb-6 mb-md-8">
@@ -227,5 +235,14 @@
 		</div>
 	</div>
 </div>
+
+{% block script %}
+<script>
+	function shareFacebook() {
+		const url = encodeURIComponent(window.location.href);
+		window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=400');
+	}
+</script>
+{% endblock %}
 
 {% endblock page_content %}
