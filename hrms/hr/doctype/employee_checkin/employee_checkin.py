@@ -89,7 +89,7 @@ class EmployeeCheckin(Document):
 				frappe.throw(_("Current log time cannot be earlier than the previous log time."))
 
 	def validate_check_leave_on_same_day(self):
-		checkin_date = self.time.split(" ")[0]
+		checkin_date = self.time.date()
 		doc = frappe.db.exists(
 			"Leave Application",
 			{
