@@ -89,7 +89,7 @@ class EmployeeCheckin(Document):
 				frappe.throw(_("Current log time cannot be earlier than the previous log time."))
 
 	def validate_check_leave_on_same_day(self):
-		checkin_date = self.time.split(" ")[0]
+		checkin_date = self.time.date()
 		doc = frappe.db.exists(
 			"Leave Application",
 			{
@@ -138,7 +138,7 @@ class EmployeeCheckin(Document):
 		docs = frappe.db.sql(
 			"""SELECT COUNT(log_type) FROM `tabEmployee Checkin` WHERE CAST(time as DATE)=%(time_val)s AND
 			log_type='IN' AND employee = %(employee)s""",
-			{"time_val": self.time.split(" ")[0], "employee": self.employee},
+			{"time_val": self.time.date(), "employee": self.employee},
 		)
 		if docs[0][0] < 1:
 			frappe.throw(_("Please add check-in first"))
@@ -801,6 +801,7 @@ def get_all_active_employees():
 
 
 def send_compliance_report(non_compliant, today_str):
+	target = get_compliance_channel()  # Management Channel
 	if non_compliant:
 		# Build a plain text header
 		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\n"
@@ -814,10 +815,23 @@ def send_compliance_report(non_compliant, today_str):
 		# Build a plain text message
 		split_messages = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
 
-	target = "C08JA26QG84"  # Management Channel
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
 
+def get_compliance_channel():
+	"""
+	Fetches the 'operation_compliance_channel' from System Settings.
+	Logs an error and aborts if the field or value is missing.
+	"""
+	try:
+		channel = frappe.db.get_single_value("System Settings", "operation_compliance_channel")
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Failed to fetch Operation Compliance Channel")
+		frappe.throw(_("System Settings or the field operation_compliance_channel is missing."))
+	if not channel:
+		frappe.log_error("No Operation Compliance Channel configured", "Configuration Error")
+		frappe.throw(_("Please configure Operation Compliance Channel in System Settings."))
+	return channel
 
 def split_long_message(message, max_length=3800):
 	"""
@@ -915,14 +929,14 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 	return employee_records
 
 def is_public_holiday(date):
-    """
-    Checks if the given date is a public holiday in the "Public Holidays" holiday list.
+	"""
+	Checks if the given date is a public holiday in the "Public Holidays" holiday list.
 
-    :param date: The date to check (YYYY-MM-DD)
-    :return: True if the date is a public holiday, False otherwise
-    """
-    holiday_list = "Public Holidays"  # Name of the holiday list
-    return frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": date})
+	:param date: The date to check (YYYY-MM-DD)
+	:return: True if the date is a public holiday, False otherwise
+	"""
+	holiday_list = "Public Holidays"  # Name of the holiday list
+	return frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": date})
 
 # send compliance report to operations channel
 def send_daily_compliance_report():
@@ -957,11 +971,15 @@ def send_daily_compliance_report():
 		checkin, checkout, reason = check_non_compliance(email, emp_data, custom_api_key, start_dt, end_dt)
 		if reason:
 			non_compliant.append({
+				"employee_id": emp_data["employee"],
 				"employee": emp_data["employee_name"],
 				"checkin": checkin,
 				"checkout": checkout,
 				"reason": reason
 			})
+	# send to erp
+	create_employee_compliance_reports(non_compliant, report_date=today_str)
+	# send to operations channel
 	send_compliance_report(non_compliant, today_str)
 
 
@@ -1084,3 +1102,28 @@ def get_employee_leave_status(emp_id, date):
 	:return: "On Leave", "Half Day", or None if not on leave.
 	"""
 	return frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
+
+def create_employee_compliance_reports(entries, report_date=None):
+	"""
+	entries: list of dicts with keys:
+	  - employee    (Link to Employee)
+	  - checkin     (Time string, e.g. "09:00")
+	  - checkout    (Time string, e.g. "17:00")
+	  - reason      (str)
+	report_date: date string "YYYY-MM-DD";
+	"""
+	for e in entries:
+		# build the new document
+		doc = frappe.get_doc({
+			"doctype": "Employee Compliance Report",
+			"employee": e["employee_id"],
+			"report_date": report_date,
+			"checkin": e["checkin"],
+			"checkout": e["checkout"],
+			"reason": e["reason"]
+		})
+		# insert into the database
+		doc.insert(ignore_permissions=True)
+
+	# commit once after all inserts
+	frappe.db.commit()
