@@ -799,6 +799,7 @@ def get_all_active_employees():
 
 
 def send_compliance_report(non_compliant, today_str):
+	target = get_compliance_channel()  # Management Channel
 	if non_compliant:
 		# Build a plain text header
 		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\n"
@@ -812,10 +813,23 @@ def send_compliance_report(non_compliant, today_str):
 		# Build a plain text message
 		split_messages = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
 
-	target = "C08JA26QG84"  # Management Channel
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
 
+def get_compliance_channel():
+	"""
+	Fetches the 'operation_compliance_channel' from System Settings.
+	Logs an error and aborts if the field or value is missing.
+	"""
+	try:
+		channel = frappe.db.get_single_value("System Settings", "operation_compliance_channel")
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Failed to fetch Operation Compliance Channel")
+		frappe.throw(_("System Settings or the field operation_compliance_channel is missing."))
+	if not channel:
+		frappe.log_error("No Operation Compliance Channel configured", "Configuration Error")
+		frappe.throw(_("Please configure Operation Compliance Channel in System Settings."))
+	return channel
 
 def split_long_message(message, max_length=3800):
 	"""
@@ -955,11 +969,15 @@ def send_daily_compliance_report():
 		checkin, checkout, reason = check_non_compliance(email, emp_data, custom_api_key, start_dt, end_dt)
 		if reason:
 			non_compliant.append({
+				"employee_id": emp_data["employee"],
 				"employee": emp_data["employee_name"],
 				"checkin": checkin,
 				"checkout": checkout,
 				"reason": reason
 			})
+	# send to erp
+	create_employee_compliance_reports(non_compliant, report_date=today_str)
+	# send to operations channel
 	send_compliance_report(non_compliant, today_str)
 
 
@@ -1119,3 +1137,28 @@ def get_employee_leave_status(emp_id, date):
 	:return: "On Leave", "Half Day", or None if not on leave.
 	"""
 	return frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
+
+def create_employee_compliance_reports(entries, report_date=None):
+	"""
+	entries: list of dicts with keys:
+	  - employee    (Link to Employee)
+	  - checkin     (Time string, e.g. "09:00")
+	  - checkout    (Time string, e.g. "17:00")
+	  - reason      (str)
+	report_date: date string "YYYY-MM-DD";
+	"""
+	for e in entries:
+		# build the new document
+		doc = frappe.get_doc({
+			"doctype": "Employee Compliance Report",
+			"employee": e["employee_id"],
+			"report_date": report_date,
+			"checkin": e["checkin"],
+			"checkout": e["checkout"],
+			"reason": e["reason"]
+		})
+		# insert into the database
+		doc.insert(ignore_permissions=True)
+
+	# commit once after all inserts
+	frappe.db.commit()

@@ -74,6 +74,7 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Time",
+   "permlevel": 1,
    "reqd": 1
   },
   {
@@ -179,9 +180,8 @@
    "read_only": 1
   }
  ],
- "grid_page_length": 50,
  "links": [],
- "modified": "2025-04-15 12:08:59.374183",
+ "modified": "2025-04-17 17:24:08.537422",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Checkin",
