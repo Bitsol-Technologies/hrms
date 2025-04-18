@@ -1062,7 +1062,8 @@ def get_employee_shift_type(employee_id):
 	# Query for the employee's shift assignment, filtering for only "Submitted" shifts
 	shift_assignments = frappe.get_all("Shift Assignment", filters={
 		"employee": employee_id,  # Use employee ID field from emp_data["employee"]
-		"docstatus": 1  # Ensure we're only fetching submitted shifts
+		"docstatus": 1,  # Ensure we're only fetching submitted shifts
+		"status": "Active"  # Ensure we're only fetching active shifts
 	}, fields=["shift_type"], limit=1)  # Limit to the first assignment
 
 	# If no active submitted shift assignment found, return None
