@@ -776,8 +776,8 @@ def build_compliance_report_table(non_compliant):
 	rows = []
 	for rec in non_compliant:
 		emp = rec["employee"]
-		checkin = rec["checkin"].strftime('%I:%M %p') if rec["checkin"] else "N/A"
-		checkout = rec["checkout"].strftime('%I:%M %p') if rec["checkout"] else "N/A"
+		checkin = rec["checkin"]
+		checkout = rec["checkout"]
 		reason = rec["reason"]
 		row = f"{emp:20} | {checkin:10} | {checkout:10} | {reason:30}"
 		rows.append(row)
@@ -977,8 +977,42 @@ def send_daily_compliance_report():
 			})
 	# send to erp
 	create_employee_compliance_reports(non_compliant, report_date=today_str)
-	# send to operations channel
-	send_compliance_report(non_compliant, today_str)
+	# Send to channel at 9am nextday
+
+def send_yesterday_compliance_report_to_slack():
+	from datetime import datetime, timedelta
+
+	yesterday = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+	# Pull non-compliant data from your DocType for yesterday
+	records = frappe.get_all("Employee Compliance Report", 
+		filters={
+			"report_date": yesterday,
+		},
+		fields=["employee", "employee_name", "checkin", "checkout", "reason"],
+		limit_page_length=0 
+	)
+
+	# Format the data like original non_compliant list
+	non_compliant = [{
+		"employee_id": r.employee,
+		"employee": r.employee_name,
+		"checkin": format_time_string(r.checkin),
+		"checkout": format_time_string(r.checkout),
+		"reason": r.reason
+	} for r in records]
+
+	send_compliance_report(non_compliant, yesterday)
+
+def format_time_string(value):
+	if value and value.upper() != "N/A":
+		try:
+			# If it's a full datetime string
+			dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+			return dt.strftime("%I:%M %p")
+		except (ValueError, AttributeError):
+			return value  # fallback in case of unexpected format
+	return "N/A"
 
 
 def get_employee_checkin(emp_email, start_dt, end_dt):
