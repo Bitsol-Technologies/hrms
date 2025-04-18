@@ -28,6 +28,8 @@
   "leave_approver",
   "leave_approver_name",
   "follow_via_email",
+  "team_lead",
+  "lead_name",
   "column_break_18",
   "posting_date",
   "status",
@@ -261,14 +263,27 @@
    "fieldtype": "Small Text",
    "label": "Reason For Rejection",
    "mandatory_depends_on": "eval:doc.status == \"Rejected\""
+  },
+  {
+   "fetch_from": "employee.team_lead",
+   "fieldname": "team_lead",
+   "fieldtype": "Data",
+   "label": "Team Lead "
+  },
+  {
+   "fetch_from": "employee.team_lead_name",
+   "fieldname": "lead_name",
+   "fieldtype": "Data",
+   "label": "Lead Name"
   }
  ],
+ "grid_page_length": 50,
  "icon": "fa fa-calendar",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
  "max_attachments": 3,
- "modified": "2024-10-17 14:49:42.940743",
+ "modified": "2025-04-18 13:21:13.695934",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Leave Application",
@@ -360,6 +375,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee,employee_name,leave_type,from_date,to_date,total_leave_days",
  "sort_field": "modified",
  "sort_order": "DESC",
