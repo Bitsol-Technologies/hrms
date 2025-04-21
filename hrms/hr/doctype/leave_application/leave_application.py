@@ -36,9 +36,6 @@ from hrms.hr.utils import (
 )
 from hrms.mixins.pwa_notifications import PWANotificationsMixin
 from hrms.utils import get_employee_email
-from hrms.hr.doctype.employee_checkin.employee_checkin import send_slack_message_for_employee
-from hrms.hr.doctype.job_applicant.job_applicant import get_slack_user_id
-from hrms.hr.doctype.work_from_home.work_from_home import get_hr_manager_user_emails, get_wfh_leave_channel
 class LeaveDayBlockedError(frappe.ValidationError):
 	pass
 
@@ -72,19 +69,6 @@ class LeaveApplication(Document, PWANotificationsMixin):
 
 	def after_insert(self):
 		self.notify_approver()
-		self.notify_leave()
-
-	def notify_leave(self):
-			target = get_wfh_leave_channel()
-			emails = ["mishael.mushtaq@bitsol.tech", "fiza.mahmood@bitsol.tech"]
-			slack_user_ids = [get_slack_user_id(email) for email in emails if get_slack_user_id(email)]
-			slack_mentions = " , ".join([f"<@{user_id}>" for user_id in slack_user_ids])
-			team_lead = get_slack_user_id(self.team_lead)
-			cc_line = ""
-			if team_lead:  # Only add CC if there are valid Slack user IDs
-				cc_line = f"CC: <@{team_lead}>"
-			msg = f"{slack_mentions} *{self.employee_name}* has applied for *Leave* from *{self.from_date}* to *{self.to_date}*.\n{cc_line}"
-			send_slack_message_for_employee([target], msg)
 
 	def validate(self):
 		validate_active_employee(self.employee)

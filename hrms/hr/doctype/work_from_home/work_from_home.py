@@ -9,8 +9,6 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 
-from hrms.hr.doctype.employee_checkin.employee_checkin import send_slack_message_for_employee
-from hrms.hr.doctype.job_applicant.job_applicant import get_slack_user_id
 
 @frappe.whitelist()
 def get_number_of_wfh_days(
@@ -130,7 +128,6 @@ class WorkFromHome(Document):
 			frappe.throw(_("Only document with status 'Approved' or 'Rejected' can be submitable."))
 
 	def after_insert(self):
-		self.notify_wfh()
 		try:
 			if self.status == "Requested":
 				parent_doc = frappe.get_doc("Work From Home", self.name)
@@ -160,42 +157,6 @@ class WorkFromHome(Document):
 		except Exception as e:
 			frappe.msgprint("Something went wrong! \n %s" % (str(e)))
 
-
-	def notify_wfh(self):
-		target = get_wfh_leave_channel()
-		emails = ["mishael.mushtaq@bitsol.tech", "fiza.mahmood@bitsol.tech"]
-		slack_user_ids = [get_slack_user_id(email) for email in emails if get_slack_user_id(email)]
-		slack_mentions = " , ".join([f"<@{user_id}>" for user_id in slack_user_ids])
-		team_lead = get_slack_user_id(self.team_lead_id)
-		cc_line = ""
-		if team_lead:  # Only add CC if there are valid Slack user IDs
-			cc_line = f"CC: <@{team_lead}>"
-		msg = f"{slack_mentions} *{self.employee_name}* has applied for *Work From Home* from *{self.from_date}* to *{self.to_date}*.\n{cc_line}"
-		send_slack_message_for_employee([target], msg)
-
-def get_hr_manager_user_emails():
-	# Fetch users with the HR Manager role
-	users = frappe.get_all("Has Role",
-		filters={"role": "HR Manager"},
-		fields=["parent"]  # 'parent' refers to the User
-	)
-	user_emails = [frappe.db.get_value("User", u.parent, "email") for u in users]
-	return [email for email in user_emails if email]
-
-def get_wfh_leave_channel():
-	"""
-	Fetches the 'wfh_leave_channel' from System Settings.
-	Logs an error and aborts if the field or value is missing.
-	"""
-	try:
-		channel = frappe.db.get_single_value("System Settings", "wfh_leave_channel")
-	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Failed to fetch WFH Leave Channel")
-		frappe.throw(_("System Settings or the field wfh_leave_channel is missing."))
-	if not channel:
-		frappe.log_error("No WFH Leave Channel configured", "Configuration Error")
-		frappe.throw(_("Please configure WFH Leave Channel in System Settings."))
-	return channel
 
 @frappe.whitelist()
 def send_wfh_feedback_forms():
@@ -234,3 +195,5 @@ def send_wfh_feedback_forms():
 
 def get_sender_email() -> str | None:
 	return frappe.db.get_single_value("HR Settings", "sender_email")
+
+
