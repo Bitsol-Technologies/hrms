@@ -63,6 +63,7 @@ class Interview(Document):
 				"title": self.job_title,
 				"location": self.location,
 				"date": self.scheduled_on,
+				"interview_round": self.interview_round,
 				"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
 				"meeting_link": meeting_link,
 				"interview_type": "Remote" if self.location == "Remote" else "On-Site"
