@@ -40,7 +40,11 @@ class Interview(Document):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
 		ics_file = self.create_ics_file(recipients, meeting_link)
-		
+		# Fetch HR Managers and append their emails to recipients
+		hr_manager_emails = get_hr_manager_emails()
+		for email in hr_manager_emails:
+			if email not in recipients:
+				recipients.append(email)
 		# Create a copy of recipients list before modification
 		notification_recipients = recipients.copy()
 		if self.job_applicant in notification_recipients:
@@ -408,6 +412,14 @@ def send_interview_reminder():
 
 		doc.db_set("reminded", 1)
 
+def get_hr_manager_emails():
+	hr_manager_emails = frappe.get_all(
+		"User",
+		filters={"enabled": 1},
+		or_filters={"role_profile_name": "HR Manager"},
+		fields=["email"]
+	)
+	return [user["email"] for user in hr_manager_emails if user["email"]]
 
 def send_daily_feedback_reminder():
 	reminder_settings = frappe.db.get_value(
