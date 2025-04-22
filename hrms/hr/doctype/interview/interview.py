@@ -1,10 +1,10 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-
+import requests 
 import uuid
 from datetime import datetime, timedelta
-
+import json
 from google.apps import meet_v2
 from google.oauth2.service_account import Credentials
 
@@ -383,6 +383,7 @@ def update_job_applicant_status(args):
 
 
 def send_interview_reminder():
+	
 	reminder_settings = frappe.db.get_value(
 		"HR Settings",
 		"HR Settings",
@@ -413,10 +414,15 @@ def send_interview_reminder():
 
 	for d in interviews:
 		doc = frappe.get_doc("Interview", d.name)
+		formatted_date = doc.scheduled_on.strftime("%B %d, %Y")  # Example: April 22, 2025
+		# Convert from_time to string, then parse and format
+		from_time_str = str(doc.from_time)  # Convert to string
+		formatted_time = datetime.strptime(from_time_str, "%H:%M:%S").strftime("%I:%M %p")  # Example: 03:27 PM  # Example: 03:27 PM
 		context = doc.as_dict()
+		context["formatted_date"] = formatted_date
+		context["formatted_time"] = formatted_time
 		message = frappe.render_template(interview_template.response, context)
-		recipients = get_recipients(doc.name)
-
+		recipients = list(set(get_recipients(doc.name, for_feedback=1)+ ["mashal@bitsol.tech", "imran@bitsol.tech"] ))
 		frappe.sendmail(
 			sender=reminder_settings.hiring_sender_email,
 			recipients=recipients,
@@ -425,9 +431,35 @@ def send_interview_reminder():
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,
 		)
-
+		send_slack_message(recipients,doc.location, doc.applicant_name, doc.job_title, formatted_date, formatted_time)
 		doc.db_set("reminded", 1)
 
+def send_slack_message(emails, location, applicant_name, job_title, scheduled_on, from_time):
+	system_settings = frappe.get_single("System Settings")
+	SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+	SLACK_TOKEN = system_settings.slack_token
+
+	for email in emails:
+		slack_user_id = frappe.db.get_value("Employee", {"user_id": email}, "custom_slack_user_id")
+		if slack_user_id:
+			message = f"Hey <@{slack_user_id}>, Just a quick reminder — you have {location} Interview scheduled with { applicant_name } for the position {job_title} on {scheduled_on} {from_time}.\nLet me know if you need anything before the call. Good luck!\n\nMashal Farman"
+			payload = {
+				"channel": slack_user_id,
+				"text": message
+			}
+			headers = {
+				"Authorization": f"Bearer {SLACK_TOKEN}",
+				"Content-Type": "application/json"
+			}
+			response = requests.post(SLACK_POST_MESSAGE_URL, headers=headers, data=json.dumps(payload))
+			if not response.ok:
+				frappe.log_error(f"Slack API error for {email}: {response.text}")
+			else:
+				print(f"No Slack ID for Employee linked to {email}")
+		else:
+			# skip for candidate
+			print(f"No Employee linked to User {email}")
+			
 def send_daily_feedback_reminder():
 	reminder_settings = frappe.db.get_value(
 		"HR Settings",
