@@ -40,7 +40,6 @@ class Interview(Document):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
 		ics_file = self.create_ics_file(recipients, meeting_link)
-		
 		# Create a copy of recipients list before modification
 		notification_recipients = recipients.copy()
 		if self.job_applicant in notification_recipients:
@@ -63,6 +62,7 @@ class Interview(Document):
 				"title": self.job_title,
 				"location": self.location,
 				"date": self.scheduled_on,
+				"interview_round": self.interview_round,
 				"time": datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p"),
 				"meeting_link": meeting_link,
 				"interview_type": "Remote" if self.location == "Remote" else "On-Site"
@@ -81,7 +81,6 @@ class Interview(Document):
 				email_template_name=email_template_name,
 				attachments=[attachment]  # Ensure it's a list
 			)
-
 			# Step 5: Manually create the notification log with the same content
 			frappe.get_doc({
 				"doctype": "Notification Log",
@@ -91,9 +90,16 @@ class Interview(Document):
 				"document_name": self.name,
 				"for_users": notification_recipients,  # Use the same recipients
 			}).insert(ignore_permissions=True)
+			log_email_in_comments(
+			doc=self,
+			subject=f"Interview Scheduled – {email_args['interview_type']}",
+			html_content=email_content,       # <-- pass that HTML here
+			recipients=recipients
+			)
 
+						
 		except Exception as e:
-			frappe.log_error(f"Error sending email: {e}")
+			frappe.log_error(message=f"Error sending email: {e}",title="Interview Email Send Error")
 
 	def validate_duplicate_interview(self):
 
@@ -261,6 +267,21 @@ TRANSP:OPAQUE
 def get_interviewers(interview_round: str) -> list[str]:
 	return frappe.get_all("Interviewer", filters={"parent": interview_round}, fields=["user as interviewer"])
 
+def log_email_in_comments(doc, subject, html_content, recipients):
+	frappe.get_doc({
+		"doctype":               "Communication",
+		"communication_type":    "Communication",
+		"communication_medium":  "Email",
+		"sent_or_received":      "Sent",
+		"subject":               subject,
+		"content":               html_content,       # full HTML body
+		"reference_doctype":     doc.doctype,
+		"reference_name":        doc.name,
+		"recipients":            ", ".join(recipients),
+		"sender":                frappe.session.user,
+		"private":               1,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 def get_recipients(name, for_feedback=0):
 	interview = frappe.get_doc("Interview", name)
@@ -547,7 +568,6 @@ def get_interviewer_list(doctype, txt, searchfield, start, page_len, filters):
 		fields=["parent"],
 		as_list=1,
 	)
-
 
 @frappe.whitelist()
 def get_events(start, end, filters=None):

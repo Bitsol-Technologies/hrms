@@ -8,7 +8,6 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
-from hrms.hr.doctype.leave_application.leave_application import get_holidays
 
 
 @frappe.whitelist()
@@ -34,6 +33,7 @@ def get_number_of_wfh_days(
 			number_of_days = date_diff(to_date, from_date) + 1
 	else:
 		number_of_days = date_diff(to_date, from_date) + 1
+	from hrms.hr.doctype.leave_application.leave_application import get_holidays
 	number_of_days = flt(number_of_days) - flt(
 		get_holidays(employee, from_date, to_date, holiday_list=holiday_list)
 	)
@@ -195,3 +195,5 @@ def send_wfh_feedback_forms():
 
 def get_sender_email() -> str | None:
 	return frappe.db.get_single_value("HR Settings", "sender_email")
+
+

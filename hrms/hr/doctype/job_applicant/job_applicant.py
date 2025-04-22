@@ -239,7 +239,7 @@ def get_applicant_to_hire_percentage():
 		"fieldtype": "Percent",
 	}
 
-
+@frappe.whitelist()
 def get_slack_user_id(email):
 	system_settings = frappe.get_single("System Settings")
 	SLACK_API_URL = "https://slack.com/api/users.lookupByEmail"
@@ -292,3 +292,28 @@ def send_slack_message(emails, applicant_name, job_title, docname, status, scree
 		else:
 			print(f"Could not find Slack user for {email}")
 
+@frappe.whitelist()
+def fetch_and_save_all_slack_ids():
+	"""Loop through all Employees missing custom_slack_user_id and save it."""
+	employees = frappe.get_all(
+		"Employee",
+		filters={"custom_slack_user_id": ""},
+		fields=["name", "user_id"],
+		ignore_permissions=True
+	)
+	updated = 0
+	for emp in employees:
+		email = frappe.get_value("User", emp.user_id, "email")
+		if not email:
+			continue
+		sid = get_slack_user_id(email)  # your existing whitelisted helper
+		if sid:
+			frappe.db.set_value(
+				"Employee", emp.name, "custom_slack_user_id", sid,
+			)
+			updated += 1
+	frappe.db.commit()
+	frappe.log_error(
+		f"Slack ID Sync: found {len(employees)}, updated {updated}",
+		"SlackIDSync"
+	)
