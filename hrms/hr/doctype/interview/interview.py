@@ -82,7 +82,6 @@ class Interview(Document):
 				email_template_name=email_template_name,
 				attachments=[attachment]  # Ensure it's a list
 			)
-
 			# Step 5: Manually create the notification log with the same content
 			frappe.get_doc({
 				"doctype": "Notification Log",
@@ -92,6 +91,12 @@ class Interview(Document):
 				"document_name": self.name,
 				"for_users": notification_recipients,  # Use the same recipients
 			}).insert(ignore_permissions=True)
+			log_email_in_comments(
+			doc=self,
+			subject=f"Interview Scheduled – {email_args['interview_type']}",
+			html_content=email_content,       # <-- pass that HTML here
+			recipients=recipients
+			)
 
 						
 		except Exception as e:
@@ -263,6 +268,21 @@ TRANSP:OPAQUE
 def get_interviewers(interview_round: str) -> list[str]:
 	return frappe.get_all("Interviewer", filters={"parent": interview_round}, fields=["user as interviewer"])
 
+def log_email_in_comments(doc, subject, html_content, recipients):
+	frappe.get_doc({
+		"doctype":               "Communication",
+		"communication_type":    "Communication",
+		"communication_medium":  "Email",
+		"sent_or_received":      "Sent",
+		"subject":               subject,
+		"content":               html_content,       # full HTML body
+		"reference_doctype":     doc.doctype,
+		"reference_name":        doc.name,
+		"recipients":            ", ".join(recipients),
+		"sender":                frappe.session.user,
+		"private":               1,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 def get_recipients(name, for_feedback=0):
 	interview = frappe.get_doc("Interview", name)
