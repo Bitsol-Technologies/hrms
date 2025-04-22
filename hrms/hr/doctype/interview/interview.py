@@ -39,6 +39,7 @@ class Interview(Document):
 	def after_insert(self):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
+		recipients.append("mashal@bitsol.tech")
 		ics_file = self.create_ics_file(recipients, meeting_link)
 		# Create a copy of recipients list before modification
 		notification_recipients = recipients.copy()
