@@ -39,7 +39,6 @@ class Interview(Document):
 	def after_insert(self):
 		meeting_link = get_meeting_link()
 		recipients = get_recipients(self.name)
-		recipients.append("mashal@bitsol.tech")
 		ics_file = self.create_ics_file(recipients, meeting_link)
 		# Create a copy of recipients list before modification
 		notification_recipients = recipients.copy()
@@ -409,22 +408,6 @@ def send_interview_reminder():
 
 		doc.db_set("reminded", 1)
 
-def log_email_in_comments(doc, subject, html_content, recipients):
-    # this will show up under the Comments tab and in the Timeline Communications section
-    frappe.get_doc({
-        "doctype":               "Communication",
-        "communication_type":    "Communication",    # ensures full HTML render
-        "communication_medium":  "Email",
-        "sent_or_received":      "Sent",
-        "subject":               subject,
-        "content":               html_content,
-        "reference_doctype":     doc.doctype,
-        "reference_name":        doc.name,
-        "recipients":            ", ".join(recipients),
-        "sender":                frappe.session.user,
-        "private":               1,                  # only sender + recipients see it
-    }).insert(ignore_permissions=True)
-
 def send_daily_feedback_reminder():
 	reminder_settings = frappe.db.get_value(
 		"HR Settings",
@@ -533,15 +516,6 @@ def get_interviewer_list(doctype, txt, searchfield, start, page_len, filters):
 		fields=["parent"],
 		as_list=1,
 	)
-
-def get_hr_manager_emails():
-	hr_manager_emails = frappe.get_all(
-		"User",
-		filters={"enabled": 1},
-		or_filters={"role_profile_name": "HR Manager"},
-		fields=["email"]
-	)
-	return [user["email"] for user in hr_manager_emails if user["email"]]
 
 @frappe.whitelist()
 def get_events(start, end, filters=None):
