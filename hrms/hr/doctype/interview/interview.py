@@ -221,7 +221,7 @@ class Interview(Document):
 
 		# Define event details
 		event_name = f"{self.applicant_name}-({self.job_title})-{self.location} Interview"
-		event_description = "dummy desc"
+		event_description = "Candidate Interview"
 		timezone = "Asia/Karachi"
 
 		# Create ICS content
@@ -243,9 +243,9 @@ END:VTIMEZONE
 BEGIN:VEVENT
 DTSTART;TZID={timezone}:{start_time.strftime('%Y%m%dT%H%M%S')}
 DTEND;TZID={timezone}:{end_time.strftime('%Y%m%dT%H%M%S')}
-DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}
+DTSTAMP:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
 ORGANIZER;CN=Mashal Farman:mailto:mashal@bitsol.tech
-UID:{uuid.uuid4()}@google.com
+UID:{uuid.uuid4()}
 X-GOOGLE-CONFERENCE:{meeting_link}
 CREATED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
 DESCRIPTION:{event_description}
@@ -256,8 +256,7 @@ TRANSP:OPAQUE
 """
 
 		for attenndee in recipients:
-			ics_content += f"""ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=
- TRUE;CN={attenndee};X-NUM-GUESTS=0:mailto:{attenndee}\n"""
+			ics_content += f"""ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CN={attenndee};X-NUM-GUESTS=0:mailto:{attenndee}\n"""
 
 		ics_content += "END:VEVENT\nEND:VCALENDAR"
 		return ics_content
