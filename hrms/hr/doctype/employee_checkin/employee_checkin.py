@@ -771,15 +771,14 @@ def check_today_checkins():
 
 def build_compliance_report_table(non_compliant):
 	# Define fixed widths for each column (adjust as needed)
-	header = f"{'Employee':20} | {'Checkin':10} | {'Checkout':10} | {'Reason':30}\n"
+	header = f"{'Employee':20} | {'Checkin':10} | {'Reason':30}\n"
 	header += "-" * 80 + "\n"
 	rows = []
 	for rec in non_compliant:
 		emp = rec["employee"]
 		checkin = rec["checkin"]
-		checkout = rec["checkout"]
 		reason = rec["reason"]
-		row = f"{emp:20} | {checkin:10} | {checkout:10} | {reason:30}"
+		row = f"{emp:20} | {checkin:10} | {reason:30}"
 		rows.append(row)
 	table_text = header + "\n".join(rows)
 	return table_text
@@ -811,7 +810,7 @@ def send_compliance_report(non_compliant, today_str):
 
 	else:
 		# Build a plain text message
-		split_messages = f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."
+		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."]
 
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
@@ -1157,7 +1156,8 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		if total_logged_seconds > 0:
 			return None, None, f"No check-in recorded. {hours} hr {minutes} mins logged{half_day_message}"
 		else:
-			return None, None, "No check-in, No Clockify logs, No leave recorded"
+			# No check-in, No Clockify logs, No leave recorded
+			return None, None, "Absent"
 
 	if total_logged_seconds == 0:
 		return checkin_time, checkout_time, "No Clockify logs recorded"
