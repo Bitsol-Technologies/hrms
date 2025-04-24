@@ -123,6 +123,13 @@
    "set_only_once": 1
   },
   {
+    "default": "0",
+    "fieldname": "reminded",
+    "fieldtype": "Check",
+    "hidden": 1,
+    "label": "Reminded"
+   },
+  {
    "fieldname": "from_time",
    "fieldtype": "Time",
    "in_list_view": 1,
