@@ -23,7 +23,6 @@
   "meeting_link",
   "section_break_hqvh",
   "interview_details",
-  "reminded_candidate",
   "ratings_section",
   "expected_average_rating",
   "column_break_12",
@@ -207,13 +206,6 @@
    "fieldname": "applicant_email",
    "fieldtype": "Data",
    "label": "Applicant Email"
-  },
-  {
-   "default": "0",
-   "fieldname": "reminded_candidate",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Reminded Candidate"
   }
  ],
  "grid_page_length": 50,
@@ -225,7 +217,7 @@
    "link_fieldname": "interview"
   }
  ],
- "modified": "2025-04-24 15:19:31.343811",
+ "modified": "2025-04-24 17:15:52.704857",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview",
