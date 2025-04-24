@@ -10,6 +10,7 @@
   "interview_round",
   "job_applicant",
   "applicant_name",
+  "applicant_email",
   "job_opening",
   "job_title",
   "designation",
@@ -18,20 +19,19 @@
   "scheduled_on",
   "from_time",
   "to_time",
-  "resume_link",
   "location",
+  "meeting_link",
   "section_break_hqvh",
   "interview_details",
+  "reminded_candidate",
   "ratings_section",
   "expected_average_rating",
   "column_break_12",
   "average_rating",
-  "section_break_13",
-  "interview_summary",
-  "reminded",
-  "amended_from",
+  "column_break_axfa",
   "feedback_tab",
-  "feedback_html"
+  "feedback_html",
+  "amended_from"
  ],
  "fields": [
   {
@@ -85,20 +85,8 @@
    "read_only": 1
   },
   {
-   "allow_on_submit": 1,
-   "fieldname": "interview_summary",
-   "fieldtype": "Text"
-  },
-  {
    "fieldname": "column_break_4",
    "fieldtype": "Column Break"
-  },
-  {
-   "fetch_from": "job_applicant.resume_link",
-   "fetch_if_empty": 1,
-   "fieldname": "resume_link",
-   "fieldtype": "Data",
-   "label": "Resume link"
   },
   {
    "fieldname": "interview_details_section",
@@ -111,12 +99,6 @@
    "fieldtype": "Rating",
    "label": "Expected Average Rating",
    "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_break_13",
-   "fieldtype": "Section Break",
-   "label": "Interview Summary"
   },
   {
    "fieldname": "column_break_12",
@@ -133,15 +115,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Interview",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
    "fieldname": "scheduled_on",
    "fieldtype": "Date",
    "in_list_view": 1,
@@ -149,13 +122,6 @@
    "label": "Interview Date",
    "reqd": 1,
    "set_only_once": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "reminded",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Reminded"
   },
   {
    "fieldname": "from_time",
@@ -215,6 +181,39 @@
    "label": "Location",
    "options": "Onsite\nRemote",
    "reqd": 1
+  },
+  {
+   "fieldname": "column_break_axfa",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "meeting_link",
+   "fieldtype": "Data",
+   "label": "Meeting Link",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Interview",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "job_applicant.email_id",
+   "fieldname": "applicant_email",
+   "fieldtype": "Data",
+   "label": "Applicant Email"
+  },
+  {
+   "default": "0",
+   "fieldname": "reminded_candidate",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Reminded Candidate"
   }
  ],
  "grid_page_length": 50,
@@ -226,7 +225,7 @@
    "link_fieldname": "interview"
   }
  ],
- "modified": "2025-04-23 11:51:21.279772",
+ "modified": "2025-04-24 15:19:31.343811",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview",

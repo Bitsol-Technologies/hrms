@@ -12,7 +12,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Avg
-from frappe.utils import cint, cstr, get_datetime, get_link_to_form, getdate, nowtime
+from frappe.utils import cint, cstr, get_datetime, get_link_to_form, getdate, nowtime, today, format_time
 
 SCOPES = [
 	"https://www.googleapis.com/auth/meetings.space.created",
@@ -38,6 +38,7 @@ class Interview(Document):
 
 	def after_insert(self):
 		meeting_link = get_meeting_link()
+		self.db_set("meeting_link", meeting_link)
 		recipients = get_recipients(self.name)
 		ics_file = self.create_ics_file(recipients, meeting_link)
 		# Create a copy of recipients list before modification
@@ -431,7 +432,9 @@ def send_interview_reminder():
 			reference_name=doc.name,
 		)
 		send_slack_message(recipients,doc.location, doc.applicant_name, doc.job_title, formatted_date, formatted_time)
+		send_candidate_reminders(doc, formatted_date, formatted_time)
 		doc.db_set("reminded", 1)
+		
 
 def send_slack_message(emails, location, applicant_name, job_title, scheduled_on, from_time):
 	system_settings = frappe.get_single("System Settings")
@@ -657,3 +660,29 @@ def get_meeting_link():
 	except Exception as e:
 		frappe.msgprint(f"Error creating space: {e}")
 		return None
+
+
+def send_candidate_reminders(interview, formatted_date, formatted_time):
+	reminder_template = frappe.get_doc("Email Template", "Interview Reminder - Candidate" )
+	# Prepare context for the template
+	args = {
+		"job_title": interview.job_title,
+		"applicant_name": interview.applicant_name,
+		"location": interview.location,
+		"interview_round": interview.interview_round,
+		"scheduled_on": formatted_date,
+		"from_time": formatted_time,
+		"meeting_link": interview.meeting_link
+	}
+	message = frappe.render_template(reminder_template.response, args)
+	subject = frappe.render_template(reminder_template.subject, args)
+	try:
+		frappe.sendmail(
+			recipients=[interview.applicant_email],
+			message=message,
+			subject=subject,
+			reference_doctype=interview.doctype,
+			reference_name=interview.name,
+		)
+	except Exception as e:
+		frappe.log_error(f"Error sending interview reminder to {interview.applicant_email}: {e}")
