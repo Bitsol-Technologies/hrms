@@ -27,10 +27,7 @@
   "expected_average_rating",
   "column_break_12",
   "average_rating",
-  "column_break_axfa",
-  "feedback_tab",
-  "feedback_html",
-  "amended_from"
+  "reminded"
  ],
  "fields": [
   {
@@ -197,16 +194,6 @@
    "fieldtype": "Data",
    "label": "Meeting Link",
    "read_only": 1
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Interview",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
   },
   {
    "fetch_from": "job_applicant.email_id",
