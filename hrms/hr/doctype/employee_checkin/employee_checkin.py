@@ -980,14 +980,17 @@ def send_daily_compliance_report():
 
 def send_yesterday_compliance_report_to_slack():
 	from datetime import datetime, timedelta
+	today = datetime.today().date() # 2025-04-25
+	if is_public_holiday(today):
+		return
+	
+	# Start from yesterday and go backwards to find last valid working day
+	yesterday_date = today - timedelta(days=1)
+	while yesterday_date.weekday() in (5, 6) or is_public_holiday(yesterday_date):
+		yesterday_date -= timedelta(days=1)
 
-	yesterday = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
-	yesterday_date = datetime.strptime(yesterday, "%Y-%m-%d").date()
-	# Skip public holidays
-	if is_public_holiday(yesterday_date):
-		return
-	if yesterday_date.weekday() in (5, 6):  # Skip weekends
-		return
+	# Convert to string to keep your variable consistent
+	yesterday = yesterday_date.strftime("%Y-%m-%d")
 
 	# Pull non-compliant data from your DocType for yesterday
 	records = frappe.get_all("Employee Compliance Report", 
