@@ -925,8 +925,6 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 
 	return employee_records
 
-import frappe
-
 def is_public_holiday(date):
 	"""
 	:param date: string YYYY-MM-DD
