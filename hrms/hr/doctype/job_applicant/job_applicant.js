@@ -18,8 +18,32 @@ frappe.ui.form.on("Job Applicant", {
 		frm.events.create_custom_buttons(frm);
 		frm.events.make_dashboard(frm);
 		frm.events.set_telephonic_interviewers_query(frm);
-		frm.events.refresh_attachments(frm);
+		frm.trigger("load_feedback");
 	},
+	
+	load_feedback: function(frm) {
+	console.log("in here")
+    frappe
+        .call({
+            method: "hrms.hr.doctype.job_applicant.job_applicant.get_feedback_by_round", 
+            args: { applicant: frm.doc.name },
+        })
+        .then((r) => {
+            frm.feedback = r.message;
+            frm.events.render_feedback(frm);
+        });
+},
+
+	render_feedback: function(frm) {
+    frappe.require("interview.bundle.js", () => {
+        const wrapper = $(frm.fields_dict.custom_interview_feedback_html.wrapper);
+        const feedback_html = frappe.render_template("grouped_feedback_history", {
+            feedback_history: frm.feedback,
+        });
+        $(wrapper).empty();
+        $(feedback_html).appendTo(wrapper);
+    });
+},
 	set_telephonic_interviewers_query: function (frm) {
 		let emp = [];
 		for (let d in frm.doc.telephonic_interviewers) {
