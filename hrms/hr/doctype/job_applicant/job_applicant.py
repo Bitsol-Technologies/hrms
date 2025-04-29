@@ -202,6 +202,7 @@ def create_interview(doc, interview_round):
 	interview.resume_link = doc.resume_link
 	interview.job_opening = doc.job_title
 	interview.job_title = doc.title
+	interview.applicant_email = doc.email_id
 
 	interviewers = get_interviewers(interview_round)
 	for d in interviewers:
