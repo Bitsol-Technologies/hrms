@@ -927,13 +927,30 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 
 def is_public_holiday(date):
 	"""
-	Checks if the given date is a public holiday in the "Public Holidays" holiday list.
-
-	:param date: The date to check (YYYY-MM-DD)
-	:return: True if the date is a public holiday, False otherwise
+	:param date: string YYYY-MM-DD
+	:returns: True if `date` is in this year’s Holiday List, False otherwise
 	"""
-	holiday_list = "Public Holidays"  # Name of the holiday list
-	return frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": date})
+	# 1) get all Holiday List names whose from_date is in “this year”
+	holiday_lists = frappe.db.get_list(
+		"Holiday List",
+		filters = {
+			"from_date": ["timespan", "this year"]
+		},
+		pluck = "name"
+	) 
+
+	if not holiday_lists:
+		return False
+
+	# 2) pick the first matching Holiday List
+	holiday_list = holiday_lists[0]
+
+	# 3) check if `date` appears in its Holiday child table
+	return frappe.db.exists(
+		"Holiday",
+		{"parent": holiday_list, "holiday_date": date}
+	)
+
 
 # send compliance report to operations channel
 def send_daily_compliance_report():
@@ -981,7 +998,7 @@ def send_daily_compliance_report():
 def send_yesterday_compliance_report_to_slack():
 	from datetime import datetime, timedelta
 	today = datetime.today().date() # 2025-04-25
-	if is_public_holiday(today):
+	if is_public_holiday(today) or today.weekday() in (5, 6):
 		return
 	
 	# Start from yesterday and go backwards to find last valid working day
