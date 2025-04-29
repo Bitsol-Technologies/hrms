@@ -318,3 +318,47 @@ def fetch_and_save_all_slack_ids():
 		f"Slack ID Sync: found {len(employees)}, updated {updated}",
 		"SlackIDSync"
 	)
+
+@frappe.whitelist()
+def get_feedback_by_round(applicant: str):
+	# Step 1: Get all interviews for the given job applicant
+	interviews = frappe.get_all(
+		"Interview", filters={"job_applicant": applicant}, fields=["name", "interview_round"]
+	)
+
+	# Step 2: Fetch feedback for each interview
+	feedback_by_round = []
+	
+	for interview in interviews:
+		interview_feedback = frappe.qb.DocType("Interview Feedback")
+		employee = frappe.qb.DocType("Employee")
+		
+		feedback_data = (
+			frappe.qb.from_(interview_feedback)
+			.select(
+				interview_feedback.name,
+				interview_feedback.modified.as_("added_on"),
+				interview_feedback.interviewer.as_("user"),
+				interview_feedback.feedback,
+				interview_feedback.result,
+				(interview_feedback.average_rating * 5).as_("total_score"),
+				employee.employee_name.as_("reviewer_name"),
+				employee.designation.as_("reviewer_designation"),
+			)
+			.left_join(employee)
+			.on(interview_feedback.interviewer == employee.user_id)
+			.where(
+				(interview_feedback.interview == interview["name"]) &
+				(interview_feedback.docstatus == 1)
+			)
+			.orderby(interview_feedback.modified)
+		).run(as_dict=True)
+		
+		# Add the feedback data with interview round to the list
+		if feedback_data:
+			feedback_by_round.append({
+				"interview_round": interview["interview_round"],  # Include round info
+				"feedback": feedback_data
+			})
+	
+	return feedback_by_round
