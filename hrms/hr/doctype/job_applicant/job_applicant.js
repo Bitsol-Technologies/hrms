@@ -22,7 +22,6 @@ frappe.ui.form.on("Job Applicant", {
 	},
 	
 	load_feedback: function(frm) {
-	console.log("in here")
     frappe
         .call({
             method: "hrms.hr.doctype.job_applicant.job_applicant.get_feedback_by_round", 
