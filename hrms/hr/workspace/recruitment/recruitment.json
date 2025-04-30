@@ -183,7 +183,7 @@
    "type": "Link"
   }
  ],
- "modified": "2024-10-11 16:13:20.632229",
+ "modified": "2025-04-28 15:44:59.561695",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Recruitment",
@@ -210,6 +210,9 @@
   },
   {
    "role": "HR User"
+  },
+  {
+   "role": "Talent and Growth Manager"
   }
  ],
  "sequence_id": 12.0,

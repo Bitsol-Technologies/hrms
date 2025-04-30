@@ -1,0 +1,80 @@
+{
+ "cards": [
+  {
+   "card": "Total Employees"
+  },
+  {
+   "card": "New Hires (This Year)"
+  },
+  {
+   "card": "Employee Exits (This Year)"
+  },
+  {
+   "card": "Employees Joining (This Quarter)"
+  },
+  {
+   "card": "Employees Relieving (This Quarter)"
+  }
+ ],
+ "charts": [
+  {
+   "chart": "Attendance Count",
+   "width": "Half"
+  },
+  {
+   "chart": "Total Present Employees",
+   "width": "Half"
+  },
+  {
+   "chart": "Employee Check-in Records(Shift-Wise)",
+   "width": "Half"
+  },
+  {
+   "chart": "Department Wise Employee Count",
+   "width": "Half"
+  },
+  {
+   "chart": "Designation Wise Employee Count",
+   "width": "Half"
+  },
+  {
+   "chart": "Employees by Age",
+   "width": "Full"
+  },
+  {
+   "chart": "Hiring vs Attrition Count",
+   "width": "Full"
+  },
+  {
+   "chart": "Gender Diversity Ratio",
+   "width": "Half"
+  },
+  {
+   "chart": "Employees by Type",
+   "width": "Half"
+  },
+  {
+   "chart": "Employees by Grade",
+   "width": "Half"
+  },
+  {
+   "chart": "Employees by Branch",
+   "width": "Half"
+  },
+  {
+   "width": "Half"
+  }
+ ],
+ "creation": "2025-04-23 12:42:13.417957",
+ "dashboard_name": "CEO",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2025-04-23 12:44:23.418042",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "CEO",
+ "owner": "Administrator"
+}

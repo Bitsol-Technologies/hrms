@@ -46,7 +46,9 @@
   "currency",
   "column_break_18",
   "lower_range",
-  "upper_range"
+  "upper_range",
+  "interview_feedback_tab",
+  "custom_interview_feedback_html"
  ],
  "fields": [
   {
@@ -294,13 +296,24 @@
    "fieldname": "screening_to",
    "fieldtype": "Datetime",
    "label": "Screening To"
+  },
+  {
+   "fieldname": "interview_feedback_tab",
+   "fieldtype": "Tab Break",
+   "label": "Interview Feedback"
+  },
+  {
+   "fieldname": "custom_interview_feedback_html",
+   "fieldtype": "HTML",
+   "label": "Interview Feedback HTML"
   }
  ],
+ "grid_page_length": 50,
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-08 12:13:31.298634",
+ "modified": "2025-04-30 11:41:20.863492",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
@@ -319,6 +332,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "applicant_name, email_id, job_title, phone_number",
  "sender_field": "email_id",
  "sort_field": "modified",
