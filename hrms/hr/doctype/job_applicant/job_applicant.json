@@ -122,9 +122,9 @@
   },
   {
    "fieldname": "notes",
-   "fieldtype": "Data",
+   "fieldtype": "Text",
    "label": "Notes",
-   "read_only": 1
+   "permlevel": 2
   },
   {
    "fieldname": "phone_number",
@@ -230,6 +230,7 @@
    "fieldtype": "Section Break"
   },
   {
+   "depends_on": "eval:doc.applicant_status == \"Lead Screening\"",
    "fieldname": "cv_reviews",
    "fieldtype": "Select",
    "label": "CV Review Status",
@@ -296,11 +297,12 @@
    "label": "Screening To"
   }
  ],
+ "grid_page_length": 50,
  "icon": "fa fa-user",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-08 12:13:31.298634",
+ "modified": "2025-05-05 17:53:49.974657",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
@@ -319,6 +321,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "applicant_name, email_id, job_title, phone_number",
  "sender_field": "email_id",
  "sort_field": "modified",

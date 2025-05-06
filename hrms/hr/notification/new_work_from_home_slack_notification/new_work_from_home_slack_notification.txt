@@ -1,4 +1,4 @@
-{% set slack_1 = frappe.db.get_value("Employee", {"user_id": "mishael.mushtaq@bitsol.tech"}, "custom_slack_user_id") %}
+{% set slack_1 = frappe.db.get_value("Employee", {"user_id": "mashal@bitsol.tech"}, "custom_slack_user_id") %}
 {% set slack_2 = frappe.db.get_value("Employee", {"user_id": "fiza.mahmood@bitsol.tech"}, "custom_slack_user_id") %}
 
 {% set slack_mentions = "" %}

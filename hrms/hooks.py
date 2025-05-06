@@ -383,3 +383,6 @@ company_data_to_be_ignored = [
 	"Employee Onboarding Template",
 	"Employee Separation Template",
 ]
+webform_include_css = {
+  "Job Application": "public/css/job_application.css"
+}

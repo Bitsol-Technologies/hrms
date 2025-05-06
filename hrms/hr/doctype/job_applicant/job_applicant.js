@@ -112,7 +112,6 @@ frappe.ui.form.on("Job Applicant", {
 					frm.dashboard.add_section(
 						frappe.render_template("job_applicant_dashboard", {
 							data: r.message.interviews,
-							number_of_stars: r.message.stars,
 						}),
 						__("Interview Summary"),
 					);

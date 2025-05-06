@@ -21,13 +21,18 @@
   "to_time",
   "location",
   "meeting_link",
+  "resume_attachment",
   "section_break_hqvh",
   "interview_details",
   "ratings_section",
   "expected_average_rating",
+  "custom_feedback_button",
   "column_break_12",
   "average_rating",
-  "reminded"
+  "reminded",
+  "feedback_tab",
+  "feedback_html",
+  "amended_from"
  ],
  "fields": [
   {
@@ -75,7 +80,7 @@
   {
    "allow_on_submit": 1,
    "fieldname": "average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Obtained Average Rating",
    "read_only": 1
@@ -92,7 +97,7 @@
   {
    "fetch_from": "interview_round.expected_average_rating",
    "fieldname": "expected_average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "label": "Expected Average Rating",
    "read_only": 1
   },
@@ -120,12 +125,12 @@
    "set_only_once": 1
   },
   {
-    "default": "0",
-    "fieldname": "reminded",
-    "fieldtype": "Check",
-    "hidden": 1,
-    "label": "Reminded"
-   },
+   "default": "0",
+   "fieldname": "reminded",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Reminded"
+  },
   {
    "fieldname": "from_time",
    "fieldtype": "Time",
@@ -160,8 +165,10 @@
    "allow_on_submit": 1,
    "fieldname": "interview_details",
    "fieldtype": "Table",
+   "ignore_user_permissions": 1,
    "label": "Interviewers",
    "options": "Interview Detail",
+   "read_only_depends_on": "eval:frappe.user.has_role('Interviewer')",
    "reqd": 1
   },
   {
@@ -186,10 +193,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "column_break_axfa",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "meeting_link",
    "fieldtype": "Data",
    "label": "Meeting Link",
@@ -200,18 +203,34 @@
    "fieldname": "applicant_email",
    "fieldtype": "Data",
    "label": "Applicant Email"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Interview",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "job_applicant.resume_attachment",
+   "fieldname": "resume_attachment",
+   "fieldtype": "Attach",
+   "label": "Resume Attachment"
+  },
+  {
+   "fieldname": "custom_feedback_button",
+   "fieldtype": "HTML",
+   "label": "Submit Feedback"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
- "links": [
-  {
-   "link_doctype": "Interview Feedback",
-   "link_fieldname": "interview"
-  }
- ],
- "modified": "2025-04-24 17:15:52.704857",
+ "links": [],
+ "modified": "2025-05-05 17:50:54.615103",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview",

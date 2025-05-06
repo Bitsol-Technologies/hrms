@@ -5,7 +5,7 @@ frappe.ui.form.on("Interview Feedback", {
 	onload: function (frm) {
 		frm.ignore_doctypes_on_cancel_all = ["Interview"];
 
-		frm.set_query("interview", function () {
+		frm.set_query("interview", function () {                                                            
 			return {
 				filters: {
 					docstatus: ["!=", 2],

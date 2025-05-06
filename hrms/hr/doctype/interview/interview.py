@@ -352,7 +352,7 @@ def get_feedback(interview: str) -> list[dict]:
 			interview_feedback.modified.as_("added_on"),
 			interview_feedback.interviewer.as_("user"),
 			interview_feedback.feedback,
-			(interview_feedback.average_rating * 5).as_("total_score"),
+			interview_feedback.average_rating.as_("total_score"),
 			employee.employee_name.as_("reviewer_name"),
 			employee.designation.as_("reviewer_designation"),
 		)

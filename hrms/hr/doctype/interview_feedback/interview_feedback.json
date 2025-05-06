@@ -67,7 +67,7 @@
   },
   {
    "fieldname": "average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Average Rating",
    "read_only": 1
@@ -121,11 +121,10 @@
    "read_only": 1
   }
  ],
- "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-25 14:59:01.007517",
+ "modified": "2025-04-30 16:50:30.977270",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Feedback",
