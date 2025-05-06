@@ -62,8 +62,7 @@
    "allow_in_quick_entry": 1,
    "fieldname": "skill_assessment",
    "fieldtype": "Table",
-   "options": "Skill Assessment",
-   "reqd": 1
+   "options": "Skill Assessment"
   },
   {
    "fieldname": "average_rating",
@@ -124,7 +123,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-30 16:50:30.977270",
+ "modified": "2025-05-06 17:46:50.965441",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Feedback",
