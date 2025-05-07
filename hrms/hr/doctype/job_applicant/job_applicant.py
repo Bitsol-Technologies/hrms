@@ -85,7 +85,7 @@ class JobApplicant(Document):
 				send_slack_message(telephonic_reviewers, self.applicant_name, self.title, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
 			# Notify only newly added Telephonic Interviewers
-			if new_telephonic_reviewers and self.applicant_status == "Telephonic Screening":
+			if new_telephonic_reviewers and previous_status == "Telephonic Screening" and self.applicant_status == "Telephonic Screening":
 				frappe.sendmail(
 					recipients=new_telephonic_reviewers,
 					create_notification_log=True,
