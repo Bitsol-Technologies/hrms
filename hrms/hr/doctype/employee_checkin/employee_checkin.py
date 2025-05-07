@@ -607,7 +607,9 @@ def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 		active_entries = response.json()
 		return bool(active_entries)
 	except Exception as e:
-		frappe.log_error(f"Clockify API error for user {clockify_user_id}: {e}", "Clockify Task")
+		title = "Clockify Task"
+		message = f"Error for user {clockify_user_id}:\n{str(e)}"
+		frappe.log_error(message, title)
 		return False
 
 
@@ -634,22 +636,18 @@ def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, st
 
 def get_slack_user_id(email):
 	"""
-	Fetch Slack User ID using the given email address.
+	Fetch Slack User ID from the Employee record using the email address.
+	Matches 'user_id' directly (case-insensitive in MariaDB).
 	"""
-	system_settings = frappe.get_single("System Settings")
-	slack_api_url = "https://slack.com/api/users.lookupByEmail"
-	slack_token = system_settings.slack_token
+	custom_slack_user_id = frappe.db.get_value(
+		"Employee",
+		filters={"user_id": email},
+		fieldname="custom_slack_user_id"
+	)
 
-	headers = {
-		"Authorization": f"Bearer {slack_token}",
-		"Content-Type": "application/json"
-	}
-	response = requests.get(slack_api_url, headers=headers, params={"email": email})
-	data = response.json()
-	if data.get("ok"):
-		return data["user"]["id"]
+	if custom_slack_user_id: 
+		return custom_slack_user_id
 	else:
-		frappe.log_error(f"Error fetching Slack user ID for {email}: {data.get('error')}", "Slack Notification")
 		return None
 
 
