@@ -46,7 +46,9 @@
   "currency",
   "column_break_18",
   "lower_range",
-  "upper_range"
+  "upper_range",
+  "interview_feedback_tab",
+  "custom_interview_feedback_html"
  ],
  "fields": [
   {
@@ -295,6 +297,16 @@
    "fieldname": "screening_to",
    "fieldtype": "Datetime",
    "label": "Screening To"
+  },
+  {
+   "fieldname": "interview_feedback_tab",
+   "fieldtype": "Tab Break",
+   "label": "Interview Feedback"
+  },
+  {
+   "fieldname": "custom_interview_feedback_html",
+   "fieldtype": "HTML",
+   "label": "Interview Feedback HTML"
   }
  ],
  "grid_page_length": 50,

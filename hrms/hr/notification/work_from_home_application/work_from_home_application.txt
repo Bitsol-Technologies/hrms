@@ -1,0 +1,9 @@
+Employee        {{doc.owner}}<br/>
+Request Type    Work From Home Approval</br/>
+From Date       {{doc.from_date}}\n
+To Date         {{doc.to_date}}\n
+Status          {{doc.status}}
+
+View Request ({{ frappe.utils.get_url() }}/app/work-from-home-request/{{ doc.name }})
+
+
