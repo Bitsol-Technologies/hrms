@@ -546,7 +546,7 @@ def get_default_workspace_id(custom_api_key):
 		if workspaces:
 			return [ws.get("id") for ws in workspaces if ws.get("id")]
 	except Exception as e:
-		frappe.log_error(f"Error fetching workspaces: {e}", "Clockify Task")
+		frappe.log_error(f"Error fetching workspaces for api key: {custom_api_key}", "Clockify Task")
 	return []
 
 
@@ -564,7 +564,7 @@ def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
 			if user.get("email") == email:
 				return user.get("id")
 	except Exception as e:
-		frappe.log_error(f"Error fetching Clockify users for workspace {workspace_id}: {e}", "Clockify Task")
+		frappe.log_error(f"Error fetching Clockify user for email {email} for workspace {workspace_id}", "Clockify Task")
 	return None
 
 
@@ -608,7 +608,7 @@ def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 		return bool(active_entries)
 	except Exception as e:
 		title = "Clockify Task"
-		message = f"Error for user {clockify_user_id}:\n{str(e)}"
+		message = f"Error for user {clockify_user_id} checking for active timer"
 		frappe.log_error(message, title)
 		return False
 
@@ -630,7 +630,7 @@ def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, st
 		entries = response.json()
 		return entries
 	except Exception as e:
-		frappe.log_error(f"Error fetching Clockify entries for user {clockify_user_id}: {e}", "Clockify Task")
+		frappe.log_error(f"Error fetching Clockify entries for user {clockify_user_id}", "Clockify Task")
 		return []
 
 
@@ -680,7 +680,7 @@ def send_slack_message_for_employee(emails, message):
 		response = requests.post(slack_post_message_url, headers=headers, data=json.dumps(payload))
 		result = response.json()
 		if not result.get("ok"):
-			frappe.log_error(f"Error sending Slack message to {email}: {result.get('error')}", "Slack Notification")
+			frappe.log_error(f"Error sending Slack message to {email}", "Slack Notification")
 
 
 # send reminder to turn on clockify timer
@@ -722,7 +722,7 @@ def check_today_checkins():
 		custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
 
 		if not (custom_api_key and custom_user_id and workspace_ids):
-			# msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
+			msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
 			frappe.log_error(msg, "Clockify Check")
 			continue
 
@@ -821,7 +821,7 @@ def get_compliance_channel():
 	try:
 		channel = frappe.db.get_single_value("System Settings", "operation_compliance_channel")
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Failed to fetch Operation Compliance Channel")
+		frappe.log_error("Failed to fetch Operation Compliance Channel", "Operation Compliance Channel")
 		frappe.throw(_("System Settings or the field operation_compliance_channel is missing."))
 	if not channel:
 		frappe.log_error("No Operation Compliance Channel configured", "Configuration Error")
@@ -1124,7 +1124,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 			return None, None, None
 	except Exception as e:
 		# print("Error checking active timer for {emp_email}")
-		frappe.log_error(f"Error checking active timer for {emp_email}: {e}", "Clockify Compliance Check")
+		frappe.log_error(f"Error checking active timer for {emp_email}", "Clockify Compliance Check")
 		return checkin_time, checkout_time, "Invalid API Key in the system"
 	# Continue to process further if the timer check fails
 
@@ -1142,7 +1142,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		working_hours_full_day = shift_type_doc.working_hours_threshold_for_full_day
 		working_hours_half_day = working_hours_full_day / 2
 	except Exception as e:
-		frappe.log_error(f"Error fetching Shift Type data for {employee_id}: {e}", "Shift Type Fetch Error")
+		frappe.log_error(f"Error fetching Shift Type data for {employee_id}", "Shift Type Fetch Error")
 		return checkin_time, checkout_time, "Error fetching Shift Type data"
 
 	FULL_DAY_SECONDS = working_hours_full_day * 3600  # Convert full day hours to seconds
@@ -1157,7 +1157,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		hours, minutes = divmod(total_logged_seconds // 60, 60)
 	except Exception as e:
 		# print("Clockify API sum log error for {emp_email}")
-		frappe.log_error(f"Clockify API error for {emp_email}: {e}", "Clockify Compliance Check")
+		frappe.log_error(f"Clockify API error for {emp_email}", "Clockify Compliance Check")
 		return checkout_time, checkout_time, "Invalid API Key in the system"
 
 	# Get leave status from ERPNext (e.g., "On Leave", "Half Day", etc.)
