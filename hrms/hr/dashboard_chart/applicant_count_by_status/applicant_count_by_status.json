@@ -1,0 +1,33 @@
+{
+ "chart_name": "Applicant Count by Status",
+ "chart_type": "Report",
+ "creation": "2025-05-09 11:36:09.019343",
+ "currency": "",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{}",
+ "filters_json": "{}",
+ "group_by_type": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "modified": "2025-05-09 11:36:15.987698",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Applicant Count by Status",
+ "number_of_groups": 0,
+ "owner": "Administrator",
+ "report_name": "Applicant Count by Status",
+ "roles": [],
+ "time_interval": "Yearly",
+ "timeseries": 0,
+ "timespan": "Last Year",
+ "type": "Line",
+ "use_report_chart": 0,
+ "x_field": "applicant_status",
+ "y_axis": [
+  {
+   "y_field": "applicant_count"
+  }
+ ]
+}

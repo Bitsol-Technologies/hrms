@@ -99,24 +99,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Reports",
-   "link_count": 1,
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Recruitment Analytics",
-   "link_count": 0,
-   "link_to": "Recruitment Analytics",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Jobs",
    "link_count": 6,
    "onboard": 0,
@@ -181,9 +163,39 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Recruitment Analytics",
+   "link_count": 0,
+   "link_to": "Recruitment Analytics",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Applicant Count by Status",
+   "link_count": 0,
+   "link_to": "Applicant Count by Status",
+   "link_type": "Report",
+   "onboard": 0,
+   "report_ref_doctype": "Job Applicant",
+   "type": "Link"
   }
  ],
- "modified": "2025-04-28 15:44:59.561695",
+ "modified": "2025-05-09 12:08:41.002099",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Recruitment",
@@ -210,9 +222,6 @@
   },
   {
    "role": "HR User"
-  },
-  {
-   "role": "Talent and Growth Manager"
   }
  ],
  "sequence_id": 12.0,
@@ -249,12 +258,6 @@
    "label": "Job Offer",
    "link_to": "Job Offer",
    "stats_filter": "{\"status\":[\"=\",\"Accepted\"]}",
-   "type": "DocType"
-  },
-  {
-   "doc_view": "List",
-   "label": "Job Requisition",
-   "link_to": "Job Requisition",
    "type": "DocType"
   }
  ],
