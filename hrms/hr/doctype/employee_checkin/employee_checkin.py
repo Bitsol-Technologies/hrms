@@ -1221,3 +1221,202 @@ def create_employee_compliance_reports(entries, report_date=None):
 
 	# commit once after all inserts
 	frappe.db.commit()
+
+
+# weekly employee clockify summary report
+def send_weekly_time_report():
+	"""
+	Generates and sends a weekly time tracking report for all employees.
+	The report includes daily time logged, breakdown by task category, missing days,
+	and total vs expected hours.
+	"""
+	# Get system-level Clockify settings
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+	if not custom_api_key or not workspace_ids:
+		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
+		return
+
+	# Calculate date range for last week
+	end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+	# end_date = datetime(2025,5,5)
+	start_date = end_date - timedelta(days=7)
+	
+	# Get all active employees
+	active_employees = get_all_active_employees()
+	
+	# Fetch users across all workspaces
+	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
+	public_holidays_in_week = get_public_holidays_in_week(start_date, end_date)
+	# Process each employee's time entries
+	employee_reports = []
+	for email, emp_data in workspace_users.items():
+		if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
+			continue
+
+		user_id = emp_data["user_id"]
+		workspaces = emp_data["workspace_ids"]
+		
+		# Get employee's shift type for expected hours
+		shift_type = get_employee_shift_type(emp_data["employee"])
+		if not shift_type:
+			continue
+			
+		try:
+			shift_type_doc = frappe.get_doc("Shift Type", shift_type)
+			expected_hours = shift_type_doc.working_hours_threshold_for_full_day
+		except Exception:
+			continue
+
+		# Collect time entries from all workspaces
+		daily_hours = {}
+		total_hours = 0
+		
+		# Initialize daily hours for all days in the week
+		current_date = start_date
+		while current_date < end_date:
+			daily_hours[current_date.date()] = {"total_hours": 0, "entries": []}
+			current_date += timedelta(days=1)
+
+		# Fetch and process time entries from each workspace
+		for workspace_id in workspaces:
+			entries = get_clockify_time_entries(custom_api_key, workspace_id, user_id, start_date, end_date)
+			
+			for entry in entries:
+				time_interval = entry.get("timeInterval")
+				if not time_interval:
+					continue
+
+				duration_str = time_interval.get("duration")
+				start_str = time_interval.get("start")
+				if not start_str:
+					continue
+				start_time = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+				if duration_str:
+					duration = parse_iso8601_duration(duration_str) / 3600  # Convert to hours
+				else:
+					end_str = time_interval.get("end")
+
+					if not end_str:
+						continue
+
+					
+					end_time = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+					duration = (end_time - start_time).total_seconds() / 3600
+				
+				# Fetch project and task names using the respective functions
+				project_name = fetch_project_name(custom_api_key, workspace_id, entry.get("projectId"))
+				task_name = fetch_task_name(custom_api_key, workspace_id, entry.get("projectId"), entry.get("taskId"))
+				
+				entry_details = {
+					"project_name": project_name,
+					"task_name": task_name,
+					"duration": duration
+				}
+				daily_hours[start_time.date()]["entries"].append(entry_details)
+				daily_hours[start_time.date()]["total_hours"] += duration
+				total_hours += duration
+
+		# Find missing days (less than expected hours)
+		missing_days = []
+		public_holidays_in_week_count = sum([1 for date in daily_hours if public_holidays_in_week.get(date, False)])
+		working_days_in_week = 7 - public_holidays_in_week_count
+		for date, data in daily_hours.items():
+			leave_status = get_employee_leave_status(emp_data["employee"], str(date))
+			if leave_status in ["On Leave", "Half Day"]:
+				daily_hours[date]["leave_status"] = leave_status
+			elif data["total_hours"] < 1 and date.weekday() < 5 and not public_holidays_in_week.get(date, False):  # Only weekdays and non-public holidays with hours < 1
+				missing_days.append(date)
+
+		# Create employee report
+		employee_reports.append({
+			"employee_name": emp_data["employee_name"],
+			"email": email,
+			"daily_hours": daily_hours,
+			"missing_days": missing_days,
+			"total_hours": total_hours,
+			"expected_hours": expected_hours * working_days_in_week  # Expected hours for working days in a week
+		})
+
+	# Send reports via email and Slack
+	for report in employee_reports:
+		# Format email content
+		email_content = f"<h3>Weekly Time Tracking Report for {report['employee_name']}</h3><br>"
+
+		# Daily hours
+		email_content += "<strong>Daily Hours:</strong><br>"
+		for date, data in report['daily_hours'].items():
+			if date.weekday() > 4 and  data["total_hours"] == 0:
+				continue
+			public_holiday = " (Public Holiday)" if public_holidays_in_week.get(date, False) else ""
+			formatted_date = date.strftime("%A, %B %d, %Y")
+			leave_status = f" ({data['leave_status']})" if 'leave_status' in data and data['leave_status'] else ''
+			email_content += f"<strong>{formatted_date}: {data['total_hours']:.2f} hours{leave_status}{public_holiday}</strong><br>"
+			# List individual entries for the day
+			for entry in data["entries"]:
+				email_content += f"- <strong>Project</strong>: {entry['project_name']} <strong>Task</strong>: {entry['task_name']} <strong>Duration</strong>: {entry['duration']:.2f} hours<br>"
+
+		# Missing days
+		if report['missing_days']:
+			email_content += "<br><strong>Missing Days:</strong><br>"
+			for date in report['missing_days']:
+				formatted_date = date.strftime("%A, %B %d, %Y")
+				email_content += f"{formatted_date}<br>"
+
+		# Total vs Expected
+		email_content += f"<br><strong>Total Hours:</strong> {report['total_hours']:.2f}<br>"
+		email_content += f"<strong>Expected Hours:</strong> {report['expected_hours']:.2f}<br>"
+
+		# Send email as HTML
+		frappe.sendmail(
+			recipients=report['email'],
+			subject="Weekly Time Tracking Report",
+			message=email_content,
+			now=True,
+		)
+
+		# Send Slack message
+		if report['email']:
+			slack_message = html_to_slack_plaintext(email_content)
+			messages = split_long_message(slack_message)
+			for message in messages:
+				send_slack_message_for_employee([report['email']], message)
+
+
+def fetch_project_name(api_key, workspace_id, project_id):
+	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/projects/{project_id}"
+	headers = {"X-Api-Key": api_key}
+	response = requests.get(url, headers=headers)
+	if response.status_code == 200:
+		return response.json().get("name")
+	return None
+
+def fetch_task_name(api_key, workspace_id, project_id, task_id):
+	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/projects/{project_id}/tasks/{task_id}"
+	headers = {"X-Api-Key": api_key}
+	response = requests.get(url, headers=headers)
+	if response.status_code == 200:
+		return response.json().get("name")
+	return None
+
+def html_to_slack_plaintext(html):
+	# Replace <br> with newline
+	text = html.replace("<br>", "\n")
+
+	# Replace <strong> and other tags with nothing
+	text = re.sub(r"<[^>]+>", "", text)
+
+	# Remove multiple consecutive blank lines
+	text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
+
+	return text
+
+def get_public_holidays_in_week(start_date, end_date):
+	"""
+	Returns a dictionary with dates as keys and whether they are public holidays as values.
+	"""
+	public_holidays = {}
+	current_date = start_date
+	while current_date <= end_date:
+		public_holidays[current_date.date()] = is_public_holiday(str(current_date))
+		current_date += timedelta(days=1)
+	return public_holidays

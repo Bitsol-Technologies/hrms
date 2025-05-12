@@ -239,7 +239,7 @@ scheduler_events = {
 		"hrms.hr.utils.generate_leave_encashment",
 		"hrms.hr.utils.allocate_earned_leaves",
 	],
-	"weekly": ["hrms.controllers.employee_reminders.send_reminders_in_advance_weekly"],
+	"weekly": ["hrms.controllers.employee_reminders.send_reminders_in_advance_weekly",],
 	"monthly": [
 		"hrms.controllers.employee_reminders.send_reminders_in_advance_monthly",
 		"hrms.hr.employee_allowances_data.allowances_calculation.calculate_employee_fuel_allowance",
@@ -251,6 +251,7 @@ scheduler_events = {
 		"0 10 * * *": ["hrms.hr.doctype.work_from_home.work_from_home.send_wfh_feedback_forms"],
 		"0 23 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report"],
 		"0 9 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_yesterday_compliance_report_to_slack"],
+        "0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_time_report"],
 	},
 }
 
