@@ -56,28 +56,29 @@ class InterviewFeedback(Document):
 
 	def calculate_average_rating(self):
 		total_rating = 0
+		valid_ratings_count = 0
 		for d in self.skill_assessment:
-			if d.rating:
+			if d.rating and d.rating.isdigit():  # Ensure it's a digit before converting
 				total_rating += flt(d.rating)
+				valid_ratings_count += 1
 
 		self.average_rating = flt(
-			total_rating / len(self.skill_assessment) if len(self.skill_assessment) else 0
+			total_rating / valid_ratings_count if valid_ratings_count else 0
 		)
 
 	def update_interview_average_rating(self):
 		interview_feedback = frappe.qb.DocType("Interview Feedback")
 		query = (
 			frappe.qb.from_(interview_feedback)
-			.where((interview_feedback.interview == self.interview) & (interview_feedback.docstatus == 1))
+			.where((interview_feedback.interview == self.interview) & (interview_feedback.docstatus == 1) & (interview_feedback.average_rating.isnotnull()))
 			.select(Avg(interview_feedback.average_rating).as_("average"))
 		)
 		data = query.run(as_dict=True)
-		average_rating = data[0].average
+		average_rating = data[0]["average"] if data and data[0] and data[0]["average"] is not None else 0.0
 
 		interview = frappe.get_doc("Interview", self.interview)
 		interview.db_set("average_rating", average_rating)
 		interview.notify_update()
-
 
 @frappe.whitelist()
 def get_applicable_interviewers(interview: str) -> list[str]:

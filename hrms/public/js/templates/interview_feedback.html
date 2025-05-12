@@ -18,7 +18,7 @@
 		<div class="row">
 			{% for(const d of skills_average_rating) { %}
 			<div class="col-md-4 mb-4">
-				{%= frappe.render_template("circular_progress_bar", {skill: d.skill, rating: d.rating * 5}) %}
+				{%= frappe.render_template("circular_progress_bar", {skill: d.skill, rating: d.rating}) %}
 			</div>
 			{% } %}
 		</div>

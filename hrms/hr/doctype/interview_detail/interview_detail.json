@@ -11,6 +11,7 @@
   {
    "fieldname": "interviewer",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Interviewer",
@@ -22,7 +23,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-04-30 15:31:22.366382",
+ "modified": "2025-04-30 13:11:34.138106",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Detail",

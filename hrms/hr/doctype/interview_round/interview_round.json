@@ -44,8 +44,9 @@
   },
   {
    "fieldname": "expected_average_rating",
-   "fieldtype": "Rating",
-   "label": "Expected Average Rating"
+   "fieldtype": "Select",
+   "label": "Expected Average Rating",
+   "options": "\n0\n1\n2\n3\n4\n5"
   },
   {
    "fieldname": "column_break_3",
@@ -64,9 +65,10 @@
    "options": "Interviewer"
   }
  ],
+ "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-05-01 11:57:32.754037",
+ "modified": "2025-05-06 14:55:26.025280",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Round",
@@ -111,6 +113,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

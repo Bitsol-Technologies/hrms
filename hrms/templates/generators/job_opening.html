@@ -82,7 +82,7 @@
 		{%- if status == "Open" -%}
 		<a
 			class="btn btn-primary btn-md btn-lg-sm mt-2"
-			href="/{{ job_application_route if job_application_route else 'job_application' }}/new?job_title={{ name }}"
+			href="/{{ job_application_route if job_application_route else 'job_application' }}/new?job_title={{ name }}&title={{ job_title }}"
 		>
 			{{ _("I'm Interested") }}
 		</a>

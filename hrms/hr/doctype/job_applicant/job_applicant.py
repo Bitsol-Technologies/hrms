@@ -85,7 +85,7 @@ class JobApplicant(Document):
 				send_slack_message(telephonic_reviewers, self.applicant_name, self.title, self.name, "Telephonic Screening",self.screening_from, self.screening_to)
 
 			# Notify only newly added Telephonic Interviewers
-			if new_telephonic_reviewers and self.applicant_status == "Telephonic Screening":
+			if new_telephonic_reviewers and previous_status == "Telephonic Screening" and self.applicant_status == "Telephonic Screening":
 				frappe.sendmail(
 					recipients=new_telephonic_reviewers,
 					create_notification_log=True,
@@ -219,15 +219,11 @@ def get_interview_details(job_applicant):
 		fields=["name", "interview_round", "scheduled_on", "average_rating", "status"],
 	)
 	interview_detail_map = {}
-	meta = frappe.get_meta("Interview")
-	number_of_stars = meta.get_options("average_rating") or 5
 
 	for detail in interview_details:
-		detail.average_rating = detail.average_rating * number_of_stars if detail.average_rating else 0
-
 		interview_detail_map[detail.name] = detail
 
-	return {"interviews": interview_detail_map, "stars": number_of_stars}
+	return {"interviews": interview_detail_map}
 
 
 @frappe.whitelist()
@@ -341,7 +337,7 @@ def get_feedback_by_round(applicant: str):
 				interview_feedback.interviewer.as_("user"),
 				interview_feedback.feedback,
 				interview_feedback.result,
-				(interview_feedback.average_rating * 5).as_("total_score"),
+				interview_feedback.average_rating.as_("total_score"),
 				employee.employee_name.as_("reviewer_name"),
 				employee.designation.as_("reviewer_designation"),
 			)

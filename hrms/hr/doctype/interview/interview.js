@@ -3,6 +3,7 @@
 
 frappe.ui.form.on("Interview", {
 	refresh: function (frm) {
+		frm._previous_status = frm.doc.status;
 		frm.set_query("job_applicant", function () {
 			let job_applicant_filters = {
 				status: ["!=", "Rejected"],
@@ -16,12 +17,88 @@ frappe.ui.form.on("Interview", {
 		});
 
 		frm.trigger("add_custom_buttons");
+		frm.trigger("add_inline_feedback_button");
 		frappe.run_serially([
 			() => frm.trigger("load_skills_average_rating"),
 			() => frm.trigger("load_feedback"),
 		]);
 	},
 
+	status: async function (frm) {
+        const new_status = frm.doc.status;
+        const blocked_statuses = ["Cleared", "Rejected"];
+
+        if (!blocked_statuses.includes(new_status)) {
+            frm._previous_status = new_status; // update stored status
+            return;
+        }
+
+        // Check if any feedback exists
+        const feedback = await frappe.db.get_list("Interview Feedback", {
+            filters: {
+                interview: frm.doc.name,
+                docstatus: ["!=", 2],
+            },
+            limit: 1,
+        });
+
+        if (feedback.length === 0) {
+            frappe.msgprint({
+                title: __("Feedback Required"),
+                message: __("At least one feedback must be submitted before setting the status to Cleared or Rejected."),
+                indicator: "red"
+            });
+
+            // Revert to previous allowed status
+            frm.set_value("status", frm._previous_status || "Pending");
+        } else {
+            // Feedback exists, allow change
+            frm._previous_status = new_status;
+        }
+    },
+	
+	add_inline_feedback_button: async function (frm) {
+		if (!frm.fields_dict.custom_feedback_button) return;
+
+		// Is current user an interviewer for this interview?
+		const is_interviewer = frm.doc.interview_details?.some(
+			(detail) => detail.interviewer === frappe.session.user
+		);
+
+		if (!is_interviewer) {
+			// Not an interviewer — don't show any button
+			frm.fields_dict.custom_feedback_button.$wrapper.empty();
+			return;
+		}
+
+		// Check if feedback already submitted
+		const feedback_list = await frappe.db.get_list("Interview Feedback", {
+			filters: [
+				["interviewer", "=", frappe.session.user],
+				["interview", "=", frm.doc.name],
+				["docstatus", "!=", 2],
+			],
+			fields: ["name"],
+			limit: 1,
+		});
+
+		const has_submitted_feedback = feedback_list.length > 0;
+
+		if (has_submitted_feedback) {
+			// Feedback already submitted — show nothing
+			frm.fields_dict.custom_feedback_button.$wrapper.empty();
+			return;
+		}
+
+		// Else, show the active Submit Feedback button
+		const html = `<button class="btn btn-primary" id="inline-submit-feedback">Submit Feedback</button>`;
+		frm.fields_dict.custom_feedback_button.$wrapper.html(html);
+
+		// Attach event handler
+		frm.fields_dict.custom_feedback_button.$wrapper.find("#inline-submit-feedback").on("click", function () {
+			frm.trigger("submit_feedback");
+		});
+	},
 	add_custom_buttons: async function (frm) {
 		if (frm.doc.docstatus === 2 || frm.doc.__islocal) return;
 
@@ -36,17 +113,26 @@ frappe.ui.form.on("Interview", {
 			);
 		}
 
-		const has_submitted_feedback = await frappe.db.get_value(
+		const feedback_list = await frappe.db.get_list(
 			"Interview Feedback",
 			{
-				interviewer: frappe.session.user,
-				interview: frm.doc.name,
-				docstatus: ("!=", 2),
+				filters: [
+					["interviewer", "=", frappe.session.user],
+					["interview", "=", frm.doc.name],
+					["docstatus", "!=", 2],
+				],
+				fields: ["name"],
+				limit: 1,
 			},
-			"name",
-		)?.message?.name;
-
-		if (has_submitted_feedback) return;
+		);
+		const has_submitted_feedback = feedback_list.length > 0;
+		if (has_submitted_feedback) {
+			const button = frm.add_custom_button(__("Submit Feedback"));
+			button.prop("disabled", true)
+				.attr("title", __("Feedback already submitted"))
+				.tooltip({ delay: { show: 600, hide: 100 }, trigger: "hover" });
+			return
+		};
 
 		const allow_feedback_submission = frm.doc.interview_details.some(
 			(interviewer) => interviewer.interviewer === frappe.session.user,
@@ -77,17 +163,17 @@ frappe.ui.form.on("Interview", {
 				frm.events.show_feedback_dialog(frm, r.message);
 				frm.refresh();
 			},
-			});
-		},
-	
-		scheduled_on: function(frm) {
-			if (frm.doc.scheduled_on && frm.doc.scheduled_on < frappe.datetime.get_today()) {
-				frappe.msgprint(__('Interview date must be greater than today.'));
-				frm.set_value('scheduled_on', '');
-			}
-		},
+		});
+	},
 
-		show_reschedule_dialog: function (frm) {
+	scheduled_on: function (frm) {
+		if (frm.doc.scheduled_on && frm.doc.scheduled_on < frappe.datetime.get_today()) {
+			frappe.msgprint(__('Interview date must be greater than today.'));
+			frm.set_value('scheduled_on', '');
+		}
+	},
+
+	show_reschedule_dialog: function (frm) {
 		let d = new frappe.ui.Dialog({
 			title: "Reschedule Interview",
 			fields: [
@@ -144,7 +230,7 @@ frappe.ui.form.on("Interview", {
 					label: __("Skill Assessment"),
 					cannot_add_rows: false,
 					in_editable_grid: true,
-					reqd: 1,
+					reqd: 0,
 					fields: fields,
 					data: data,
 				},
@@ -159,6 +245,7 @@ frappe.ui.form.on("Interview", {
 					fieldname: "feedback",
 					fieldtype: "Small Text",
 					label: __("Feedback"),
+					reqd: 1,
 				},
 			],
 			size: "large",
@@ -265,7 +352,7 @@ frappe.ui.form.on("Interview", {
 			const wrapper = $(frm.fields_dict.feedback_html.wrapper);
 			const feedback_html = frappe.render_template("interview_feedback", {
 				feedbacks: frm.feedback,
-				average_rating: flt(frm.doc.average_rating * 5, 2),
+				average_rating: flt(frm.doc.average_rating, 2),
 				reviews_per_rating: frm.reviews_per_rating,
 				skills_average_rating: frm.skills_average_rating,
 			});
@@ -275,12 +362,28 @@ frappe.ui.form.on("Interview", {
 	},
 
 	calculate_reviews_per_rating(frm) {
-		const reviews_per_rating = [0, 0, 0, 0, 0];
-		frm.feedback.forEach((x) => {
-			reviews_per_rating[Math.floor(x.total_score - 1)] += 1;
-		});
-		frm.reviews_per_rating = reviews_per_rating.map((x) =>
-			flt((x * 100) / frm.feedback.length, 1),
-		);
+		// 1. Initialize an array to store the count of reviews for each rating (0 to 5).
+		const reviews_per_rating = [0, 0, 0, 0, 0, 0];
+	
+		// 2. Check if there is any feedback to process.
+		if (frm.feedback && frm.feedback.length > 0) {
+			// 3. Iterate through each feedback item.
+			frm.feedback.forEach((x) => {
+				// 4. Get the integer part of the total score (which is now 0 to 5).
+				const rating = Math.floor(x.total_score);
+	
+				// 5. Categorize the review based on the rating.
+				if (rating >= 0 && rating <= 5) {
+					// If the rating is 0, 1, 2, 3, 4, or 5, increment the count for that rating.
+					reviews_per_rating[rating] += 1;
+				}
+			});
+	
+			// 6. Calculate the percentage of reviews for each rating.
+			frm.reviews_per_rating = reviews_per_rating.map((x) =>
+				// (Count of reviews for this rating * 100) / (Total number of feedback items), rounded to 1 decimal place.
+				flt((x * 100) / frm.feedback.length, 1)
+			);
+		} 
 	},
 });

@@ -23,7 +23,7 @@
 
 				<td class="text-left">
 					<div class="rating">
-						{% for (let i = 1; i <= number_of_stars; i++) { %}
+						{% for (let i = 1; i <= 5; i++) { %}
 							{% if (i <= value["average_rating"]) { %}
 								{% right_class = 'star-click'; %}
 							{% } else { %}

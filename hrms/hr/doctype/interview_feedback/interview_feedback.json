@@ -62,12 +62,11 @@
    "allow_in_quick_entry": 1,
    "fieldname": "skill_assessment",
    "fieldtype": "Table",
-   "options": "Skill Assessment",
-   "reqd": 1
+   "options": "Skill Assessment"
   },
   {
    "fieldname": "average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Average Rating",
    "read_only": 1
@@ -121,11 +120,10 @@
    "read_only": 1
   }
  ],
- "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-04-25 14:59:01.007517",
+ "modified": "2025-05-06 17:46:50.965441",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Feedback",

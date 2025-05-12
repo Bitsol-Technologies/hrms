@@ -22,7 +22,6 @@ frappe.ui.form.on("Job Applicant", {
 	},
 	
 	load_feedback: function(frm) {
-	console.log("in here")
     frappe
         .call({
             method: "hrms.hr.doctype.job_applicant.job_applicant.get_feedback_by_round", 
@@ -113,7 +112,6 @@ frappe.ui.form.on("Job Applicant", {
 					frm.dashboard.add_section(
 						frappe.render_template("job_applicant_dashboard", {
 							data: r.message.interviews,
-							number_of_stars: r.message.stars,
 						}),
 						__("Interview Summary"),
 					);
