@@ -575,18 +575,13 @@ def get_employee_clockify_details(employee_id):
 	"""
 	emp = frappe.get_doc("Employee", employee_id)
 	user_id = emp.get("user_id")
-	custom_api_key = emp.get("custom_clockify_api_key")
 	custom_user_id = emp.get("custom_clockify_user_id")  # Might be empty
-	workspace_raw = emp.get("custom_clockify_workspaces")  # Might be empty
 
-	# If workspace is not provided, fetch a default workspace using the API key.
-	workspace_ids = [ws.strip() for ws in (workspace_raw or "").split(",") if ws.strip()]
-	if not workspace_ids and custom_api_key:
-		workspace_ids = get_default_workspace_id(custom_api_key)
+	custom_api_key, workspace_ids = get_system_clockify_settings()
 
 	# If user ID is not provided, try to look it up using employee's email.
 	if not custom_user_id:
-		email = emp.get("user") or emp.get("user_id")
+		email = user_id
 		if custom_api_key and workspace_ids and email:
 			custom_user_id = get_clockify_user_id_by_email(custom_api_key, workspace_ids[0], email)
 
