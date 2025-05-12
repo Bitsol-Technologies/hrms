@@ -239,7 +239,7 @@ scheduler_events = {
 		"hrms.hr.utils.generate_leave_encashment",
 		"hrms.hr.utils.allocate_earned_leaves",
 	],
-	"weekly": ["hrms.controllers.employee_reminders.send_reminders_in_advance_weekly",],
+	"weekly": ["hrms.controllers.employee_reminders.send_reminders_in_advance_weekly"],
 	"monthly": [
 		"hrms.controllers.employee_reminders.send_reminders_in_advance_monthly",
 		"hrms.hr.employee_allowances_data.allowances_calculation.calculate_employee_fuel_allowance",
