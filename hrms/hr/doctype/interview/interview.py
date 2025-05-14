@@ -273,7 +273,7 @@ BEGIN:VEVENT
 DTSTART;TZID={timezone}:{start_time.strftime('%Y%m%dT%H%M%S')}
 DTEND;TZID={timezone}:{end_time.strftime('%Y%m%dT%H%M%S')}
 DTSTAMP:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
-ORGANIZER;CN=Mashal Farman:mailto:mashal@bitsol.tech
+ORGANIZER;CN=Bitsol:mailto:no-reply@bitsol.tech
 UID:{uuid.uuid4()}
 X-GOOGLE-CONFERENCE:{meeting_link}
 CREATED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
