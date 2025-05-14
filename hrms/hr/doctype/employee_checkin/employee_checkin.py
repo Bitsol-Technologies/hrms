@@ -564,7 +564,7 @@ def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
 			if user.get("email") == email:
 				return user.get("id")
 	except Exception as e:
-		frappe.log_error(f"Error fetching Clockify user for email {email} for workspace {workspace_id}", "Clockify Task")
+		frappe.log(f"Error fetching Clockify user for email {email} for workspace {workspace_id}", "Clockify Task")
 	return None
 
 
@@ -604,7 +604,7 @@ def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 	except Exception as e:
 		title = "Clockify Task"
 		message = f"Error for user {clockify_user_id} checking for active timer"
-		frappe.log_error(message, title)
+		frappe.log(message)
 		return False
 
 
@@ -625,7 +625,7 @@ def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, st
 		entries = response.json()
 		return entries
 	except Exception as e:
-		frappe.log_error(f"Error fetching Clockify entries for user {clockify_user_id}", "Clockify Task")
+		frappe.log(f"Error fetching Clockify entries for user {clockify_user_id} and workspace = {workspace_id}")
 		return []
 
 
@@ -675,7 +675,7 @@ def send_slack_message_for_employee(emails, message):
 		response = requests.post(slack_post_message_url, headers=headers, data=json.dumps(payload))
 		result = response.json()
 		if not result.get("ok"):
-			frappe.log_error(f"Error sending Slack message to {email}", "Slack Notification")
+			frappe.log(f"Error sending Slack message to {email}", "Slack Notification")
 
 
 # send reminder to turn on clockify timer
@@ -718,7 +718,7 @@ def check_today_checkins():
 
 		if not (custom_api_key and custom_user_id and workspace_ids):
 			msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
-			frappe.log_error(msg, "Clockify Check")
+			frappe.log(msg)
 			continue
 
 		# Check for active timer in any workspace
@@ -1119,7 +1119,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 			return None, None, None
 	except Exception as e:
 		# print("Error checking active timer for {emp_email}")
-		frappe.log_error(f"Error checking active timer for {emp_email}", "Clockify Compliance Check")
+		frappe.log(f"Error checking active timer for {emp_email}", "Clockify Compliance Check")
 		return checkin_time, checkout_time, "Invalid API Key in the system"
 	# Continue to process further if the timer check fails
 
