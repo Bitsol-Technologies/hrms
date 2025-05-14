@@ -1195,7 +1195,7 @@ def get_employee_leave_status(emp_id, date):
 	:param date: The date to check leave status (YYYY-MM-DD)
 	:return: "On Leave", "Half Day", or None if not on leave.
 	"""
-	return frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date}, "status")
+	return frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date, "docstatus": ["!=", 2]}, "status")
 
 def create_employee_compliance_reports(entries, report_date=None):
 	"""
@@ -1238,15 +1238,17 @@ def send_weekly_time_report():
 
 	# Calculate date range for last week
 	end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-	# end_date = datetime(2025,5,5)
 	start_date = end_date - timedelta(days=7)
-	
 	# Get all active employees
 	active_employees = get_all_active_employees()
-	
 	# Fetch users across all workspaces
 	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
 	public_holidays_in_week = get_public_holidays_in_week(start_date, end_date)
+
+	# Count public holidays
+	public_holidays_in_week_count = sum(1 for v in public_holidays_in_week.values() if v)
+	# Calculate working days by excluding weekends and public holidays
+	working_days_in_week = 7 - public_holidays_in_week_count
 	# Process each employee's time entries
 	employee_reports = []
 	for email, emp_data in workspace_users.items():
@@ -1255,7 +1257,6 @@ def send_weekly_time_report():
 
 		user_id = emp_data["user_id"]
 		workspaces = emp_data["workspace_ids"]
-		
 		# Get employee's shift type for expected hours
 		shift_type = get_employee_shift_type(emp_data["employee"])
 		if not shift_type:
@@ -1266,105 +1267,95 @@ def send_weekly_time_report():
 			expected_hours = shift_type_doc.working_hours_threshold_for_full_day
 		except Exception:
 			continue
-
-		# Collect time entries from all workspaces
-		daily_hours = {}
-		total_hours = 0
 		
-		# Initialize daily hours for all days in the week
-		current_date = start_date
-		while current_date < end_date:
-			daily_hours[current_date.date()] = {"total_hours": 0, "entries": []}
-			current_date += timedelta(days=1)
+		#  initialize the employees weekly report for each workspace
+		employee_weekly_reports = []
+
+		# Fetch and process Late Entries in a week
+		late_entries_count = get_late_entries_count(emp_data["employee"], start_date, end_date - timedelta(days=1))
+
+		# Fetch and process Work From Home in a week
+		wfh_days_count = get_wfh_days_count(emp_data["employee"], start_date, end_date - timedelta(days=1))
 
 		# Fetch and process time entries from each workspace
 		for workspace_id in workspaces:
-			entries = get_clockify_time_entries(custom_api_key, workspace_id, user_id, start_date, end_date)
-			
-			for entry in entries:
-				time_interval = entry.get("timeInterval")
-				if not time_interval:
-					continue
+			task_id = get_clockify_report_task_id(workspace_id, start_date, end_date - timedelta(days=1), user_id, custom_api_key)
+			if task_id:
 
-				duration_str = time_interval.get("duration")
-				start_str = time_interval.get("start")
-				if not start_str:
-					continue
-				start_time = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-				if duration_str:
-					duration = parse_iso8601_duration(duration_str) / 3600  # Convert to hours
-				else:
-					end_str = time_interval.get("end")
-
-					if not end_str:
-						continue
-
-					
-					end_time = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-					duration = (end_time - start_time).total_seconds() / 3600
+				report_data = get_clockify_report_result(workspace_id, task_id, custom_api_key)
+				if report_data:
+					totals = report_data.get("totals", {})
+					chart = report_data.get("chart", {})
+					group_one = report_data.get("groupOne", {})
 				
-				# Fetch project and task names using the respective functions
-				project_name = fetch_project_name(custom_api_key, workspace_id, entry.get("projectId"))
-				task_name = fetch_task_name(custom_api_key, workspace_id, entry.get("projectId"), entry.get("taskId"))
+					# process report data
+					weekly_report = generate_weekly_report(start_date, end_date - timedelta(days=1), emp_data["employee"], user_id, totals, chart, group_one, expected_hours, public_holidays_in_week, working_days_in_week)
+					employee_weekly_reports.append({
+						"workspace_id": workspace_id,
+						"weekly_report": weekly_report
+					})
 				
-				entry_details = {
-					"project_name": project_name,
-					"task_name": task_name,
-					"duration": duration
-				}
-				daily_hours[start_time.date()]["entries"].append(entry_details)
-				daily_hours[start_time.date()]["total_hours"] += duration
-				total_hours += duration
-
-		# Find missing days (less than expected hours)
-		missing_days = []
-		public_holidays_in_week_count = sum([1 for date in daily_hours if public_holidays_in_week.get(date, False)])
-		working_days_in_week = 7 - public_holidays_in_week_count
-		for date, data in daily_hours.items():
-			leave_status = get_employee_leave_status(emp_data["employee"], str(date))
-			if leave_status in ["On Leave", "Half Day"]:
-				daily_hours[date]["leave_status"] = leave_status
-			elif data["total_hours"] < 1 and date.weekday() < 5 and not public_holidays_in_week.get(date, False):  # Only weekdays and non-public holidays with hours < 1
-				missing_days.append(date)
-
-		# Create employee report
-		employee_reports.append({
-			"employee_name": emp_data["employee_name"],
-			"email": email,
-			"daily_hours": daily_hours,
-			"missing_days": missing_days,
-			"total_hours": total_hours,
-			"expected_hours": expected_hours * working_days_in_week  # Expected hours for working days in a week
-		})
+		if employee_weekly_reports:
+			employee_reports.append({
+				"employee_name": emp_data["employee_name"],
+				"email": email,
+				"weekly_reports": employee_weekly_reports,
+				"late_entries_count": late_entries_count,
+				"wfh_days_count": wfh_days_count
+			})
 
 	# Send reports via email and Slack
 	for report in employee_reports:
 		# Format email content
 		email_content = f"<h3>Weekly Time Tracking Report for {report['employee_name']}</h3><br>"
 
-		# Daily hours
-		email_content += "<strong>Daily Hours:</strong><br>"
-		for date, data in report['daily_hours'].items():
-			if date.weekday() > 4 and  data["total_hours"] == 0:
-				continue
-			public_holiday = " (Public Holiday)" if public_holidays_in_week.get(date, False) else ""
-			formatted_date = date.strftime("%A, %B %d, %Y")
-			leave_status = f" ({data['leave_status']})" if 'leave_status' in data and data['leave_status'] else ''
-			email_content += f"<strong>{formatted_date}: {data['total_hours']:.2f} hours{leave_status}{public_holiday}</strong><br>"
-			# List individual entries for the day
-			for entry in data["entries"]:
-				email_content += f"- <strong>Project</strong>: {entry['project_name']} <strong>Task</strong>: {entry['task_name']} <strong>Duration</strong>: {entry['duration']:.2f} hours<br>"
+		for workspace_report in report.get("weekly_reports", []):
+			weekly_report = workspace_report["weekly_report"]
+			workspace_id = workspace_report["workspace_id"]
 
-		# Missing days
-		if report['missing_days']:
-			email_content += "<br><strong>Missing Days:</strong><br>"
-			for date in report['missing_days']:
+			# email_content += f"<hr><h3>Workspace ID: {workspace_id}</h3>"
+
+			# Total vs Expected
+			email_content += f"<strong>Total Hours:</strong> {weekly_report['total_hours']:.2f}<br>"
+			email_content += f"<strong>Expected Hours:</strong> {weekly_report['expected_hours']:.2f}<br>"
+
+			# Late Entries
+			email_content += f"<strong>Total Late Entries:</strong> {report['late_entries_count'] if report['late_entries_count'] else 0}<br>"
+
+			# Leaves Taken
+			leave_count = sum(1 if day.get("leave_status") == "On Leave" else 0.5 if day.get("leave_status") == "Half Day" else 0 
+							for day in weekly_report.get("week_breakdown", []))
+			email_content += f"<strong>Total Leaves Taken:</strong> {leave_count:.1f}<br>"
+
+			# Work From Home
+			email_content += f"<strong>Total WFH Days:</strong> {report['wfh_days_count'] if report['wfh_days_count'] else 0}<br>"
+
+			# Daily hours breakdown
+			email_content += "<br><strong>Daily Breakdown:</strong><br>"
+			for day in weekly_report.get("week_breakdown", []):
+				date = day["date"]
+				total_time = day["total_time"]
 				formatted_date = date.strftime("%A, %B %d, %Y")
-				email_content += f"{formatted_date}<br>"
+				leave = f" ({day['leave_status']})" if day['leave_status'] in ["On Leave", "Half Day"] else ""
+				public_holiday = f" (Public Holiday)" if day['is_public_holiday'] else ""
+				email_content += f"<strong>{formatted_date}</strong>: {total_time:.2f} hours{leave}{public_holiday}<br>"
 
-		# Total vs Expected
-		email_content += f"<br><strong>Total Hours:</strong> {report['total_hours']:.2f}<br>"
-		email_content += f"<strong>Expected Hours:</strong> {report['expected_hours']:.2f}<br>"
+				for project in day.get("projects", []):
+					email_content += f"- Project: <strong>{project['project_name']}</strong> — Time Spent: {project['time_spent']:.2f} hours<br>"
+
+			# Missing days
+			if weekly_report.get("missing_days"):
+				email_content += "<br><strong>Missing Days:</strong><br>"
+				for missing_date in weekly_report["missing_days"]:
+					formatted_date = missing_date.strftime("%A, %B %d, %Y")
+					email_content += f"{formatted_date}<br>"
+
+			# Project Breakdown
+			email_content += "<br><strong>Project Breakdown:</strong><br>"
+			for project in weekly_report.get("project_breakdown", []):
+				email_content += f"<strong>Project:</strong> {project['project_name']} — <strong>Total Duration:</strong> {project['total_duration']:.2f} hours<br>"
+				for task in project.get("tasks", []):
+					email_content += f"— Task: {task['task_name']} — Duration: {task['task_duration']:.2f} hours<br>"
 
 		# Send email as HTML
 		frappe.sendmail(
@@ -1381,22 +1372,77 @@ def send_weekly_time_report():
 			for message in messages:
 				send_slack_message_for_employee([report['email']], message)
 
+def generate_weekly_report(start_date, end_date, employee_id, user_id, totals, chart, group_one, expected_hours, public_holidays_in_week, working_days_in_week):
+	"""
+	Generate the weekly report by processing totals, chart, and other data for each employee.
+	"""
+	weekly_report = {
+		"total_hours": totals[0]["totalTime"] / 3600,  # Convert seconds to hours
+		"expected_hours": expected_hours * working_days_in_week,
+		"week_breakdown": [],
+		"project_breakdown": [],
+		"missing_days": [],
+	}
 
-def fetch_project_name(api_key, workspace_id, project_id):
-	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/projects/{project_id}"
-	headers = {"X-Api-Key": api_key}
-	response = requests.get(url, headers=headers)
-	if response.status_code == 200:
-		return response.json().get("name")
-	return None
+	# Process the daily breakdown from the chart
+	current_date = start_date
+	while current_date <= end_date:
+		leave_status = get_employee_leave_status(employee_id, current_date.date())
+		date_str = current_date.strftime("%Y-%m-%d")
+		daily_entries = chart.get(date_str, [])
+		day_total_time = sum(entry["totalTime"] for entry in daily_entries) / 3600  # in hours
 
-def fetch_task_name(api_key, workspace_id, project_id, task_id):
-	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/projects/{project_id}/tasks/{task_id}"
-	headers = {"X-Api-Key": api_key}
-	response = requests.get(url, headers=headers)
-	if response.status_code == 200:
-		return response.json().get("name")
-	return None
+		is_public_holiday = public_holidays_in_week.get(current_date.date())
+		# Mark as missing if < 1 hour and not a public holiday and no leave applied
+		if day_total_time < 1 and is_public_holiday is None and current_date.weekday() < 5 and leave_status not in ["On Leave", "Half Day"]:
+			weekly_report["missing_days"].append(current_date)
+
+		# Build daily report (0-hour days included)
+		daily_report = {
+			"date": current_date,
+			"total_time": day_total_time,
+			"leave_status": leave_status,
+			"is_public_holiday": True if is_public_holiday is not None and current_date.weekday() < 5 else False,
+			"projects": [],
+		}
+
+		for entry in daily_entries:
+			daily_report["projects"].append({
+				"project_name": entry["projectName"],
+				"time_spent": entry["totalTime"] / 3600
+			})
+
+		# Only add weekends if hours > 0
+		if day_total_time > 0 or (current_date.weekday() < 5):  
+			weekly_report["week_breakdown"].append(daily_report)
+
+		current_date += timedelta(days=1)
+
+	# Process the project breakdown
+	for project in group_one:
+		project_info = {
+			"project_name": project["name"],
+			"total_duration": 0,
+			"tasks": []
+		}
+
+		for task in project.get("children", []):
+			task_duration = 0
+			for child in task.get("children", []):
+				if child["_id"] == user_id:
+					task_duration = child["duration"] / 3600
+					break  # stop after finding user's entry
+			task_info = {
+				"task_name": task.get("name", "Unnamed"),
+				"task_duration": task_duration
+			}
+			project_info["tasks"].append(task_info)
+			project_info["total_duration"] += task_duration
+
+		weekly_report["project_breakdown"].append(project_info)
+
+	return weekly_report
+
 
 def html_to_slack_plaintext(html):
 	# Replace <br> with newline
@@ -1416,7 +1462,117 @@ def get_public_holidays_in_week(start_date, end_date):
 	"""
 	public_holidays = {}
 	current_date = start_date
-	while current_date <= end_date:
+	while current_date < end_date:
 		public_holidays[current_date.date()] = is_public_holiday(str(current_date))
+
 		current_date += timedelta(days=1)
 	return public_holidays
+
+def get_clockify_report_task_id(workspace_id, start_date, end_date, user_id, api_key):
+	url = f"https://app.clockify.me/report/workspaces/{workspace_id}/async/reports/summary"
+	
+	headers = {
+		"Content-Type": "application/json",
+		"X-Api-Key": api_key
+	}
+	payload = {
+		"dateRangeStart": start_date.strftime("%Y-%m-%dT00:00:00.000Z"),
+		"dateRangeEnd": end_date.strftime("%Y-%m-%dT23:59:59.999Z"),
+		"sortOrder": "DESCENDING",
+		"description": "",
+		"rounding": False,
+		"withoutDescription": False,
+		"amounts": [],
+		"amountShown": "HIDE_AMOUNT",
+		"zoomLevel": "WEEK",
+		"userLocale": "en-US",
+		"customFields": None,
+		"userCustomFields": None,
+		"kioskIds": [],
+		"users": {
+			"contains": "CONTAINS",
+			"ids": [user_id],
+			"status": "ACTIVE_WITH_PENDING",
+			"numberOfDeleted": 0
+		},
+		"userGroups": {
+			"contains": "CONTAINS",
+			"ids": [],
+			"status": "ACTIVE_WITH_PENDING",
+			"numberOfDeleted": 0
+		},
+		"summaryFilter": {
+			"sortColumn": "DURATION",
+			"groups": ["PROJECT", "TASK", "USER"],
+			"summaryChartType": "PROJECT"
+		}
+	}
+
+	response = requests.post(url, headers=headers, json=payload)
+	if response.status_code == 202:
+		return response.json().get("reportTaskId")
+	else:
+		error_message = f"Error: {response.status_code} - {response.text}"
+		frappe.log_error(message=error_message, title="Clockify Report Task ID Fetch Error for Clockify Summary Report")
+		return None
+	
+
+import time
+def get_clockify_report_result(workspace_id, report_task_id, api_key, max_retries=3, delay=1.5):
+	url = f"https://app.clockify.me/report/workspaces/{workspace_id}/async/reports/summary/{report_task_id}"
+	
+	headers = {
+		"X-Api-Key": api_key
+	}
+
+	for attempt in range(max_retries):
+		try:
+			response = requests.get(url, headers=headers)
+
+			if response.status_code == 200:
+				return response.json()
+			elif response.status_code == 202:
+				time.sleep(delay)
+			else:
+				error_message = f"Error: {response.status_code} - {response.text}"
+				frappe.log_error(message=error_message, title="Clockify Report Fetch Error for Clockify Summary Report")
+				return None
+		except requests.exceptions.RequestException as e:
+			error_message = f"Request failed: {e}"
+			frappe.log_error(message=error_message, title="Clockify Report Fetch Error for Clockify Summary Report")
+			time.sleep(delay)
+
+	error_message = "Max retries reached. Report is still not ready."
+	frappe.log_error(message=error_message, title="Clockify Report Fetch Error for Clockify Summary Report")
+	return None
+
+def get_late_entries_count(employee_id, start_date, end_date):
+	late_entries = frappe.get_all(
+		"Attendance",
+		filters={
+			"employee": employee_id,
+			"late_entry": 1,
+			"docstatus": ["!=", 2],
+			"attendance_date": ["between", [start_date.date(), end_date.date()]]
+		},
+		fields=["name"]
+	)
+	return len(late_entries)
+
+def get_wfh_days_count(employee_id, start_date, end_date):
+	wfh_days = frappe.get_all(
+		"Work From Home",
+		filters={
+			"employee": employee_id,
+			"docstatus": ["!=", 2],
+			"status": "Approved",
+			"from_date": ["between", [start_date.date(), end_date.date()]]
+		},
+		fields=["total_days"]
+	)
+	return sum(day["total_days"] for day in wfh_days)
+	
+	
+
+
+
