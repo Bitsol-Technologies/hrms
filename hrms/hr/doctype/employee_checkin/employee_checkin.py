@@ -1216,3 +1216,160 @@ def create_employee_compliance_reports(entries, report_date=None):
 
 	# commit once after all inserts
 	frappe.db.commit()
+
+
+def send_late_report_to_HR():
+	"""
+	Sends the weekly late report to HR via email.
+	Fetches data directly from the 'Weekly Late Report' query.
+	Sends a 'no late entries' message if the report is empty.
+	"""
+	try:
+		today = frappe.utils.get_datetime(frappe.utils.get_datetime()).strftime("%d %b %Y")
+		report_name = "Weekly Late Report"
+		report = frappe.get_doc("Report", report_name)
+		if report.report_type != "Query Report":
+			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
+			return
+
+		report_data = frappe.db.sql(report.query, as_dict=True)
+		email_message_html = f"<h3>Weekly Late Report ({today})</h3>"
+		if not report_data:
+			email_message_html += "<p>No late entries found for the week.</p>"
+
+		else:
+			email_message_html += "<p>The following employees were late this week:</p>"
+			email_message_html += "<table border='1'>"
+			email_message_html += "<tr><th>Employee</th><th>Number of Late Entries</th><th>Attendance Dates</th></tr>"
+			for record in report_data:
+				employee_name = record.get('employee_name', '')
+				late_count = record.get('late_count', '')
+				late_dates = record.get('late_dates', '')
+				email_message_html += f"<tr><td>{employee_name}</td><td>{late_count}</td><td>{late_dates}</td></tr>"
+			email_message_html += "</table>"
+	
+		target_emails = get_hr_manager()
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly Late Report",
+			message=email_message_html,
+			now=True
+		)
+
+	except frappe.DoesNotExistError:
+		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
+	except Exception as e:
+		frappe.log_error(f"Error sending Weekly Late Report to HR: {str(e)}", "Email Notification")
+
+def send_leave_report_to_HR():
+	"""
+	Sends the weekly leave report to HR via email.
+	Fetches data directly from the 'Weekly Leave Report' query.
+	Sends a 'no leave entries' message if the report is empty.
+	"""
+	try:
+		today = frappe.utils.get_datetime(frappe.utils.get_datetime()).strftime("%d %b %Y")
+		report_name = "Weekly Leave Report"
+		report = frappe.get_doc("Report", report_name)
+		if report.report_type != "Query Report":
+			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
+			return
+	
+		report_data = frappe.db.sql(report.query, as_dict=True)
+		email_message_html = f"<h3>Weekly Leave Report ({today})</h3>"
+		if not report_data:
+			email_message_html += "<p>No leave entries found for the week.</p>"
+		else:
+			email_message_html += "<p>The following employees were on leave this week:</p>"
+			email_message_html += "<table border='1'>"
+			email_message_html += "<tr><th>Employee</th><th>Number of Leaves</th><th>Attendance Dates</th></tr>"
+			for record in report_data:
+				employee_name = record.get('employee_name', '')
+				leave_count = record.get('leave_count', '')
+				leave_dates = record.get('leave_dates', '')
+				email_message_html += f"<tr><td>{employee_name}</td><td>{leave_count}</td><td>{leave_dates}</td></tr>"
+			email_message_html += "</table>"
+	
+		target_emails = get_hr_manager()
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly Leave Report",
+			message=email_message_html,
+			now=True
+		)
+
+	except frappe.DoesNotExistError:
+		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
+	except Exception as e:
+		frappe.log_error(f"Error sending Weekly Leave Report to HR: {str(e)}", "Email Notification")
+
+
+def send_wfh_report_to_HR():
+	"""
+	Sends the weekly WFH report to HR via email.
+	Fetches data directly from the 'Weekly WFH Report' query.
+	Sends a 'no WFH entries' message if the report is empty.
+	"""	
+	try:
+		today = frappe.utils.get_datetime(frappe.utils.get_datetime()).strftime("%d %b %Y")
+		report_name = "Weekly WFH Report"
+		report = frappe.get_doc("Report", report_name)
+		if report.report_type != "Query Report":
+			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
+			return
+	
+		report_data = frappe.db.sql(report.query, as_dict=True)
+		email_message_html = f"<h3>Weekly WFH Report ({today})</h3>"
+		if not report_data:
+			email_message_html += "<p>No WFH entries found for the week.</p>"
+		else:
+			email_message_html += "<p>The following employees were on WFH this week:</p>"	
+			email_message_html += "<table border='1'>"
+			email_message_html += "<tr><th>Employee</th><th>Number of WFH Days</th><th>Attendance Dates</th></tr>"
+			for record in report_data:
+				employee_name = record.get('employee_name', '')
+				wfh_count = record.get('total_days', '')
+				wfh_date_ranges = record.get('wfh_date_ranges', '')
+				email_message_html += f"<tr><td>{employee_name}</td><td>{wfh_count}</td><td>{wfh_date_ranges}</td></tr>"
+			email_message_html += "</table>"
+	
+		target_emails = get_hr_manager()
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly WFH Report",
+			message=email_message_html,
+			now=True
+		)
+
+	except frappe.DoesNotExistError:
+		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
+	except Exception as e:
+		frappe.log_error(f"Error sending Weekly WFH Report to HR: {str(e)}", "Email Notification")	
+	
+def get_hr_manager():
+	"""
+	Returns a list of email addresses of users with the 'HR Manager' role.
+	"""
+	# First, find all users who have the 'HR Manager' role assigned
+	users_with_role = frappe.get_all(
+		"Has Role",
+		filters={"role": "HR Manager"},
+		fields=["parent"]
+	)
+
+	# Extract user IDs
+	user_ids = [u["parent"] for u in users_with_role]
+
+	if not user_ids:
+		return []
+
+	# Now get their emails
+	users = frappe.get_all(
+		"User",
+		filters={"name": ["in", user_ids], "enabled": 1},
+		fields=["email"]
+	)
+
+	# Return email addresses
+	return [user["email"] for user in users if user.get("email")]
+
