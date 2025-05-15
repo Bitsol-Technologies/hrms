@@ -1270,7 +1270,7 @@ def send_weekly_time_report():
 		# Send email as HTML
 		frappe.sendmail(
 			recipients=recipients,
-			subject="Weekly Time Tracking Report",
+			subject=f"Weekly Time Tracking Report for {report['employee_name']}",
 			message=email_content,
 			now=True,
 		)
