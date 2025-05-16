@@ -252,10 +252,10 @@ scheduler_events = {
 		"0 23 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report"],
 		"0 9 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_yesterday_compliance_report_to_slack"],
 		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_late_report_to_HR"],
-		"5 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_leave_report_to_HR"],
-		"10 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_wfh_report_to_HR"],
-		"15 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_time_report"],
-		"20 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_compliance_report_to_HR"],
+		"1 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_leave_report_to_HR"],
+		"2 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_wfh_report_to_HR"],
+		"3 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_time_report"],
+		"4 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_compliance_report_to_HR"],
 	},
 }
 
