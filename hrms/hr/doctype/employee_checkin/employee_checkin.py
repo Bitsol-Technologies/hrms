@@ -921,9 +921,9 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 def is_public_holiday(date):
 	"""
 	:param date: string YYYY-MM-DD
-	:returns: True if `date` is in this year’s Holiday List, False otherwise
+	:returns: True if `date` is in this year's Holiday List, False otherwise
 	"""
-	# 1) get all Holiday List names whose from_date is in “this year”
+	# 1) get all Holiday List names whose from_date is in "this year"
 	holiday_lists = frappe.db.get_list(
 		"Holiday List",
 		filters = {
@@ -1850,6 +1850,199 @@ def get_wfh_days_count(employee_id, start_date, end_date):
 	)
 	return sum(day["total_days"] for day in wfh_days)
 	
+
+def generate_weekly_compliance_email_content(report_data, non_compliant_employees, start_date, end_date):
+	"""
+	Generate HTML email content for the weekly time tracking report.
+	
+	Args:
+		report_data (list): List of employee report dictionaries
+		non_compliant_employees (list): List of non-compliant employee reports
+		start_date (datetime): Start date of the report period
+		end_date (datetime): End date of the report period
+		
+	Returns:
+		str: HTML formatted email content
+	"""
+	email_content = f"<h3>Weekly Time Tracking Summary Report for All Employees</h3>"
+	email_content += f"<p>Report Period: {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}</p>"
+
+	# Add summary table
+	email_content += "<table border='1' style='border-collapse: collapse; width: 100%;'>"
+	email_content += "<tr style='background-color: #f2f2f2;'>"
+	email_content += "<th>Employee Name</th><th>Working Days</th><th>Expected Hours</th><th>Logged Hours</th><th>Hours Difference</th><th>Status</th>"
+	email_content += "</tr>"
+
+	for employee in report_data:
+		# Calculate hours difference (logged - expected)
+		hours_diff = employee["logged_hours"] - employee["expected_hours"]
+		
+		# Determine status and color
+		if hours_diff >= 0:
+			status = "Compliant"
+			row_color = "#e6ffe6"  # Light green background
+			text_color = "#006600"  # Dark green text
+			hours_diff_display = f"+{hours_diff:.2f}" if hours_diff > 0 else "0.00"
+		else:
+			status = "Non-Compliant"
+			row_color = "#ffe6e6"  # Light red background
+			text_color = "#cc0000"  # Dark red text
+			hours_diff_display = f"{hours_diff:.2f}"
+
+		email_content += f"<tr style='background-color: {row_color}; color: {text_color};'>"
+		email_content += f"<td>{employee['name']}</td>"
+		email_content += f"<td>{employee['working_days_in_week']}</td>"
+		email_content += f"<td>{employee['expected_hours']}</td>"
+		email_content += f"<td>{employee['logged_hours']}</td>"
+		email_content += f"<td>{hours_diff_display}</td>"
+		email_content += f"<td>{status}</td>"
+		email_content += "</tr>"
+
+	email_content += "</table>"
+
+	return email_content
+
+def process_weekly_employee_compliance_data(emp_data, start_date, end_date, custom_api_key, working_days_in_week):
+	"""
+	Process time data for a single employee.
+	
+	Args:
+		emp_data (dict): Employee data containing name, user_id, workspaces, etc.
+		start_date (datetime): Start date of the report period
+		end_date (datetime): End date of the report period
+		custom_api_key (str): Clockify API key
+		working_days_in_week (int): Number of working days in the period
+		
+	Returns:
+		dict: Employee report data or None if processing fails
+	"""
+	employee_name = emp_data["employee_name"]
+	user_id = emp_data["user_id"]
+	workspaces = emp_data["workspace_ids"]
+	leave_count = get_leave_count(emp_data["employee"], start_date, end_date)
+	working_days_in_week = working_days_in_week - leave_count
+	# Get employee's shift type for expected hours
+	shift_type = get_employee_shift_type(emp_data["employee"])
+	if not shift_type:
+		return None
+
+	try:
+		shift_type_doc = frappe.get_doc("Shift Type", shift_type)
+		expected_hours = shift_type_doc.working_hours_threshold_for_full_day * working_days_in_week
+	except Exception:
+		return None
 	
 
+	# Get total logged hours from Clockify
+	total_logged_hours = 0
+	for workspace_id in workspaces:
+		task_id = get_clockify_report_task_id(workspace_id, start_date, end_date, user_id, custom_api_key)
+		if task_id:
+			report_data = get_clockify_report_result(workspace_id, task_id, custom_api_key)
+			if report_data and report_data.get("totals"):
+				total_logged_hours += report_data["totals"][0]["totalTime"] / 3600  # Convert seconds to hours
 
+	# Calculate hours difference
+	hours_difference = expected_hours - total_logged_hours
+	
+	# Create employee report
+	employee_report = {
+		"name": employee_name,
+		"working_days_in_week": working_days_in_week,
+		"logged_hours": round(total_logged_hours, 2),
+		"expected_hours": round(expected_hours, 2),
+		"hours_difference": round(hours_difference, 2)
+	}
+
+	return employee_report
+
+def send_weekly_compliance_report_to_HR():
+	"""
+	Generates and sends a weekly time tracking report for all employees to HR email.
+	The report includes employee name, total vs expected hours, hours difference, compliance check.
+	"""
+	# Get system-level Clockify settings
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+	if not custom_api_key or not workspace_ids:
+		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
+		return
+
+	# Calculate date range for last week
+	end_date = datetime(2025, 5, 12)
+	# end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+	start_date = end_date - timedelta(days=7)
+	# Get all active employees
+	active_employees = get_all_active_employees()
+	
+	# Fetch users across all workspaces
+	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
+	public_holidays_in_week = get_public_holidays_in_week(start_date, end_date)
+
+	# Count public holidays
+	public_holidays_in_week_count = sum(1 for v in public_holidays_in_week.values() if v)
+	# Calculate working days by excluding weekends and public holidays
+	working_days_in_week = 7 - public_holidays_in_week_count
+
+	# Initialize report data
+	report_data = []
+	non_compliant_employees = []
+
+	# Process each employee
+	for email, emp_data in workspace_users.items():
+		employee_report = process_weekly_employee_compliance_data(
+			emp_data,
+			start_date,
+			end_date - timedelta(days=1),
+			custom_api_key,
+			working_days_in_week
+		)
+		
+		if employee_report:
+			report_data.append(employee_report)
+			# Check compliance
+			if employee_report["logged_hours"] < employee_report["expected_hours"]:
+				non_compliant_employees.append(employee_report)
+
+	# Generate email content
+	email_content = generate_weekly_compliance_email_content(
+		report_data,
+		non_compliant_employees,
+		start_date,
+		end_date - timedelta(days=1),
+	)
+
+	# Send email to HR
+	target_emails = get_hr_manager()
+	if target_emails:
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly Time Tracking Summary Report for All Employees",
+			message=email_content,
+			now=True
+		)
+
+def get_leave_count(employee, start_date, end_date):
+	"""
+	Calculate total leave days for an employee within a date range.
+	Full day leave counts as 1, half day leave counts as 0.5.
+	
+	Args:
+		employee (str): Employee ID
+		start_date (datetime): Start date of the period
+		end_date (datetime): End date of the period
+		
+	Returns:
+		float: Total leave days
+	"""
+	leave_count = 0
+	current_date = start_date
+	
+	while current_date < end_date:
+		leave_status = get_employee_leave_status(employee, current_date.date())
+		if leave_status == "On Leave":
+			leave_count += 1
+		elif leave_status == "Half Day":
+			leave_count += 0.5
+		current_date += timedelta(days=1)
+		
+	return leave_count
