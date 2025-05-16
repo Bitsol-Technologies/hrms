@@ -255,6 +255,7 @@ scheduler_events = {
 		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_leave_report_to_HR"],
 		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_wfh_report_to_HR"],
 		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_time_report"],
+        "0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_compliance_report_to_HR"],
 	},
 }
 
