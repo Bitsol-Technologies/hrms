@@ -251,6 +251,9 @@ scheduler_events = {
 		"0 10 * * *": ["hrms.hr.doctype.work_from_home.work_from_home.send_wfh_feedback_forms"],
 		"0 23 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report"],
 		"0 9 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_yesterday_compliance_report_to_slack"],
+		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_late_report_to_HR"],
+		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_leave_report_to_HR"],
+		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_wfh_report_to_HR"],
 		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_time_report"],
 	},
 }
