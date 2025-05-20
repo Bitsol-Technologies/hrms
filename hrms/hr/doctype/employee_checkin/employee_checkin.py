@@ -1340,7 +1340,7 @@ def send_wfh_report_to_HR():
 			email_message_html += "<p>No WFH entries found for the week.</p>"
 		else:
 			email_message_html += "<p>The following employees were on WFH this week:</p>"	
-			email_message_html += "<table border='1' style='border-collapse: collapse;'>"
+			email_message_html += "<table border='1'>"
 			email_message_html += "<tr><th>Employee</th><th>Number of WFH Days</th><th>Attendance Dates</th></tr>"
 
 			for record in report_data:
