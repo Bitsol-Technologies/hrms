@@ -1245,7 +1245,15 @@ def send_late_report_to_HR():
 				employee_name = record.get('employee_name', '')
 				late_count = record.get('late_count', '')
 				late_dates = record.get('late_dates', '')
-				email_message_html += f"<tr><td>{employee_name}</td><td>{late_count}</td><td>{late_dates}</td></tr>"
+				dates = [date.strip() for date in late_dates.split(',')]	
+				email_message_html += f"<tr><td style='text-align: center;'>{employee_name}</td><td style='text-align: center;'>{late_count}</td><td>"
+				email_message_html += "<table style='border-collapse: collapse; width: 100%;'><tr>"
+				for i, date in enumerate(dates):
+					border_left = "border-left: 1px solid gray;" if i > 0 else ""
+					email_message_html += (
+						f"<td style='text-align: center; {border_left}'>{date}</td>"
+					)
+				email_message_html += "</tr></table></td></tr>"
 			email_message_html += "</table>"
 	
 		target_emails = get_hr_manager()
@@ -1287,7 +1295,15 @@ def send_leave_report_to_HR():
 				employee_name = record.get('employee_name', '')
 				leave_count = record.get('leave_count', '')
 				leave_dates = record.get('leave_dates', '')
-				email_message_html += f"<tr><td>{employee_name}</td><td>{leave_count}</td><td>{leave_dates}</td></tr>"
+				dates = [date.strip() for date in leave_dates.split(',')]	
+				email_message_html += f"<tr><td style='text-align: center;'>{employee_name}</td><td style='text-align: center;'>{leave_count}</td><td>"
+				email_message_html += "<table style='border-collapse: collapse; width: 100%;'><tr>"
+				for i, date in enumerate(dates):
+					border_left = "border-left: 1px solid gray;" if i > 0 else ""
+					email_message_html += (
+						f"<td style='text-align: center; {border_left}'>{date}</td>"
+					)
+				email_message_html += "</tr></table></td></tr>"
 			email_message_html += "</table>"
 	
 		target_emails = get_hr_manager()
@@ -1326,11 +1342,25 @@ def send_wfh_report_to_HR():
 			email_message_html += "<p>The following employees were on WFH this week:</p>"	
 			email_message_html += "<table border='1'>"
 			email_message_html += "<tr><th>Employee</th><th>Number of WFH Days</th><th>Attendance Dates</th></tr>"
+
 			for record in report_data:
 				employee_name = record.get('employee_name', '')
 				wfh_count = record.get('total_days', '')
 				wfh_date_ranges = record.get('wfh_date_ranges', '')
-				email_message_html += f"<tr><td>{employee_name}</td><td>{wfh_count}</td><td>{wfh_date_ranges}</td></tr>"
+
+				dates = [date.strip() for date in wfh_date_ranges.split(',')]
+
+				email_message_html += f"<tr><td style='text-align: center;'>{employee_name}</td><td style='text-align: center;'>{wfh_count}</td><td>"
+				email_message_html += "<table style='border-collapse: collapse; width: 100%;'><tr>"
+
+				for i, date in enumerate(dates):
+					border_left = "border-left: 1px solid gray;" if i > 0 else ""
+					email_message_html += (
+						f"<td style='text-align: center; {border_left}'>{date}</td>"
+					)
+
+				email_message_html += "</tr></table></td></tr>"
+
 			email_message_html += "</table>"
 	
 		target_emails = get_hr_manager()
@@ -1344,7 +1374,7 @@ def send_wfh_report_to_HR():
 	except frappe.DoesNotExistError:
 		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
 	except Exception as e:
-		frappe.log_error(f"Error sending Weekly WFH Report to HR: {str(e)}", "Email Notification")	
+		frappe.log_error(f"Error sending Weekly WFH Report to HR: {str(e)}", "Email Notification")
 	
 def get_hr_manager():
 	"""
