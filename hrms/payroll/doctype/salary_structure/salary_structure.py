@@ -372,6 +372,11 @@ def make_salary_slip(
 			if posting_date:
 				target.posting_date = posting_date
 
+		# ✅ Explicitly set hour rate and base hour rate
+		if target.employee:
+			hour_rate = frappe.get_cached_value("Employee", target.employee, "hourly_rate")
+			target.hour_rate = hour_rate
+			
 		target.run_method("process_salary_structure", for_preview=for_preview)
 
 	doc = get_mapped_doc(
