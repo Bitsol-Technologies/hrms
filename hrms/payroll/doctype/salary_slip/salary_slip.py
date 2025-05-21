@@ -414,7 +414,7 @@ class SalarySlip(TransactionBase):
 
 		if self.salary_slip_based_on_timesheet:
 			self.salary_structure = self._salary_structure_doc.name
-			self.hour_rate = self._salary_structure_doc.hour_rate
+			self.hour_rate = frappe.get_cached_value("Employee", self.employee, "hourly_rate")
 			self.base_hour_rate = flt(self.hour_rate) * flt(self.exchange_rate)
 			self.total_working_hours = sum([d.working_hours or 0.0 for d in self.timesheets]) or 0.0
 			wages_amount = self.hour_rate * self.total_working_hours
@@ -1341,9 +1341,9 @@ class SalarySlip(TransactionBase):
 	def get_tax_components(self) -> list:
 		"""
 		Returns:
-		        list: A list of tax components specific to the company.
-		        If no tax components are defined for the company,
-		        it returns the default tax components.
+				list: A list of tax components specific to the company.
+				If no tax components are defined for the company,
+				it returns the default tax components.
 		"""
 		tax_components = frappe.cache().get_value(
 			TAX_COMPONENTS_BY_COMPANY, self._fetch_tax_components_by_company
@@ -1355,10 +1355,10 @@ class SalarySlip(TransactionBase):
 	def _fetch_tax_components_by_company(self) -> dict:
 		"""
 		Returns:
-		    dict: A dictionary containing tax components grouped by company.
+			dict: A dictionary containing tax components grouped by company.
 
 		Raises:
-		    None
+			None
 		"""
 
 		tax_components = {}
