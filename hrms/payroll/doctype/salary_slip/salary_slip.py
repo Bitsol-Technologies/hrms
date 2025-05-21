@@ -414,9 +414,7 @@ class SalarySlip(TransactionBase):
 
 		if self.salary_slip_based_on_timesheet:
 			self.salary_structure = self._salary_structure_doc.name
-			# self.hour_rate = self._salary_structure_doc.hour_rate
 			self.hour_rate = frappe.get_cached_value("Employee", self.employee, "hourly_rate")
-			self.set("hour_rate", self.hour_rate)
 			self.base_hour_rate = flt(self.hour_rate) * flt(self.exchange_rate)
 			self.total_working_hours = sum([d.working_hours or 0.0 for d in self.timesheets]) or 0.0
 			wages_amount = self.hour_rate * self.total_working_hours
