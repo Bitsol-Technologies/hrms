@@ -1,0 +1,32 @@
+{
+ "add_total_row": 1,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2025-05-22 11:47:09.028680",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-05-22 12:26:48.272588",
+ "modified_by": "Administrator",
+ "module": "Payroll",
+ "name": "Salary Cost by Cost Center",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Payroll Entry",
+ "report_name": "Salary Cost by Cost Center",
+ "report_script": "\ndef execute(filters=None):\n    # Default filters\n    if not filters:\n        filters = {}\n    start_date = filters.get(\"start_date\")\n    if not start_date:\n        start_date = frappe.utils.add_days(frappe.utils.nowdate(),-30)\n    end_date = filters.get(\"end_date\")\n    if not end_date:\n        end_date= frappe.utils.nowdate()\n    employee = filters.get(\"employee\")\n    cost_center = filters.get(\"cost_center\")\n\n    # Columns definition\n    columns = [\n        {\"fieldname\": \"employee\", \"label\": \"Employee\", \"fieldtype\": \"Link\", \"options\": \"Employee\", \"width\": 150},\n        {\"fieldname\": \"employee_name\", \"label\": \"Employee Name\", \"fieldtype\": \"Data\", \"width\": 150},\n        {\"fieldname\": \"cost_center\", \"label\": \"Cost Center\", \"fieldtype\": \"Link\", \"options\": \"Cost Center\", \"width\": 200},\n        {\"fieldname\": \"division\", \"label\": \"Division\", \"fieldtype\": \"Data\", \"width\": 150},\n        {\"fieldname\": \"total_hours\", \"label\": \"Total Hours\", \"fieldtype\": \"Float\", \"width\": 100},\n        {\"fieldname\": \"hourly_rate\", \"label\": \"Hourly Rate (KWD)\", \"fieldtype\": \"Currency\", \"width\": 120},\n        {\"fieldname\": \"earnings\", \"label\": \"Earnings (KWD)\", \"fieldtype\": \"Currency\", \"width\": 120},\n        {\"fieldname\": \"allocation_percentage\", \"label\": \"Allocation %\", \"fieldtype\": \"Percent\", \"width\": 120},\n        {\"fieldname\": \"allocated_cost\", \"label\": \"Allocated Cost (KWD)\", \"fieldtype\": \"Currency\", \"width\": 150}\n    ]\n\n    # Data fetch and processing\n    data = []\n    employees = frappe.get_list(\"Employee\", filters={\"status\": \"Active\"}, fields=[\"name\", \"employee_name\"])\n    for emp in employees:\n        print(emp)\n        if employee and emp.name != employee:\n            continue\n        # Fetch custom hourly rate\n        hourly_rate = frappe.db.get_value(\"Employee\", emp.name, \"hourly_rate\") or 0\n        print(hourly_rate)\n        # Fetch total hours from timesheets\n        total_hours = frappe.db.sql(\"\"\"\n            SELECT SUM(`tabTimesheet Detail`.hours)\n            FROM `tabTimesheet Detail`\n            INNER JOIN `tabTimesheet` ON `tabTimesheet`.name = `tabTimesheet Detail`.parent\n            WHERE `tabTimesheet`.employee = %s\n            AND `tabTimesheet`.start_date BETWEEN %s AND %s\n            AND `tabTimesheet`.docstatus = 1\n        \"\"\", (emp.name, start_date, end_date), as_list=True)[0][0] or 0\n        print(total_hours)\n        # Fetch salary slips\n        salary_slips = frappe.get_list(\"Salary Slip\", filters={\n            \"employee\": emp.name,\n            \"start_date\": [\"between\", [start_date, end_date]],\n            \"docstatus\": 1\n        }, fields=[\"name\"])\n        print(salary_slips)\n        if not salary_slips or not total_hours:\n            continue\n\n        # Fetch cost center allocations from Salary Structure Assignment\n        ssa = frappe.get_list(\"Salary Structure Assignment\", filters={\n            \"employee\": emp.name,\n            \"from_date\": [\"<=\", end_date],\n            \"docstatus\": [\"!=\", 2]\n        }, fields=[\"name\"], order_by=\"from_date desc\", limit=1)\n        print(ssa[0].name)\n        if ssa:\n            ssa_doc = frappe.get_doc(\"Salary Structure Assignment\", ssa[0].name)\n            for cc in ssa_doc.payroll_cost_centers:\n                print(cc.cost_center)\n                if cost_center and cc.cost_center != cost_center:\n                    continue\n                division = frappe.db.get_value(\"Cost Center\", cc.cost_center, \"parent_cost_center\") or \"\"\n                earnings = total_hours * hourly_rate\n                allocated_cost = (earnings * cc.percentage) / 100\n\n                data.append({\n                    \"employee\": emp.name,\n                    \"employee_name\": emp.employee_name,\n                    \"cost_center\": cc.cost_center,\n                    \"division\": division,\n                    \"total_hours\": total_hours,\n                    \"hourly_rate\": hourly_rate,\n                    \"earnings\": earnings,\n                    \"allocation_percentage\": cc.percentage,\n                    \"allocated_cost\": allocated_cost\n                })\n    print(columns, data)\n    return columns, data\nexecute(filters)",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "Employee Self Service"
+  }
+ ],
+ "timeout": 0
+}
