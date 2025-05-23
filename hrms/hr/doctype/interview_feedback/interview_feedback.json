@@ -69,6 +69,7 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Average Rating",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -123,7 +124,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-05-06 17:46:50.965441",
+ "modified": "2025-05-22 14:59:13.699879",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Feedback",
