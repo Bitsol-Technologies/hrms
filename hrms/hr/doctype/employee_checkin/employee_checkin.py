@@ -1170,7 +1170,6 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		# Fetching full and half day hours assigned to shift
 		working_hours_full_day = shift_type_doc.working_hours_threshold_for_full_day
 		working_hours_half_day = shift_type_doc.working_hours_threshold_for_half_day
-
 	except Exception as e:
 		frappe.log_error(f"Error fetching Shift Type data for {employee_id}", "Shift Type Fetch Error")
 		compliance_data["is_compliant"] = False
