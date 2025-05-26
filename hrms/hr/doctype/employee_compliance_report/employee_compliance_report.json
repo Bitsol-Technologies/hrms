@@ -8,11 +8,17 @@
   "employee",
   "employee_name",
   "employee_email",
+  "total_hours",
+  "reason",
+  "leave_type",
   "column_break_rfdl",
   "report_date",
   "checkin",
   "checkout",
-  "reason"
+  "expected_hours",
+  "compliant",
+  "late_entry",
+  "wfh"
  ],
  "fields": [
   {
@@ -62,12 +68,54 @@
    "fieldtype": "Data",
    "label": "Reason",
    "read_only": 1
+  },
+  {
+   "fieldname": "total_hours",
+   "fieldtype": "Float",
+   "label": "Total Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_hours",
+   "fieldtype": "Float",
+   "label": "Expected Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "late_entry",
+   "fieldtype": "Check",
+   "label": "Late Entry",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "wfh",
+   "fieldtype": "Check",
+   "label": "Work From Home",
+   "read_only": 1
+  },
+  {
+   "fieldname": "leave_type",
+   "fieldtype": "Select",
+   "label": "Leave Type",
+   "options": "\nOn Leave\nHalf Day",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "compliant",
+   "fieldtype": "Check",
+   "label": "Compliant",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-17 17:05:22.679169",
+ "modified": "2025-05-23 16:02:48.044528",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Compliance Report",
