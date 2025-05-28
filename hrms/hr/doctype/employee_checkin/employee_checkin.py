@@ -685,83 +685,116 @@ def check_today_checkins():
 	Scheduled task that:
 	  - Retrieves all Employee Checkin records for today.
 	  - For each checkin that is at least 4 hours old:
-		  • Checks if there is an active Clockify timer.
-		  • Checks if any time entries have been logged since the checkin.
-	  - If both are false, sends a Slack reminder notification.
+		  • If the check-in falls within a defined shift, check if current time is past the shift's end time.
+		  • If no shift applies to the check-in time, no reminder is sent.
+		  • Otherwise, checks if there is an active Clockify timer or logged entries.
+	  - If conditions suggest a reminder is needed, sends a Slack/Push notification.
 	"""
 
 	checkins = get_employee_checkins("IN")
 
 	for checkin in checkins:
-		checkin_dt = get_datetime(checkin["time"])
-		current_dt = get_datetime(now())
-		time_since_checkin = current_dt - checkin_dt
+		try:
+			checkin_dt = get_datetime(checkin["time"])
+			current_dt = get_datetime(now())
+			time_since_checkin = current_dt - checkin_dt
 
-		if time_since_checkin < timedelta(hours=4):
-			# Skip checkins that are less than 4 hours old
-			continue
+			if time_since_checkin < timedelta(hours=4):
+				# Skip checkins that are less than 4 hours old
+				continue
 
-		# Check if the employee has checked out (log_type "OUT") after this checkin.
-		checkout_records = frappe.get_all(
-			"Employee Checkin",
-			filters={
-				"employee": checkin["employee"],
-				"log_type": "OUT",
-				"time": [">", checkin["time"]]
-			},
-			fields=["name"]
-		)
-		if checkout_records:
-			# print(f"Employee {checkin['employee']} has checked out after checkin {checkin['name']}; skipping reminder.")
-			continue
+			# Fetch employee's shift details for the day of the checkin.
+			# This also fetches the default shift if no assignment is found.
+			shift_details = get_actual_start_end_datetime_of_shift(checkin["employee"], checkin_dt, True)
 
-		custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
+			if not shift_details:
+				# If the check-in time does not fall into any defined shift (assigned or default)
+				# for this employee on this day, skip sending a Clockify reminder.
+				# frappe.log_info(f"Clockify Reminder: Skipping for {checkin.employee} as check-in at {checkin_dt} is outside any defined shift.")
+				continue
 
-		if not (custom_api_key and custom_user_id and workspace_ids):
-			msg = f"Employee {emp.name} missing one or more custom Clockify credentials."
-			frappe.log(msg)
-			continue
+			# At this point, shift_details is not empty, meaning the check-in occurred within a recognized shift period.
+			pure_shift_end_dt = shift_details.get("end_datetime")
+			if pure_shift_end_dt and (current_dt > pure_shift_end_dt):
+				# If end_datetime exists and current time is past it, skip reminder.
+				# frappe.log_info(f"Clockify Reminder: Skipping for {checkin.employee} as current time {current_dt} is past shift's end time {pure_shift_end_dt}.")
+				continue
+			# If pure_shift_end_dt is None (should be rare if shift_details is populated and valid),
+			# or if current time is not past shift end, the reminder process continues based on Clockify.
 
-		# Check for active timer in any workspace
-		active_timer = False
-		for ws in workspace_ids:
-			if is_clockify_timer_active(custom_api_key, ws, custom_user_id):
-				active_timer = True
-				break
+			# If employee has checked out after this specific check-in
+			subsequent_checkout_exists = frappe.db.exists(
+				"Employee Checkin",
+				{
+					"employee": checkin["employee"],
+					"log_type": "OUT",
+					"time": [">", checkin_dt],
+					"docstatus": ["!=", 2] # Consider only non-cancelled checkouts
+				}
+			)
+			if subsequent_checkout_exists:
+				# frappe.log_info(f"Clockify Reminder: Skipping for {checkin.employee} (check-in: {checkin_dt}) as a subsequent checkout exists: {subsequent_checkout_exists}.")
+				continue
+			custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
 
-		if active_timer:
-			# print(f"Employee {emp.name} has an active Clockify timer in at least one workspace; skipping reminder.")
-			continue
+			if not (custom_api_key and custom_user_id and workspace_ids):
+				msg = f"Employee {emp.name if emp else checkin.employee} missing one or more custom Clockify credentials."
+				frappe.log_error(message=msg, title="Clockify Reminder Check")
+				continue
 
-		# Check for time entries in any workspace
-		entries_found = False
-		for ws in workspace_ids:
-			entries = get_clockify_time_entries(custom_api_key, ws, custom_user_id, checkin_dt, current_dt)
-			if entries:
-				entries_found = True
-				break
+			# Check for active timer in any workspace
+			active_timer = False
+			for ws in workspace_ids:
+				if is_clockify_timer_active(custom_api_key, ws, custom_user_id):
+					active_timer = True
+					break
 
-		if entries_found:
-			# print(f"Employee {emp.name} has logged time entries in at least one workspace; skipping reminder.")
-			continue
+			if active_timer:
+				# frappe.log_info(f"Clockify Reminder: Skipping for {emp.name if emp else checkin.employee} as Clockify timer is active.")
+				continue
 
-		# If no active timer and no time entries across all workspaces, send Slack reminder
-		reminder_message = (
-			"Reminder: You are checked in, but no time is logged in Clockify for the past 4 hours. "
-			"Please start your Clockify timer to ensure compliance."
-		)
-		email = emp.get("user") or emp.get("user_id")
-		if not email:
-			msg = f"Employee {emp.name} missing email for Slack notification."
-			frappe.log_error(msg, "Clockify Check")
-			continue
+			# Check for time entries in any workspace
+			entries_found = False
+			for ws in workspace_ids:
+				entries = get_clockify_time_entries(custom_api_key, ws, custom_user_id, checkin_dt, current_dt)
+				if entries:
+					entries_found = True
+					break
 
-		send_slack_message_for_employee([email], reminder_message)
+			if entries_found:
+				# frappe.log_info(f"Clockify Reminder: Skipping for {emp.name if emp else checkin.employee} as Clockify entries found.")
+				continue
 
-		from fcm_notification.send_notification import send_push_to_user
-		push_title = "Clockify Timer Reminder"
-		send_push_to_user(email, push_title, reminder_message)
+			# If no active timer and no time entries across all workspaces, send Slack reminder
+			reminder_message = (
+				"Reminder: You are checked in, but no time is logged in Clockify for the past 4 hours. "
+				"Please start your Clockify timer to ensure compliance."
+			)
+			# Ensure 'emp' object exists before trying to access attributes from it for email
+			email_user_id = emp.get("user") or emp.get("user_id") if emp else None
+			if not email_user_id:
+				# If emp object itself is None from get_employee_clockify_details (e.g. if employee was deleted)
+				# or if email/user_id is not set on the employee doc.
+				employee_identifier = checkin.employee # Fallback to employee ID from checkin
+				if emp and emp.name: # Prefer emp.name if available
+					employee_identifier = emp.name
+				msg = f"Employee {employee_identifier} missing email/user_id for Slack/Push notification."
+				frappe.log_error(message=msg, title="Clockify Reminder Check")
+				continue
 
+			send_slack_message_for_employee([email_user_id], reminder_message)
+
+			from fcm_notification.send_notification import send_push_to_user
+			push_title = "Clockify Timer Reminder"
+			send_push_to_user(email_user_id, push_title, reminder_message)
+			# frappe.log_info(f"Clockify Reminder: Sent to {email_user_id}.")
+
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error processing Clockify reminder for check-in {checkin.name} (Employee: {checkin.employee}): {frappe.get_traceback()}",
+				title="Clockify Reminder Check Failure"
+			)
+			continue # Continue to the next check-in
 
 def build_compliance_report_table(non_compliant):
 	# Define fixed widths for each column (adjust as needed)
