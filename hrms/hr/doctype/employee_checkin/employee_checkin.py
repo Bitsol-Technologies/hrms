@@ -4,6 +4,7 @@
 
 from datetime import datetime
 
+from frappe.utils.data import flt
 import pytz
 
 import frappe
@@ -503,7 +504,7 @@ from frappe.utils import today, now, get_datetime
 
 
 def get_today_date_range():
-	# today_str = "2025-05-25"
+	# today_str = "2025-06-03"
 	today_str = today()  # e.g., "2025-03-18"
 	start_dt_str = f"{today_str} 00:00:00"
 	end_dt_str = f"{today_str} 23:59:59"
@@ -573,6 +574,7 @@ def get_employee_clockify_details(employee_id):
 	"""
 	Retrieves Clockify details for an employee. If workspace or user ID is missing,
 	it uses the API key to fetch a default workspace and then looks up the user by email.
+	If the user is not found in the first workspace, tries the other workspaces.
 	"""
 	emp = frappe.get_doc("Employee", employee_id)
 	user_id = emp.get("user_id")
@@ -584,7 +586,10 @@ def get_employee_clockify_details(employee_id):
 	if not custom_user_id:
 		email = user_id
 		if custom_api_key and workspace_ids and email:
-			custom_user_id = get_clockify_user_id_by_email(custom_api_key, workspace_ids[0], email)
+			for ws_id in workspace_ids:
+				custom_user_id = get_clockify_user_id_by_email(custom_api_key, ws_id, email)
+				if custom_user_id:
+					break
 
 	return (custom_api_key, custom_user_id, workspace_ids, emp, user_id)
 
@@ -1793,22 +1798,17 @@ def process_project_breakdown(group_one, user_id):
 	for project in group_one:
 		project_info = {
 			"project_name": project["name"],
-			"total_duration": 0,
+			"total_duration": flt(project["duration"] / 3600,2),
 			"tasks": []
 		}
 
 		for task in project.get("children", []):
-			task_duration = 0
-			for child in task.get("children", []):
-				if child["_id"] == user_id:
-					task_duration = child["duration"] / 3600
-					break  # stop after finding user's entry
+			task_duration = flt(task["duration"] / 3600,2)
 			task_info = {
 				"task_name": task.get("name", "Unnamed"),
 				"task_duration": task_duration
 			}
 			project_info["tasks"].append(task_info)
-			project_info["total_duration"] += task_duration
 
 		project_breakdown.append(project_info)
 		
@@ -1925,7 +1925,7 @@ def get_clockify_report_task_id(workspace_id, start_date, end_date, user_id, api
 		},
 		"summaryFilter": {
 			"sortColumn": "DURATION",
-			"groups": ["PROJECT", "TASK", "USER"],
+			"groups": ["PROJECT", "TASK", "TIMEENTRY"],
 			"summaryChartType": "PROJECT"
 		}
 	}
