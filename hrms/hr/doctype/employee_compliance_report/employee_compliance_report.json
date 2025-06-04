@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "ECR-EMP-.YYYY.-.#####",
  "creation": "2025-04-17 14:20:06.370134",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -114,11 +115,17 @@
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2025-05-23 16:02:48.044528",
+ "links": [
+  {
+   "link_doctype": "Timesheet",
+   "link_fieldname": "employee_compliance_report"
+  }
+ ],
+ "modified": "2025-06-03 11:58:45.925881",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Compliance Report",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
@@ -135,7 +142,9 @@
   }
  ],
  "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "report_date"
 }

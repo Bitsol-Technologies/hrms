@@ -4,6 +4,7 @@
 
 from datetime import datetime
 
+from frappe.utils.data import flt
 import pytz
 
 import frappe
@@ -503,7 +504,7 @@ from frappe.utils import today, now, get_datetime
 
 
 def get_today_date_range():
-	# today_str = "2025-05-25"
+	# today_str = "2025-05-21"
 	today_str = today()  # e.g., "2025-03-18"
 	start_dt_str = f"{today_str} 00:00:00"
 	end_dt_str = f"{today_str} 23:59:59"
@@ -556,7 +557,7 @@ def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
 	Looks up the Clockify user ID for a given email within a workspace.
 	"""
 	headers = {"X-Api-Key": custom_api_key}
-	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users"
+	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users?page-size=500"
 	try:
 		response = requests.get(url, headers=headers)
 		response.raise_for_status()
@@ -573,6 +574,7 @@ def get_employee_clockify_details(employee_id):
 	"""
 	Retrieves Clockify details for an employee. If workspace or user ID is missing,
 	it uses the API key to fetch a default workspace and then looks up the user by email.
+	If the user is not found in the first workspace, tries the other workspaces.
 	"""
 	emp = frappe.get_doc("Employee", employee_id)
 	user_id = emp.get("user_id")
@@ -584,8 +586,10 @@ def get_employee_clockify_details(employee_id):
 	if not custom_user_id:
 		email = user_id
 		if custom_api_key and workspace_ids and email:
-			custom_user_id = get_clockify_user_id_by_email(custom_api_key, workspace_ids[0], email)
-
+			for ws_id in workspace_ids:
+				custom_user_id = get_clockify_user_id_by_email(custom_api_key, ws_id, email)
+				if custom_user_id:
+					break
 	return (custom_api_key, custom_user_id, workspace_ids, emp, user_id)
 
 
@@ -831,13 +835,14 @@ def send_compliance_report(non_compliant, today_str):
 		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\n"
 		header_text += f"Total Non-Compliant Employees: {len(non_compliant)}\n\n"
 		# Build the table as a code block
+		
 		report_message = build_compliance_report_table(non_compliant)
 		# Ensure message is within Slack's 4000-character limit
 		split_messages = split_long_message(header_text + report_message)
 
 	else:
 		# Build a plain text message
-		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for today."]
+		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\\nAll employees are compliant with Clockify logs for {today_str}."]
 
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
@@ -982,30 +987,37 @@ def is_public_holiday(date):
 # send compliance report to operations channel
 def send_daily_compliance_report():
 	"""
-	End-of-Day Compliance Report (to be run at 11 PM):
-	- Checks employee check-ins and Clockify logs to determine compliance.
-	- Sends a compliance report to Slack.
+	Daily Compliance Report for the PREVIOUS DAY (e.g., to be run at 8 AM next day):
+	- Checks employee check-ins and Clockify logs for the PREVIOUS day to determine compliance.
+	- Creates Employee Compliance Report documents in ERPNext.
+	- Note: Sending this report to Slack is handled by 'send_yesterday_compliance_report_to_slack'.
 	"""
-	today_str, _, _, start_dt, end_dt = get_today_date_range()
-	today_date = datetime.strptime(today_str, "%Y-%m-%d").date()
+	# Calculate for the previous day
+	report_date_str = frappe.utils.add_days(frappe.utils.nowdate(), -1) # Yesterday's date as string
+	report_date_obj = frappe.utils.getdate(report_date_str) # Yesterday's date as datetime.date object
+
+	# Define start and end datetime for the report_date_str
+	report_start_dt_str = f"{report_date_str} 00:00:00"
+	report_end_dt_str = f"{report_date_str} 23:59:59"
+	report_start_dt = get_datetime(report_start_dt_str)
+	report_end_dt = get_datetime(report_end_dt_str)
 
 	# Get system-level Clockify settings (API Key and comma-separated workspace IDs)
 	custom_api_key, workspace_ids = get_system_clockify_settings()
 	if not custom_api_key or not workspace_ids:
 		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
-		# print("Missing Clockify API Key or Workspace IDs in System Settings")
 		return
 
 	# Fetch active employees from ERPNext
 	active_employees = get_all_active_employees()
-	# fetch  users across all workspaces
+	# fetch users across all workspaces
 	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
 
 	report_data = []
-	is_holiday = is_public_holiday(today_date) or today_date.weekday() in (5, 6)
+	is_holiday = is_public_holiday(report_date_obj) or report_date_obj.weekday() in (5, 6)
 
 	for email, emp_data in workspace_users.items():
-		compliance_info = check_non_compliance(email, emp_data, custom_api_key, start_dt, end_dt)
+		compliance_info = check_non_compliance(email, emp_data, custom_api_key, report_start_dt, report_end_dt)
 		if is_holiday:
 			if not compliance_info["total_hours"]:
 				continue  # skip on holidays if employee has no hours otherwise, add to doctype
@@ -1025,8 +1037,8 @@ def send_daily_compliance_report():
 			})
 	
 	# send to erp
-	create_employee_compliance_reports(report_data, report_date=today_str)
-	# Send to channel at 9am nextday
+	create_employee_compliance_reports(report_data, report_date=report_date_str)
+	# Send to channel at 9am
 
 def send_yesterday_compliance_report_to_slack():
 	from datetime import datetime, timedelta
@@ -1793,22 +1805,17 @@ def process_project_breakdown(group_one, user_id):
 	for project in group_one:
 		project_info = {
 			"project_name": project["name"],
-			"total_duration": 0,
+			"total_duration": flt(project["duration"] / 3600,2),
 			"tasks": []
 		}
 
 		for task in project.get("children", []):
-			task_duration = 0
-			for child in task.get("children", []):
-				if child["_id"] == user_id:
-					task_duration = child["duration"] / 3600
-					break  # stop after finding user's entry
+			task_duration = flt(task["duration"] / 3600,2)
 			task_info = {
 				"task_name": task.get("name", "Unnamed"),
 				"task_duration": task_duration
 			}
 			project_info["tasks"].append(task_info)
-			project_info["total_duration"] += task_duration
 
 		project_breakdown.append(project_info)
 		
@@ -1925,7 +1932,7 @@ def get_clockify_report_task_id(workspace_id, start_date, end_date, user_id, api
 		},
 		"summaryFilter": {
 			"sortColumn": "DURATION",
-			"groups": ["PROJECT", "TASK", "USER"],
+			"groups": ["PROJECT", "TASK", "TIMEENTRY"],
 			"summaryChartType": "PROJECT"
 		}
 	}
