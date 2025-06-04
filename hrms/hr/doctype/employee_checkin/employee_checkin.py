@@ -832,8 +832,8 @@ def send_compliance_report(non_compliant, today_str):
 	target = get_compliance_channel()  # Management Channel
 	if non_compliant:
 		# Build a plain text header
-		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\\n"
-		header_text += f"Total Non-Compliant Employees: {len(non_compliant)}\\n\\n"
+		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\n"
+		header_text += f"Total Non-Compliant Employees: {len(non_compliant)}\n\n"
 		# Build the table as a code block
 		
 		report_message = build_compliance_report_table(non_compliant)
