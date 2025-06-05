@@ -692,7 +692,9 @@ def check_today_checkins():
 		  • If the check-in falls within a defined shift, check if current time is past the shift's end time.
 		  • If no shift applies to the check-in time, no reminder is sent.
 		  • Otherwise, checks if there is an active Clockify timer or logged entries.
-	  - If conditions suggest a reminder is needed, sends a Slack/Push notification.
+	  - If conditions suggest a reminder is needed:
+	    	sends a Slack/Push notification
+			creates a notfication log in ERPNext
 	"""
 
 	checkins = get_employee_checkins("IN")
@@ -792,6 +794,22 @@ def check_today_checkins():
 			push_title = "Clockify Timer Reminder"
 			send_push_to_user(email_user_id, push_title, reminder_message)
 			# frappe.log_info(f"Clockify Reminder: Sent to {email_user_id}.")
+
+			# Create Notification Log
+			log_entry = frappe.new_doc("Notification Log")
+			log_entry.document_type = "Employee Checkin"
+			log_entry.document_name = checkin.name
+			log_entry.subject = f"{push_title} sent to {emp.employee_name} - {emp.user_id}"
+			log_entry.email_content = reminder_message 
+			log_entry.type = "Alert"
+			log_entry.flags.ignore_permissions = True 
+			log_entry.insert() # Insert the document
+
+			frappe.db.set_value("Notification Log", log_entry.name, {
+				"for_user": email_user_id,
+				"read": 1
+			})
+			frappe.db.commit()
 
 		except Exception as e:
 			frappe.log_error(
@@ -1580,7 +1598,7 @@ def send_weekly_time_report():
 		# Send email as HTML
 		frappe.sendmail(
 			recipients=recipients,
-			subject=f"Weekly Time Tracking Report for {report['employee_name']}",
+			subject=f"Weekly HR Summary Report for {report['employee_name']}",
 			message=email_content,
 			now=True,
 		)
@@ -1591,6 +1609,21 @@ def send_weekly_time_report():
 			messages = split_long_message(slack_message)
 			for message in messages:
 				send_slack_message_for_employee([report['email']], message)
+		
+		# Create Notification Log
+		log_entry = frappe.new_doc("Notification Log")
+		log_entry.document_type = "Employee"
+		log_entry.document_name = report["employee"]
+		log_entry.subject = f"Weekly HR Summary Report for {report['employee_name']}"
+		log_entry.email_content = email_content
+		log_entry.type = "Alert"
+		log_entry.flags.ignore_permissions = True
+		log_entry.insert()
+		frappe.db.set_value("Notification Log", log_entry.name, {
+			"for_user": report["email"],
+			"read": 1
+		})
+		frappe.db.commit()
 
 def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, public_holidays_in_week, working_days_in_week):
 	"""
@@ -1612,18 +1645,9 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 
 	user_id = emp_data["user_id"]
 	workspaces = emp_data["workspace_ids"]
-	
-	# Get employee's shift type for expected hours
-	shift_type = get_employee_shift_type(emp_data["employee"])
-	if not shift_type:
-		return None, None, None
-		
-	try:
-		shift_type_doc = frappe.get_doc("Shift Type", shift_type)
-		expected_hours = shift_type_doc.working_hours_threshold_for_full_day
-	except Exception:
-		return None, None, None
-	
+	hr_settings = frappe.get_single("HR Settings")
+	expected_hours = hr_settings.standard_working_hours
+
 	# Initialize the employees weekly report for each workspace
 	employee_weekly_reports = []
 
@@ -1692,6 +1716,7 @@ def collect_employee_reports(workspace_users, start_date, end_date, custom_api_k
 		team_lead = frappe.db.get_value("Employee", {"user_id": email}, "team_lead")
 		if employee_weekly_reports:
 			employee_reports.append({
+				"employee": emp_data["employee"],
 				"employee_name": emp_data["employee_name"],
 				"email": email,
 				"team_lead": team_lead,
