@@ -510,18 +510,5 @@ def notify_employees_to_checkin_or_checkout():
 				title="Time to Check Out!",
 				message="Your shift is almost over. Please remember to check out. Have a great evening!",
 			)
-			log_entry = frappe.new_doc("Notification Log")
-			log_entry.document_type = "Employee"
-			log_entry.document_name = employee.name
-			log_entry.subject = f"Checkout Reminder Notifications"
-			log_entry.email_content = f"Employees notified for Check Out: {notify_checkout}"
-			log_entry.type = "Alert"
-			log_entry.flags.ignore_permissions = True
-			log_entry.insert() # Insert the document
-			frappe.db.set_value("Notification Log", log_entry.name, {
-				"for_user": employee.user_id, 
-				"read": 1
-			})
-			frappe.db.commit()
 		notification_logger.info(f"Employees to be notified for Check In: {notify_checkin}")
 		notification_logger.info(f"Employees to be notified for Check Out: {notify_checkout}")
