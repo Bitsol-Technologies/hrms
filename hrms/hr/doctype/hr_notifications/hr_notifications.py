@@ -31,10 +31,12 @@ class HRNotifications(Document):
 			self.send_push_notifications(users)
 
 	def send_email_notifications(self, users):
+		# Explicitly convert newline characters to HTML <br> tags for email clients
+		email_message = self.message.replace("\n", "<br>")
 		frappe.sendmail(
 			recipients=users,
 			subject=self.subject,
-			message=self.message,
+			message=email_message,
 			now=True
 		)
 		self.add_comment("Comment", f"Email notification sent to {', '.join(users)}")
