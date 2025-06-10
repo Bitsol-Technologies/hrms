@@ -1737,8 +1737,8 @@ def collect_employee_reports(workspace_users, start_date, end_date, custom_api_k
 def generate_summary_section(weekly_report, report):
 	"""Generate the summary section of the report (hours, late entries, leaves, WFH)"""
 	content = ""
-	content += f"<strong>Total Hours:</strong> {weekly_report['total_hours']:.2f}<br>"
-	content += f"<strong>Expected Hours:</strong> {weekly_report['expected_hours']:.2f}<br>"
+	content += f"<strong>Total Hours:</strong> {format_hours_to_hhmm(weekly_report['total_hours'])}<br>"
+	content += f"<strong>Expected Hours:</strong> {format_hours_to_hhmm(weekly_report['expected_hours'])}<br>"
 	content += f"<strong>Total Late Entries:</strong> {report['late_entries_count'] if report['late_entries_count'] else 0}<br>"
 	
 	# Calculate leaves
@@ -1757,10 +1757,10 @@ def generate_daily_breakdown_section(weekly_report):
 		formatted_date = date.strftime("%A, %B %d, %Y")
 		leave = f" ({day['leave_status']})" if day['leave_status'] in ["On Leave", "Half Day"] else ""
 		public_holiday = f" (Public Holiday)" if day['is_public_holiday'] else ""
-		content += f"<strong>{formatted_date}</strong>: {total_time:.2f} hours{leave}{public_holiday}<br>"
+		content += f"<strong>{formatted_date}</strong>: {format_hours_to_hhmm(total_time)} {leave}{public_holiday}<br>"
 
 		for project in day.get("projects", []):
-			content += f"- Project: <strong>{project['project_name']}</strong> — Time Spent: {project['time_spent']:.2f} hours<br>"
+			content += f"- Project: <strong>{project['project_name']}</strong> — Time Spent: {format_hours_to_hhmm(project['time_spent'])}<br>"
 	return content
 
 def generate_missing_days_section(weekly_report):
@@ -1777,9 +1777,9 @@ def generate_project_breakdown_section(weekly_report):
 	"""Generate the project breakdown section of the report"""
 	content = "<br><strong>Project Breakdown:</strong><br>"
 	for project in weekly_report.get("project_breakdown", []):
-		content += f"<strong>Project:</strong> {project['project_name']} — <strong>Total Duration:</strong> {project['total_duration']:.2f} hours<br>"
+		content += f"<strong>Project:</strong> {project['project_name']} — <strong>Total Duration:</strong> {format_hours_to_hhmm(project['total_duration'])}<br>"
 		for task in project.get("tasks", []):
-			content += f"— Task: {task['task_name']} — Duration: {task['task_duration']:.2f} hours<br>"
+			content += f"— Task: {task['task_name']} — Duration: {format_hours_to_hhmm(task['task_duration'])}<br>"
 	return content
 
 def generate_email_content(report):
@@ -2059,27 +2059,35 @@ def generate_weekly_compliance_email_content(report_data, non_compliant_employee
 	for employee in report_data:
 		# Calculate hours difference (logged - expected)
 		hours_diff = employee["logged_hours"] - employee["expected_hours"]
+		dw_diff = employee['daily_weekly_difference']
 		
 		# Determine status and color
 		if hours_diff >= 0:
 			status = "Compliant"
 			row_color = "#e6ffe6"  # Light green background
 			text_color = "#006600"  # Dark green text
-			hours_diff_display = f"+{hours_diff:.2f}" if hours_diff > 0 else "0.00"
+			hours_diff_display = f"+{format_hours_to_hhmm(hours_diff)}"
 		else:
 			status = "Non-Compliant"
 			row_color = "#ffe6e6"  # Light red background
 			text_color = "#cc0000"  # Dark red text
-			hours_diff_display = f"{hours_diff:.2f}"
+			hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
+
+		if dw_diff >0:
+			# daily reports are behind clockify hours
+			dw_diff_display = f"-{format_hours_to_hhmm(dw_diff)}"
+		else:
+			# daily reports are ahead of clockify hours
+			dw_diff_display = f"+{format_hours_to_hhmm(abs(dw_diff))}"
 
 		email_content += f"<tr style='background-color: {row_color}; color: {text_color};'>"
 		email_content += f"<td>{employee['name']}</td>"
 		email_content += f"<td>{employee['working_days_in_week']}</td>"
-		email_content += f"<td>{employee['expected_hours']}</td>"
-		email_content += f"<td>{employee['logged_hours']}</td>"
+		email_content += f"<td>{format_hours_to_hhmm(employee['expected_hours'])}</td>"
+		email_content += f"<td>{format_hours_to_hhmm(employee['logged_hours'])}</td>"
 		email_content += f"<td>{hours_diff_display}</td>"
-		email_content += f"<td>{employee['logged_hours_daily_sum']}</td>"
-		email_content += f"<td>{employee['daily_weekly_difference']}</td>"
+		email_content += f"<td>{format_hours_to_hhmm(employee['logged_hours_daily_sum'])}</td>"
+		email_content += f"<td>{dw_diff_display}</td>"
 		email_content += f"<td>{status}</td>"
 		email_content += "</tr>"
 
@@ -2240,3 +2248,18 @@ def get_leave_count(employee, start_date, end_date):
 		current_date += timedelta(days=1)
 		
 	return leave_count
+
+def format_hours_to_hhmm(hours_float):
+	"""Converts a float representing hours into an 'Xh Ym' string, omitting zero values."""
+	if not isinstance(hours_float, (int, float)):
+		return "0h"
+	hours = int(hours_float)
+	minutes = int((hours_float * 60) % 60)
+	parts = []
+	if hours > 0:
+		parts.append(f"{hours}h")
+	if minutes > 0:
+		parts.append(f"{minutes}m")
+	if not parts:
+		return "0h"
+	return " ".join(parts)
