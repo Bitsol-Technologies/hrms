@@ -1,8 +1,7 @@
-# Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from frappe.utils.data import flt
 import pytz
@@ -1036,6 +1035,9 @@ def send_daily_compliance_report():
 
 	for email, emp_data in workspace_users.items():
 		compliance_info = check_non_compliance(email, emp_data, custom_api_key, report_start_dt, report_end_dt)
+		if not compliance_info:
+			continue
+
 		if is_holiday:
 			if not compliance_info["total_hours"]:
 				continue  # skip on holidays if employee has no hours otherwise, add to doctype
@@ -1224,8 +1226,9 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	# Fetch Shift Type linked to the employee (using the first shift found)
 	shift_type = get_employee_shift_type(employee_id)
 	if not shift_type:
+		print("No shift assigned or no valid shift found for", employee_id)
 		# If no shift assigned or no valid shift found, skip the compliance check
-		return compliance_data
+		return None
 
 	# Fetch shift type thresholds
 	try:
@@ -1349,8 +1352,8 @@ def create_employee_compliance_reports(entries, report_date=None):
 			"checkout": e["checkout"],
 			"reason": e["reason"],
 			"compliant": e["is_compliant"],
-			"total_hours": e["total_hours"],
-			"expected_hours": e["expected_hours"],
+			"total_hours": timedelta(hours=e.get("total_hours", 0)),
+			"expected_hours": timedelta(hours=e.get("expected_hours", 0)),
 			"leave_type": e["leave_type"],
 			"late_entry": e["is_late_entry"],
 			"wfh": e["is_wfh"]
@@ -1781,7 +1784,7 @@ def generate_project_breakdown_section(weekly_report):
 
 def generate_email_content(report):
 	"""Generate the complete email content for a report"""
-	email_content = f"<h3>Weekly Time Tracking Report for {report['employee_name']}</h3><br>"
+	email_content = f"<h3>Weekly HR Summary Report for {report['employee_name']}</h3><br>"
 
 	for workspace_report in report.get("weekly_reports", []):
 		weekly_report = workspace_report["weekly_report"]
