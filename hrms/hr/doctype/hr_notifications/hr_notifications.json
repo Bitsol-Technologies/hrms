@@ -6,6 +6,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "column_break_udwo",
   "user",
   "subject",
   "send_email",
@@ -15,6 +16,13 @@
   "push_message"
  ],
  "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Table MultiSelect",
+   "label": "User",
+   "options": "Notification User",
+   "reqd": 1
+  },
   {
    "fieldname": "subject",
    "fieldtype": "Text",
@@ -27,26 +35,13 @@
    "fieldtype": "Text",
    "in_list_view": 1,
    "label": "Message",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.send_email || doc.send_slack"
   },
   {
-   "fieldname": "push_message",
-   "fieldtype": "Text",
-   "label": "Push Message",
-   "mandatory_depends_on": "eval:doc.send_push == 1;"
-  },
-  {
-   "default": "0",
-   "fieldname": "send_push",
+   "default": "1",
+   "fieldname": "send_email",
    "fieldtype": "Check",
-   "label": "Send Push Notification"
-  },
-  {
-   "fieldname": "user",
-   "fieldtype": "Table MultiSelect",
-   "label": "User",
-   "options": "Notification User",
-   "reqd": 1
+   "label": "Send Email"
   },
   {
    "default": "0",
@@ -55,16 +50,26 @@
    "label": "Send Slack Notification"
   },
   {
-   "default": "1",
-   "fieldname": "send_email",
+   "default": "0",
+   "fieldname": "send_push",
    "fieldtype": "Check",
-   "label": "Send Email"
+   "label": "Send Push Notification"
+  },
+  {
+   "fieldname": "push_message",
+   "fieldtype": "Text",
+   "label": "Push Message",
+   "mandatory_depends_on": "eval:doc.send_push == 1;"
+  },
+  {
+   "fieldname": "column_break_udwo",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-06-10 16:28:34.446783",
+ "modified": "2025-06-10 17:56:34.953354",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR Notifications",
