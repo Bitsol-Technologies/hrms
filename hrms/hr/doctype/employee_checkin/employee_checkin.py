@@ -860,7 +860,7 @@ def send_compliance_report(non_compliant, today_str):
 
 	else:
 		# Build a plain text message
-		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\\nAll employees are compliant with Clockify logs for {today_str}."]
+		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for {today_str}."]
 
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
