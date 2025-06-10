@@ -484,19 +484,14 @@ def notify_employees_to_checkin_or_checkout():
 				title="Don’t Forget to Check In!",
 				message="Good morning! Please remember to check in for your shift. Have a productive day!",
 			)
-			log_entry = frappe.new_doc("Notification Log")
-			log_entry.document_type = "Employee"
-			log_entry.document_name = employee.name
-			log_entry.subject = f"Checkin in Reminder Notifications"
-			log_entry.email_content = f"Employees notified for Check In: {notify_checkin}"
-			log_entry.type = "Alert"
-			log_entry.flags.ignore_permissions = True 
-			log_entry.insert() # Insert the document
-			frappe.db.set_value("Notification Log", log_entry.name, {
-				"for_user": employee.user_id, 
-				"read": 1
-			})
-			frappe.db.commit()
+			frappe.get_doc({
+				"doctype": "HR Notifications",
+				"subject": f"Checkin in Reminder Notification for Employee {employee.employee_name}",
+				"message": f"{employee.employee_name} notified for Check In",
+				"user": [{"user": employee.user_id}],
+				"send_push": 0,
+				"send_slack": 0
+			}).insert()
 		employees_closer_to_checkout = get_assigned_employees_with_specified_threshold(
 			shift.name, end_time=time_difference_out
 		)

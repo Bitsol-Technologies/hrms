@@ -787,28 +787,21 @@ def check_today_checkins():
 				frappe.log_error(message=msg, title="Clockify Reminder Check")
 				continue
 
-			send_slack_message_for_employee([email_user_id], reminder_message)
-
-			from fcm_notification.send_notification import send_push_to_user
 			push_title = "Clockify Timer Reminder"
-			send_push_to_user(email_user_id, push_title, reminder_message)
-			# frappe.log_info(f"Clockify Reminder: Sent to {email_user_id}.")
-
+			
 			# Create Notification Log
-			log_entry = frappe.new_doc("Notification Log")
-			log_entry.document_type = "Employee Checkin"
-			log_entry.document_name = checkin.name
-			log_entry.subject = f"{push_title} sent to {emp.employee_name} - {emp.user_id}"
-			log_entry.email_content = reminder_message 
-			log_entry.type = "Alert"
-			log_entry.flags.ignore_permissions = True 
-			log_entry.insert() # Insert the document
-
-			frappe.db.set_value("Notification Log", log_entry.name, {
-				"for_user": email_user_id,
-				"read": 1
-			})
-			frappe.db.commit()
+			hr_notf = frappe.get_doc(
+				{
+				"doctype": "HR Notifications",
+				"subject": f"{push_title} for {emp.employee_name}",
+				"message": reminder_message,
+				"push_message": reminder_message,
+				"user": [{"user": email_user_id}],
+				"send_push": 1,
+				"send_slack": 1,
+				"send_email": 0
+				}
+			).insert(ignore_permissions=True)
 
 		except Exception as e:
 			frappe.log_error(
@@ -1608,26 +1601,22 @@ def send_weekly_time_report():
 		)
 
 		# Send Slack message
-		if report['email']:
-			slack_message = html_to_slack_plaintext(email_content)
-			messages = split_long_message(slack_message)
-			for message in messages:
-				send_slack_message_for_employee([report['email']], message)
-		
+		slack_message = html_to_slack_plaintext(email_content)
+
 		# Create Notification Log
-		log_entry = frappe.new_doc("Notification Log")
-		log_entry.document_type = "Employee"
-		log_entry.document_name = report["employee"]
-		log_entry.subject = f"Weekly HR Summary Report for {report['employee_name']}"
-		log_entry.email_content = email_content
-		log_entry.type = "Alert"
-		log_entry.flags.ignore_permissions = True
-		log_entry.insert()
-		frappe.db.set_value("Notification Log", log_entry.name, {
-			"for_user": report["email"],
-			"read": 1
-		})
-		frappe.db.commit()
+		hr_notf = frappe.get_doc(
+			{
+				"doctype": "HR Notifications",
+				"subject": f"Weekly HR Summary Report for {report['employee_name']}",
+				"message": slack_message,
+				"user": [{"user": report["email"]}],
+				"send_push": 0,
+				"send_slack": 1,
+				"send_email": 0
+			}
+		).insert(ignore_permissions=True)
+
+
 
 def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, public_holidays_in_week, working_days_in_week):
 	"""

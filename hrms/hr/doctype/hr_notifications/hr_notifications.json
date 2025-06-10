@@ -1,0 +1,91 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "HR-NOTF-.#####",
+ "creation": "2025-06-10 14:03:51.213822",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "subject",
+  "send_email",
+  "send_slack",
+  "message",
+  "send_push",
+  "push_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "subject",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Subject",
+   "reqd": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Message",
+   "reqd": 1
+  },
+  {
+   "fieldname": "push_message",
+   "fieldtype": "Text",
+   "label": "Push Message",
+   "mandatory_depends_on": "eval:doc.send_push == 1;"
+  },
+  {
+   "default": "0",
+   "fieldname": "send_push",
+   "fieldtype": "Check",
+   "label": "Send Push Notification"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Table MultiSelect",
+   "label": "User",
+   "options": "Notification User",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "send_slack",
+   "fieldtype": "Check",
+   "label": "Send Slack Notification"
+  },
+  {
+   "default": "1",
+   "fieldname": "send_email",
+   "fieldtype": "Check",
+   "label": "Send Email"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-06-10 16:28:34.446783",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "HR Notifications",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
