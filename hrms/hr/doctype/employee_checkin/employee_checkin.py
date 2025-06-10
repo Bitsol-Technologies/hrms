@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from frappe.utils.data import flt
 import pytz
@@ -1350,8 +1350,8 @@ def create_employee_compliance_reports(entries, report_date=None):
 			"checkout": e["checkout"],
 			"reason": e["reason"],
 			"compliant": e["is_compliant"],
-			"total_hours": timedelta(hours=e.get("total_hours", 0)),
-			"expected_hours": timedelta(hours=e.get("expected_hours", 0)),
+			"total_hours": e["total_hours"],
+			"expected_hours": e["expected_hours"],
 			"leave_type": e["leave_type"],
 			"late_entry": e["is_late_entry"],
 			"wfh": e["is_wfh"]
