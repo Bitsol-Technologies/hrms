@@ -1011,8 +1011,7 @@ def send_daily_compliance_report():
 	- Note: Sending this report to Slack is handled by 'send_yesterday_compliance_report_to_slack'.
 	"""
 	# Calculate for the previous day
-	report_date_str = frappe.utils.nowdate()
-	# report_date_str = frappe.utils.add_days(frappe.utils.nowdate(), -1) # Yesterday's date as string
+	report_date_str = frappe.utils.add_days(frappe.utils.nowdate(), -1) # Yesterday's date as string
 	report_date_obj = frappe.utils.getdate(report_date_str) # Yesterday's date as datetime.date object
 
 	# Define start and end datetime for the report_date_str
