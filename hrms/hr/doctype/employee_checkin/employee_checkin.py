@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from frappe.utils.data import flt
 import pytz
@@ -1011,7 +1011,8 @@ def send_daily_compliance_report():
 	- Note: Sending this report to Slack is handled by 'send_yesterday_compliance_report_to_slack'.
 	"""
 	# Calculate for the previous day
-	report_date_str = frappe.utils.add_days(frappe.utils.nowdate(), -1) # Yesterday's date as string
+	report_date_str = frappe.utils.nowdate()
+	# report_date_str = frappe.utils.add_days(frappe.utils.nowdate(), -1) # Yesterday's date as string
 	report_date_obj = frappe.utils.getdate(report_date_str) # Yesterday's date as datetime.date object
 
 	# Define start and end datetime for the report_date_str
@@ -1349,8 +1350,8 @@ def create_employee_compliance_reports(entries, report_date=None):
 			"checkout": e["checkout"],
 			"reason": e["reason"],
 			"compliant": e["is_compliant"],
-			"total_hours": e["total_hours"],
-			"expected_hours": e["expected_hours"],
+			"total_hours": timedelta(hours=e.get("total_hours", 0)),
+			"expected_hours": timedelta(hours=e.get("expected_hours", 0)),
 			"leave_type": e["leave_type"],
 			"late_entry": e["is_late_entry"],
 			"wfh": e["is_wfh"]
@@ -1567,7 +1568,8 @@ def send_weekly_time_report():
 	# active_employees = get_all_active_employees()
 	active_employees = [
 		{"user_id": "laiba.masood@bitsol.tech", "name": "HR-EMP-00056"},
-		{"user_id": "wajahat@bitsol.tech", "name": "HR-EMP-00058"}
+		{"user_id": "wajahat@bitsol.tech", "name": "HR-EMP-00058"},
+		{"user_id": "rizwan@bitsol.tech", "name": "HR-EMP-00003"}
 	]
 	# Fetch users across all workspaces
 	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
@@ -1645,6 +1647,9 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 
 	user_id = emp_data["user_id"]
 	workspaces = emp_data["workspace_ids"]
+	shift_type = get_employee_shift_type(emp_data["employee"])
+	if not shift_type:
+		return None, None, None
 	hr_settings = frappe.get_single("HR Settings")
 	expected_hours = hr_settings.standard_working_hours
 
@@ -2097,6 +2102,9 @@ def process_weekly_employee_compliance_data(emp_data, start_date, end_date, cust
 	employee_name = emp_data["employee_name"]
 	user_id = emp_data["user_id"]
 	workspaces = emp_data["workspace_ids"]
+	shift_type = get_employee_shift_type(emp_data["employee"])
+	if not shift_type:
+		return None
 	leave_count = get_leave_count(emp_data["employee"], start_date, end_date)
 	working_days_in_week = working_days_in_week - leave_count
 	hr_settings = frappe.get_single("HR Settings")
@@ -2116,12 +2124,14 @@ def process_weekly_employee_compliance_data(emp_data, start_date, end_date, cust
 	hours_difference = expected_hours - total_logged_hours
 
 	# Get daily sum from Employee Compliance Report
-	daily_sum = frappe.db.sql("""
+	daily_sum_in_seconds = frappe.db.sql("""
 		SELECT SUM(total_hours) as daily_sum
 		FROM `tabEmployee Compliance Report`
 		WHERE employee = %s
 		AND report_date BETWEEN %s AND %s
 	""", (emp_data["employee"], start_date.date(), end_date.date()), as_dict=True)[0].get('daily_sum') or 0
+	
+	daily_sum = (daily_sum_in_seconds or 0) / 3600
 	
 	# Calculate difference between logged hours and daily sum
 	daily_weekly_difference = total_logged_hours - daily_sum
