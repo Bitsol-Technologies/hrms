@@ -484,6 +484,14 @@ def notify_employees_to_checkin_or_checkout():
 				title="Don’t Forget to Check In!",
 				message="Good morning! Please remember to check in for your shift. Have a productive day!",
 			)
+			frappe.get_doc({
+				"doctype": "HR Notifications",
+				"subject": f"Checkin in Reminder Notification for Employee {employee.employee_name}",
+				"message": f"{employee.employee_name} notified for Check In",
+				"user": [{"user": employee.user_id}],
+				"send_push": 0,
+				"send_slack": 0
+			}).insert()
 		employees_closer_to_checkout = get_assigned_employees_with_specified_threshold(
 			shift.name, end_time=time_difference_out
 		)

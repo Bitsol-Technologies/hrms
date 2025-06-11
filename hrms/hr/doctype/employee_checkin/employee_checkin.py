@@ -1,8 +1,7 @@
-# Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from frappe.utils.data import flt
 import pytz
@@ -692,7 +691,9 @@ def check_today_checkins():
 		  • If the check-in falls within a defined shift, check if current time is past the shift's end time.
 		  • If no shift applies to the check-in time, no reminder is sent.
 		  • Otherwise, checks if there is an active Clockify timer or logged entries.
-	  - If conditions suggest a reminder is needed, sends a Slack/Push notification.
+	  - If conditions suggest a reminder is needed:
+	    	sends a Slack/Push notification
+			creates a notfication log in ERPNext
 	"""
 
 	checkins = get_employee_checkins("IN")
@@ -786,12 +787,21 @@ def check_today_checkins():
 				frappe.log_error(message=msg, title="Clockify Reminder Check")
 				continue
 
-			send_slack_message_for_employee([email_user_id], reminder_message)
-
-			from fcm_notification.send_notification import send_push_to_user
 			push_title = "Clockify Timer Reminder"
-			send_push_to_user(email_user_id, push_title, reminder_message)
-			# frappe.log_info(f"Clockify Reminder: Sent to {email_user_id}.")
+			
+			# Create Notification Log
+			hr_notf = frappe.get_doc(
+				{
+				"doctype": "HR Notifications",
+				"subject": f"{push_title} for {emp.employee_name}",
+				"message": reminder_message,
+				"push_message": reminder_message,
+				"user": [{"user": email_user_id}],
+				"send_push": 1,
+				"send_slack": 1,
+				"send_email": 0
+				}
+			).insert(ignore_permissions=True)
 
 		except Exception as e:
 			frappe.log_error(
@@ -842,7 +852,7 @@ def send_compliance_report(non_compliant, today_str):
 
 	else:
 		# Build a plain text message
-		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\\nAll employees are compliant with Clockify logs for {today_str}."]
+		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for {today_str}."]
 
 	for msg in split_messages:
 		send_slack_message_for_employee([target], msg)
@@ -1018,6 +1028,9 @@ def send_daily_compliance_report():
 
 	for email, emp_data in workspace_users.items():
 		compliance_info = check_non_compliance(email, emp_data, custom_api_key, report_start_dt, report_end_dt)
+		if not compliance_info:
+			continue
+
 		if is_holiday:
 			if not compliance_info["total_hours"]:
 				continue  # skip on holidays if employee has no hours otherwise, add to doctype
@@ -1206,8 +1219,9 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	# Fetch Shift Type linked to the employee (using the first shift found)
 	shift_type = get_employee_shift_type(employee_id)
 	if not shift_type:
+		print("No shift assigned or no valid shift found for", employee_id)
 		# If no shift assigned or no valid shift found, skip the compliance check
-		return compliance_data
+		return None
 
 	# Fetch shift type thresholds
 	try:
@@ -1331,8 +1345,8 @@ def create_employee_compliance_reports(entries, report_date=None):
 			"checkout": e["checkout"],
 			"reason": e["reason"],
 			"compliant": e["is_compliant"],
-			"total_hours": e["total_hours"],
-			"expected_hours": e["expected_hours"],
+			"total_hours": timedelta(hours=e.get("total_hours", 0)),
+			"expected_hours": timedelta(hours=e.get("expected_hours", 0)),
 			"leave_type": e["leave_type"],
 			"late_entry": e["is_late_entry"],
 			"wfh": e["is_wfh"]
@@ -1549,7 +1563,8 @@ def send_weekly_time_report():
 	# active_employees = get_all_active_employees()
 	active_employees = [
 		{"user_id": "laiba.masood@bitsol.tech", "name": "HR-EMP-00056"},
-		{"user_id": "wajahat@bitsol.tech", "name": "HR-EMP-00058"}
+		{"user_id": "wajahat@bitsol.tech", "name": "HR-EMP-00058"},
+		{"user_id": "rizwan@bitsol.tech", "name": "HR-EMP-00003"}
 	]
 	# Fetch users across all workspaces
 	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
@@ -1580,17 +1595,28 @@ def send_weekly_time_report():
 		# Send email as HTML
 		frappe.sendmail(
 			recipients=recipients,
-			subject=f"Weekly Time Tracking Report for {report['employee_name']}",
+			subject=f"Weekly HR Summary Report for {report['employee_name']}",
 			message=email_content,
 			now=True,
 		)
 
 		# Send Slack message
-		if report['email']:
-			slack_message = html_to_slack_plaintext(email_content)
-			messages = split_long_message(slack_message)
-			for message in messages:
-				send_slack_message_for_employee([report['email']], message)
+		slack_message = html_to_slack_plaintext(email_content)
+
+		# Create Notification Log
+		hr_notf = frappe.get_doc(
+			{
+				"doctype": "HR Notifications",
+				"subject": f"Weekly HR Summary Report for {report['employee_name']}",
+				"message": slack_message,
+				"user": [{"user": report["email"]}],
+				"send_push": 0,
+				"send_slack": 1,
+				"send_email": 0
+			}
+		).insert(ignore_permissions=True)
+
+
 
 def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, public_holidays_in_week, working_days_in_week):
 	"""
@@ -1612,18 +1638,12 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 
 	user_id = emp_data["user_id"]
 	workspaces = emp_data["workspace_ids"]
-	
-	# Get employee's shift type for expected hours
 	shift_type = get_employee_shift_type(emp_data["employee"])
 	if not shift_type:
 		return None, None, None
-		
-	try:
-		shift_type_doc = frappe.get_doc("Shift Type", shift_type)
-		expected_hours = shift_type_doc.working_hours_threshold_for_full_day
-	except Exception:
-		return None, None, None
-	
+	hr_settings = frappe.get_single("HR Settings")
+	expected_hours = hr_settings.standard_working_hours
+
 	# Initialize the employees weekly report for each workspace
 	employee_weekly_reports = []
 
@@ -1692,6 +1712,7 @@ def collect_employee_reports(workspace_users, start_date, end_date, custom_api_k
 		team_lead = frappe.db.get_value("Employee", {"user_id": email}, "team_lead")
 		if employee_weekly_reports:
 			employee_reports.append({
+				"employee": emp_data["employee"],
 				"employee_name": emp_data["employee_name"],
 				"email": email,
 				"team_lead": team_lead,
@@ -1705,8 +1726,8 @@ def collect_employee_reports(workspace_users, start_date, end_date, custom_api_k
 def generate_summary_section(weekly_report, report):
 	"""Generate the summary section of the report (hours, late entries, leaves, WFH)"""
 	content = ""
-	content += f"<strong>Total Hours:</strong> {weekly_report['total_hours']:.2f}<br>"
-	content += f"<strong>Expected Hours:</strong> {weekly_report['expected_hours']:.2f}<br>"
+	content += f"<strong>Total Hours:</strong> {format_hours_to_hhmm(weekly_report['total_hours'])}<br>"
+	content += f"<strong>Expected Hours:</strong> {format_hours_to_hhmm(weekly_report['expected_hours'])}<br>"
 	content += f"<strong>Total Late Entries:</strong> {report['late_entries_count'] if report['late_entries_count'] else 0}<br>"
 	
 	# Calculate leaves
@@ -1725,10 +1746,10 @@ def generate_daily_breakdown_section(weekly_report):
 		formatted_date = date.strftime("%A, %B %d, %Y")
 		leave = f" ({day['leave_status']})" if day['leave_status'] in ["On Leave", "Half Day"] else ""
 		public_holiday = f" (Public Holiday)" if day['is_public_holiday'] else ""
-		content += f"<strong>{formatted_date}</strong>: {total_time:.2f} hours{leave}{public_holiday}<br>"
+		content += f"<strong>{formatted_date}</strong>: {format_hours_to_hhmm(total_time)} {leave}{public_holiday}<br>"
 
 		for project in day.get("projects", []):
-			content += f"- Project: <strong>{project['project_name']}</strong> — Time Spent: {project['time_spent']:.2f} hours<br>"
+			content += f"- Project: <strong>{project['project_name']}</strong> — Time Spent: {format_hours_to_hhmm(project['time_spent'])}<br>"
 	return content
 
 def generate_missing_days_section(weekly_report):
@@ -1745,14 +1766,14 @@ def generate_project_breakdown_section(weekly_report):
 	"""Generate the project breakdown section of the report"""
 	content = "<br><strong>Project Breakdown:</strong><br>"
 	for project in weekly_report.get("project_breakdown", []):
-		content += f"<strong>Project:</strong> {project['project_name']} — <strong>Total Duration:</strong> {project['total_duration']:.2f} hours<br>"
+		content += f"<strong>Project:</strong> {project['project_name']} — <strong>Total Duration:</strong> {format_hours_to_hhmm(project['total_duration'])}<br>"
 		for task in project.get("tasks", []):
-			content += f"— Task: {task['task_name']} — Duration: {task['task_duration']:.2f} hours<br>"
+			content += f"— Task: {task['task_name']} — Duration: {format_hours_to_hhmm(task['task_duration'])}<br>"
 	return content
 
 def generate_email_content(report):
 	"""Generate the complete email content for a report"""
-	email_content = f"<h3>Weekly Time Tracking Report for {report['employee_name']}</h3><br>"
+	email_content = f"<h3>Weekly HR Summary Report for {report['employee_name']}</h3><br>"
 
 	for workspace_report in report.get("weekly_reports", []):
 		weekly_report = workspace_report["weekly_report"]
@@ -2027,27 +2048,35 @@ def generate_weekly_compliance_email_content(report_data, non_compliant_employee
 	for employee in report_data:
 		# Calculate hours difference (logged - expected)
 		hours_diff = employee["logged_hours"] - employee["expected_hours"]
+		dw_diff = employee['daily_weekly_difference']
 		
 		# Determine status and color
 		if hours_diff >= 0:
 			status = "Compliant"
 			row_color = "#e6ffe6"  # Light green background
 			text_color = "#006600"  # Dark green text
-			hours_diff_display = f"+{hours_diff:.2f}" if hours_diff > 0 else "0.00"
+			hours_diff_display = f"+{format_hours_to_hhmm(hours_diff)}"
 		else:
 			status = "Non-Compliant"
 			row_color = "#ffe6e6"  # Light red background
 			text_color = "#cc0000"  # Dark red text
-			hours_diff_display = f"{hours_diff:.2f}"
+			hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
+
+		if dw_diff >0:
+			# daily reports are behind clockify hours
+			dw_diff_display = f"-{format_hours_to_hhmm(dw_diff)}"
+		else:
+			# daily reports are ahead of clockify hours
+			dw_diff_display = f"+{format_hours_to_hhmm(abs(dw_diff))}"
 
 		email_content += f"<tr style='background-color: {row_color}; color: {text_color};'>"
 		email_content += f"<td>{employee['name']}</td>"
 		email_content += f"<td>{employee['working_days_in_week']}</td>"
-		email_content += f"<td>{employee['expected_hours']}</td>"
-		email_content += f"<td>{employee['logged_hours']}</td>"
+		email_content += f"<td>{format_hours_to_hhmm(employee['expected_hours'])}</td>"
+		email_content += f"<td>{format_hours_to_hhmm(employee['logged_hours'])}</td>"
 		email_content += f"<td>{hours_diff_display}</td>"
-		email_content += f"<td>{employee['logged_hours_daily_sum']}</td>"
-		email_content += f"<td>{employee['daily_weekly_difference']}</td>"
+		email_content += f"<td>{format_hours_to_hhmm(employee['logged_hours_daily_sum'])}</td>"
+		email_content += f"<td>{dw_diff_display}</td>"
 		email_content += f"<td>{status}</td>"
 		email_content += "</tr>"
 
@@ -2072,6 +2101,9 @@ def process_weekly_employee_compliance_data(emp_data, start_date, end_date, cust
 	employee_name = emp_data["employee_name"]
 	user_id = emp_data["user_id"]
 	workspaces = emp_data["workspace_ids"]
+	shift_type = get_employee_shift_type(emp_data["employee"])
+	if not shift_type:
+		return None
 	leave_count = get_leave_count(emp_data["employee"], start_date, end_date)
 	working_days_in_week = working_days_in_week - leave_count
 	hr_settings = frappe.get_single("HR Settings")
@@ -2091,12 +2123,14 @@ def process_weekly_employee_compliance_data(emp_data, start_date, end_date, cust
 	hours_difference = expected_hours - total_logged_hours
 
 	# Get daily sum from Employee Compliance Report
-	daily_sum = frappe.db.sql("""
+	daily_sum_in_seconds = frappe.db.sql("""
 		SELECT SUM(total_hours) as daily_sum
 		FROM `tabEmployee Compliance Report`
 		WHERE employee = %s
 		AND report_date BETWEEN %s AND %s
 	""", (emp_data["employee"], start_date.date(), end_date.date()), as_dict=True)[0].get('daily_sum') or 0
+	
+	daily_sum = (daily_sum_in_seconds or 0) / 3600
 	
 	# Calculate difference between logged hours and daily sum
 	daily_weekly_difference = total_logged_hours - daily_sum
@@ -2203,3 +2237,18 @@ def get_leave_count(employee, start_date, end_date):
 		current_date += timedelta(days=1)
 		
 	return leave_count
+
+def format_hours_to_hhmm(hours_float):
+	"""Converts a float representing hours into an 'Xh Ym' string, omitting zero values."""
+	if not isinstance(hours_float, (int, float)):
+		return "0h"
+	hours = int(hours_float)
+	minutes = int((hours_float * 60) % 60)
+	parts = []
+	if hours > 0:
+		parts.append(f"{hours}h")
+	if minutes > 0:
+		parts.append(f"{minutes}m")
+	if not parts:
+		return "0h"
+	return " ".join(parts)
