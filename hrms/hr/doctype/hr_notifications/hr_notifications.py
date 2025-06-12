@@ -53,7 +53,8 @@ class HRNotifications(Document):
 	def send_push_notifications(self, users):
 		try:
 			for user in users:
-				send_push_to_user(user, self.subject, self.push_message)
+				send_push_to_user(user, self.subject, self.message)
 			self.add_comment("Comment", f"Push notification sent to {', '.join(users)}")
 		except Exception as e:
 			self.log_error("Failed to send Push notification", frappe.get_traceback())
+

@@ -795,7 +795,7 @@ def check_today_checkins():
 				"doctype": "HR Notifications",
 				"subject": f"{push_title} for {emp.employee_name}",
 				"message": reminder_message,
-				"push_message": reminder_message,
+				"type": "Clockify Time Log Reminder",
 				"user": [{"user": email_user_id}],
 				"send_push": 1,
 				"send_slack": 1,
