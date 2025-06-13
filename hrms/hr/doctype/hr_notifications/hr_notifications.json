@@ -66,14 +66,14 @@
    "fieldname": "type",
    "fieldtype": "Select",
    "label": "Reminder Type",
-   "options": "Daily Check-in Reminder\nClockify Time Log Reminder\nGoals Meeting Reminder\nApply For Leave\nApply For WFH\nMonthly Assessment Form Filling\nTeam lead Feedback Form Filling\nMid-day Status\nDay End Status\nDay Start Plan\nPost Breaks in Channel\nInactivity Reminder\nTask Reminder\nOther",
+   "options": "Daily Check-in Reminder\nClockify Time Log Reminder\nGoals Meeting Reminder\nApply For Leave\nApply For WFH\nMonthly Assessment Form Filling\nTeam Lead Feedback Form Filling\nMid-Day Status\nDay End Status\nDay Start Plan\nPost Breaks in Channel\nInactivity Reminder\nTask Reminder\nOther",
    "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-06-12 15:49:53.821252",
+ "modified": "2025-06-13 17:33:57.170330",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR Notifications",
