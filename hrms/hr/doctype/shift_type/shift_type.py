@@ -488,6 +488,7 @@ def notify_employees_to_checkin_or_checkout():
 				"doctype": "HR Notifications",
 				"subject": f"Checkin in Reminder Notification for Employee {employee.employee_name}",
 				"message": f"{employee.employee_name} notified for Check In",
+				"type":"Daily Check-in Reminder",
 				"user": [{"user": employee.user_id}],
 				"send_push": 0,
 				"send_slack": 0

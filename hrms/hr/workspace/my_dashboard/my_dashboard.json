@@ -13,7 +13,7 @@
    "label": "Leaves Balance"
   }
  ],
- "content": "[{\"id\":\"YAGFY6T9C4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">My Dashboard</span>\",\"col\":12}},{\"id\":\"A0i6I7rqzA\",\"type\":\"card\",\"data\":{\"card_name\":\"Shortcuts\",\"col\":4}},{\"id\":\"RJqWkYFIsd\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Leaves\",\"col\":4}},{\"id\":\"M9Ek6fv54u\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Work From Home\",\"col\":4}},{\"id\":\"53T6Xjl5zF\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Stats</b></span>\",\"col\":12}},{\"id\":\"scOFuNX4k0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Late Entries (This Month)\",\"col\":4}},{\"id\":\"1fo_iApLJa\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Absent (This Month)\",\"col\":4}},{\"id\":\"unooIWWnf0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Present (This Month)\",\"col\":4}},{\"id\":\"OomnK34lj7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Early Exists (This Month)\",\"col\":4}},{\"id\":\"40xZ30Talp\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Medical</b></span>\",\"col\":12}},{\"id\":\"P-7o9g1D2X\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Allowed\",\"col\":4}},{\"id\":\"J6LNNKwuEM\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Availed\",\"col\":4}},{\"id\":\"CW0m8YosgJ\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Remaining Balance\",\"col\":4}},{\"id\":\"3Zqe-efTyS\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Medical Availed\",\"col\":12}},{\"id\":\"NnHmr2HOi0\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Leaves</b></span>\",\"col\":12}},{\"id\":\"Qzg_V0rXz0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Leaves Taken\",\"col\":4}},{\"id\":\"a-yWwiTrt0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Leaves Remainig\",\"col\":4}},{\"id\":\"ck7CIPwTr3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Allocated Leaves\",\"col\":4}},{\"id\":\"etaEJz2A1V\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Leaves Balance\",\"col\":12}},{\"id\":\"gEQ6xJbgpV\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Working Hours\",\"col\":12}},{\"id\":\"YzRF96YRG-\",\"type\":\"card\",\"data\":{\"card_name\":\"Assesments\",\"col\":4}}]",
+ "content": "[{\"id\":\"YAGFY6T9C4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">My Dashboard</span>\",\"col\":12}},{\"id\":\"A0i6I7rqzA\",\"type\":\"card\",\"data\":{\"card_name\":\"Shortcuts\",\"col\":4}},{\"id\":\"RJqWkYFIsd\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Leaves\",\"col\":4}},{\"id\":\"M9Ek6fv54u\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Work From Home\",\"col\":4}},{\"id\":\"53T6Xjl5zF\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Stats</b></span>\",\"col\":12}},{\"id\":\"1fo_iApLJa\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Absent (This Month)\",\"col\":4}},{\"id\":\"unooIWWnf0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Present (This Month)\",\"col\":4}},{\"id\":\"OomnK34lj7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Early Exists (This Month)\",\"col\":4}},{\"id\":\"Pjssiybs4p\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"HR Notifications(This Month)\",\"col\":4}},{\"id\":\"40xZ30Talp\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Medical</b></span>\",\"col\":12}},{\"id\":\"P-7o9g1D2X\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Allowed\",\"col\":4}},{\"id\":\"J6LNNKwuEM\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Availed\",\"col\":4}},{\"id\":\"CW0m8YosgJ\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Remaining Balance\",\"col\":4}},{\"id\":\"3Zqe-efTyS\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Medical Availed\",\"col\":12}},{\"id\":\"NnHmr2HOi0\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Leaves</b></span>\",\"col\":12}},{\"id\":\"etaEJz2A1V\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Leaves Balance\",\"col\":12}},{\"id\":\"gEQ6xJbgpV\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Working Hours\",\"col\":12}},{\"id\":\"YzRF96YRG-\",\"type\":\"card\",\"data\":{\"card_name\":\"Assesments\",\"col\":4}}]",
  "creation": "2023-08-06 22:31:04.826393",
  "custom_blocks": [],
  "docstatus": 0,
@@ -110,50 +110,28 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Training Events",
-   "link_count": 0,
-   "link_to": "Training Event",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
   }
  ],
- "modified": "2025-01-22 11:38:04.188165",
+ "modified": "2025-06-12 17:17:34.473507",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "My Dashboard",
  "number_cards": [
   {
-   "label": "Early Exists (This Month)",
-   "number_card_name": "Early Exit (This Month)"
-  },
-  {
-   "label": "Leaves Taken",
-   "number_card_name": "Total Availed Leaves"
-  },
-  {
-   "label": "Leaves Remainig",
-   "number_card_name": "Total Remaining Leaves"
+   "label": "HR Notifications(This Month)",
+   "number_card_name": "HR Notifications(This Month)"
   },
   {
    "label": "Total Present (This Month)",
    "number_card_name": "Total Present (This Month)"
   },
   {
-   "label": "Allocated Leaves",
-   "number_card_name": "Total Allocated Leaves"
+   "label": "Early Exists (This Month)",
+   "number_card_name": "Early Exit (This Month)"
   },
   {
    "label": "Allowed",
    "number_card_name": "Medical Allowed"
-  },
-  {
-   "label": "Late Entries (This Month)",
-   "number_card_name": "Late Entry (This Month)"
   },
   {
    "label": "Availed",
