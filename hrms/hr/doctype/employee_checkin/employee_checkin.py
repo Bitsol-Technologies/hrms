@@ -832,7 +832,7 @@ def get_all_active_employees():
 	"""
 	employees = frappe.get_all(
 		"Employee",
-		filters={"status": "Active"},
+		filters={"status": "Active", "user_id": ["is", "set"]},
 		fields=["user_id", "name"]
 	)
 	return employees
@@ -2023,66 +2023,62 @@ def get_wfh_days_count(employee_id, start_date, end_date):
 	return sum(day["total_days"] for day in wfh_days)
 	
 
-def generate_weekly_compliance_email_content(report_data, non_compliant_employees, start_date, end_date):
+def generate_weekly_compliance_report_content(report_data, start_date, end_date):
 	"""
-	Generate HTML email content for the weekly time tracking report.
+	Generate plain text content for the weekly time tracking report, suitable for Slack.
 	
 	Args:
 		report_data (list): List of employee report dictionaries
-		non_compliant_employees (list): List of non-compliant employee reports
 		start_date (datetime): Start date of the report period
 		end_date (datetime): End date of the report period
 		
 	Returns:
-		str: HTML formatted email content
+		str: Plain text formatted report content
 	"""
-	email_content = f"<h3>Weekly Time Tracking Summary Report for All Employees</h3>"
-	email_content += f"<p>Report Period: {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}</p>"
+	report_content = f"Weekly HR Compliance Report for All Employees\n"
+	report_content += f"Report Period: {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}\n\n"
 
 	# Add summary table
-	email_content += "<table border='1' style='border-collapse: collapse; width: 100%;'>"
-	email_content += "<tr style='background-color: #f2f2f2;'>"
-	email_content += "<th>Employee Name</th><th>Working Days</th><th>Expected Hours</th><th>Logged Hours</th><th>Hours Difference</th><th>Logged Hours(Daily Sum)</th><th>Daily Weekly Difference</th><th>Status</th>"
-	email_content += "</tr>"
+	header = (
+		f"{'Employee Name':<25} | {'Working Days':<15} | {'Expected Hours':<15} | "
+		f"{'Logged Hours':<15} | {'Hours Diff':<15} | {'Logged Daily Sum':<20} | "
+		f"{'Daily Weekly Diff':<20} | {'Status':<15}\n"
+	)
+	report_content += header
+	report_content += "-" * 158 + "\n"
 
 	for employee in report_data:
 		# Calculate hours difference (logged - expected)
 		hours_diff = employee["logged_hours"] - employee["expected_hours"]
 		dw_diff = employee['daily_weekly_difference']
 		
-		# Determine status and color
+		# Determine status
 		if hours_diff >= 0:
 			status = "Compliant"
-			row_color = "#e6ffe6"  # Light green background
-			text_color = "#006600"  # Dark green text
 			hours_diff_display = f"+{format_hours_to_hhmm(hours_diff)}"
 		else:
-			status = "Non-Compliant"
-			row_color = "#ffe6e6"  # Light red background
-			text_color = "#cc0000"  # Dark red text
+			# Non-compliant if logged hours are more than 10% less than expected hours
+			if employee["logged_hours"] < (employee["expected_hours"] * 0.9):
+				status = "Non-Compliant"
+			else:
+				status = "Compliant"
 			hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
 
-		if dw_diff >0:
-			# daily reports are behind clockify hours
+		if dw_diff > 0:
 			dw_diff_display = f"-{format_hours_to_hhmm(dw_diff)}"
 		else:
-			# daily reports are ahead of clockify hours
 			dw_diff_display = f"+{format_hours_to_hhmm(abs(dw_diff))}"
 
-		email_content += f"<tr style='background-color: {row_color}; color: {text_color};'>"
-		email_content += f"<td>{employee['name']}</td>"
-		email_content += f"<td>{employee['working_days_in_week']}</td>"
-		email_content += f"<td>{format_hours_to_hhmm(employee['expected_hours'])}</td>"
-		email_content += f"<td>{format_hours_to_hhmm(employee['logged_hours'])}</td>"
-		email_content += f"<td>{hours_diff_display}</td>"
-		email_content += f"<td>{format_hours_to_hhmm(employee['logged_hours_daily_sum'])}</td>"
-		email_content += f"<td>{dw_diff_display}</td>"
-		email_content += f"<td>{status}</td>"
-		email_content += "</tr>"
+		row = (
+			f"{employee['name']:<25} | {str(employee['working_days_in_week']):<15} | "
+			f"{format_hours_to_hhmm(employee['expected_hours']):<15} | "
+			f"{format_hours_to_hhmm(employee['logged_hours']):<15} | {hours_diff_display:<15} | "
+			f"{format_hours_to_hhmm(employee['logged_hours_daily_sum']):<20} | "
+			f"{dw_diff_display:<20} | {status:<15}\n"
+		)
+		report_content += row
 
-	email_content += "</table>"
-
-	return email_content
+	return report_content
 
 def process_weekly_employee_compliance_data(emp_data, start_date, end_date, custom_api_key, working_days_in_week):
 	"""
@@ -2176,7 +2172,6 @@ def send_weekly_compliance_report_to_HR():
 
 	# Initialize report data
 	report_data = []
-	non_compliant_employees = []
 
 	# Process each employee
 	for email, emp_data in workspace_users.items():
@@ -2190,27 +2185,17 @@ def send_weekly_compliance_report_to_HR():
 		
 		if employee_report:
 			report_data.append(employee_report)
-			# Check compliance
-			if employee_report["logged_hours"] < employee_report["expected_hours"]:
-				non_compliant_employees.append(employee_report)
 
 	# Generate email content
-	email_content = generate_weekly_compliance_email_content(
+	report_content = generate_weekly_compliance_report_content(
 		report_data,
-		non_compliant_employees,
 		start_date,
 		end_date - timedelta(days=1),
 	)
-
-	# Send email to HR
-	target_emails = get_hr_manager()
-	if target_emails:
-		frappe.sendmail(
-			recipients=target_emails,
-			subject="Weekly Time Tracking Summary Report for All Employees",
-			message=email_content,
-			now=True
-		)
+	compliance_channel = get_compliance_channel()
+	messages = split_long_message(report_content)
+	for message in messages:
+		send_slack_message_for_employee([compliance_channel], message)
 
 def get_leave_count(employee, start_date, end_date):
 	"""
