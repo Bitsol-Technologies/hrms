@@ -58,3 +58,41 @@ class HRNotifications(Document):
 		except Exception as e:
 			self.log_error("Failed to send Push notification", frappe.get_traceback())
 
+@frappe.whitelist()
+def get_team_users():
+    user = frappe.session.user
+
+    # List of roles that should bypass filtering
+    privileged_roles = ["HR Manager"]
+
+    # Skip filtering for Administrator or any user with privileged roles
+    if (
+        user == "Administrator" or
+        frappe.db.exists("Has Role", {"parent": user, "role": ["in", privileged_roles]})
+    ):
+        return {
+            "restricted": False,
+            "users": []
+        }
+
+    # If user is Team Lead, fetch direct reports
+    is_team_lead = frappe.db.exists("Has Role", {
+        "parent": user,
+        "role": "Team Lead"
+    })
+
+    if not is_team_lead:
+        return {
+            "restricted": False,
+            "users": []
+        }
+
+    # Get direct report users (user_id field on Employee doctype)
+    employees = frappe.get_all("Employee", {
+        "team_lead": user
+    }, ["user_id"])
+
+    return {
+        "restricted": True,
+        "users": [e.user_id for e in employees if e.user_id]
+    }
