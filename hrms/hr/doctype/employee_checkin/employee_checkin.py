@@ -1523,7 +1523,7 @@ def get_hr_manager():
 	# First, find all users who have the 'HR Manager' role assigned
 	users_with_role = frappe.get_all(
 		"Has Role",
-		filters={"role": "HR Manager"},
+		filters={"role": "HR Manager", "parenttype": "User"},
 		fields=["parent"]
 	)
 
