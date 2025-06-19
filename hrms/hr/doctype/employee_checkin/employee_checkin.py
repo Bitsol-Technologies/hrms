@@ -705,24 +705,17 @@ def check_today_checkins():
 			time_since_checkin = current_dt - checkin_dt
 
 			if time_since_checkin < timedelta(hours=4):
-				# Skip checkins that are less than 4 hours old
 				continue
 
 			# Fetch employee's shift details for the day of the checkin.
 			# This also fetches the default shift if no assignment is found.
 			shift_details = get_actual_start_end_datetime_of_shift(checkin["employee"], checkin_dt, True)
-
 			if not shift_details:
-				# If the check-in time does not fall into any defined shift (assigned or default)
-				# for this employee on this day, skip sending a Clockify reminder.
-				# frappe.log_info(f"Clockify Reminder: Skipping for {checkin.employee} as check-in at {checkin_dt} is outside any defined shift.")
 				continue
 
 			# At this point, shift_details is not empty, meaning the check-in occurred within a recognized shift period.
 			pure_shift_end_dt = shift_details.get("end_datetime")
 			if pure_shift_end_dt and (current_dt > pure_shift_end_dt):
-				# If end_datetime exists and current time is past it, skip reminder.
-				# frappe.log_info(f"Clockify Reminder: Skipping for {checkin.employee} as current time {current_dt} is past shift's end time {pure_shift_end_dt}.")
 				continue
 			# If pure_shift_end_dt is None (should be rare if shift_details is populated and valid),
 			# or if current time is not past shift end, the reminder process continues based on Clockify.
@@ -738,7 +731,6 @@ def check_today_checkins():
 				}
 			)
 			if subsequent_checkout_exists:
-				# frappe.log_info(f"Clockify Reminder: Skipping for {checkin.employee} (check-in: {checkin_dt}) as a subsequent checkout exists: {subsequent_checkout_exists}.")
 				continue
 			custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
 
@@ -755,19 +747,20 @@ def check_today_checkins():
 					break
 
 			if active_timer:
-				# frappe.log_info(f"Clockify Reminder: Skipping for {emp.name if emp else checkin.employee} as Clockify timer is active.")
 				continue
 
 			# Check for time entries in any workspace
 			entries_found = False
+			end_of_day_dt = current_dt.replace(hour=23, minute=59, second=59)
 			for ws in workspace_ids:
-				entries = get_clockify_time_entries(custom_api_key, ws, custom_user_id, checkin_dt, current_dt)
+				entries = get_clockify_time_entries(
+					custom_api_key, ws, custom_user_id, checkin_dt, end_of_day_dt
+				)
 				if entries:
 					entries_found = True
 					break
 
 			if entries_found:
-				# frappe.log_info(f"Clockify Reminder: Skipping for {emp.name if emp else checkin.employee} as Clockify entries found.")
 				continue
 
 			# If no active timer and no time entries across all workspaces, send Slack reminder
