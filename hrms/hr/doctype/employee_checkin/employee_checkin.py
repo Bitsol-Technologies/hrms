@@ -692,7 +692,7 @@ def check_today_checkins():
 		  • If no shift applies to the check-in time, no reminder is sent.
 		  • Otherwise, checks if there is an active Clockify timer or logged entries.
 	  - If conditions suggest a reminder is needed:
-	    	sends a Slack/Push notification
+			sends a Slack/Push notification
 			creates a notfication log in ERPNext
 	"""
 
@@ -1553,12 +1553,7 @@ def send_weekly_time_report():
 	end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 	start_date = end_date - timedelta(days=7)
 	# Get all active employees
-	# active_employees = get_all_active_employees()
-	active_employees = [
-		{"user_id": "laiba.masood@bitsol.tech", "name": "HR-EMP-00056"},
-		{"user_id": "wajahat@bitsol.tech", "name": "HR-EMP-00058"},
-		{"user_id": "rizwan@bitsol.tech", "name": "HR-EMP-00003"}
-	]
+	active_employees = get_all_active_employees()
 	# Fetch users across all workspaces
 	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
 	public_holidays_in_week = get_public_holidays_in_week(start_date, end_date)
