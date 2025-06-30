@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "naming_series:",
+ "autoname": "reimbursement_name",
  "creation": "2023-08-10 16:38:31.281183",
  "default_view": "List",
  "doctype": "DocType",
@@ -9,7 +9,6 @@
  "engine": "InnoDB",
  "field_order": [
   "reimbursement_name",
-  "naming_series",
   "amended_from"
  ],
  "fields": [
@@ -21,14 +20,6 @@
    "label": "Reimbursement Name"
   },
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "no_copy": 1,
-   "options": "HR-REM-TY-",
-   "set_only_once": 1
-  },
-  {
    "fieldname": "amended_from",
    "fieldtype": "Link",
    "label": "Amended From",
@@ -38,17 +29,21 @@
    "read_only": 1
   }
  ],
+ "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2023-08-18 13:13:23.135292",
+ "modified": "2025-06-27 12:39:48.006879",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Reimbursement Types",
- "naming_rule": "By \"Naming Series\" field",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [],
  "quick_entry": 1,
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "reimbursement_name"
 }
