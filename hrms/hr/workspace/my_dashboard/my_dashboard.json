@@ -48,6 +48,7 @@
    "is_query_report": 0,
    "label": "Shortcuts",
    "link_count": 6,
+   "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
   },
@@ -94,7 +95,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Reimbursement Form",
+   "label": "Reimbursements",
    "link_count": 0,
    "link_to": "Reimbursement",
    "link_type": "DocType",
@@ -112,7 +113,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-06-12 17:17:34.473507",
+ "modified": "2025-06-30 17:38:20.671011",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "My Dashboard",

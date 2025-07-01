@@ -1,5 +1,6 @@
 {
  "add_total_row": 0,
+ "add_translate_data": 0,
  "columns": [
   {
    "fieldname": "employee",
@@ -22,21 +23,21 @@
    "width": 0
   },
   {
-   "fieldname": "creation",
-   "fieldtype": "Date",
-   "label": "Availed At",
-   "width": 0
-  },
-  {
    "fieldname": "total_amount",
    "fieldtype": "Currency",
-   "label": "Total Amount",
+   "label": "Availed",
    "width": 0
   },
   {
-   "fieldname": "custom_employee_user",
-   "fieldtype": "Data",
-   "label": "Employee User",
+   "fieldname": "medical_allowance",
+   "fieldtype": "Currency",
+   "label": "Medical Allowance",
+   "width": 0
+  },
+  {
+   "fieldname": "medical_balance",
+   "fieldtype": "Currency",
+   "label": "Medical Balance",
    "width": 0
   }
  ],
@@ -58,19 +59,13 @@
    "label": "To Date",
    "mandatory": 0,
    "wildcard_filter": 0
-  },
-  {
-   "fieldname": "custom_employee_user",
-   "fieldtype": "Data",
-   "label": "Employee User",
-   "mandatory": 0,
-   "wildcard_filter": 0
   }
  ],
  "idx": 0,
  "is_standard": "Yes",
+ "javascript": "frappe.query_reports[\"Employee Reimbursements\"] = {\r\n  \"filters\": [\r\n    {\r\n      fieldname: \"from_date\",\r\n      label: __(\"From Date\"),\r\n      fieldtype: \"Date\",\r\n    },\r\n    {\r\n      fieldname: \"to_date\",\r\n      label: __(\"To Date\"),\r\n      fieldtype: \"Date\",\r\n    }\r\n  ]\r\n};\r\n",
  "letterhead": null,
- "modified": "2025-01-24 09:44:27.757326",
+ "modified": "2025-06-30 13:22:49.909596",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Reimbursements",
@@ -79,7 +74,7 @@
  "query": "",
  "ref_doctype": "Reimbursement",
  "report_name": "Employee Reimbursements",
- "report_script": "from_date = filters.get('from_date')\r\nto_date = filters.get('to_date')\r\n\r\nif from_date and to_date:\r\n    result = frappe.db.sql(\"\"\"\r\n        SELECT employee, employee_name, reimbursement_type, CAST(creation AS DATE) as creation, SUM(total_amount), custom_employee_user\r\n        FROM `tabReimbursement`\r\n        WHERE CAST(creation AS DATE) >= %s AND CAST(creation AS DATE) <= %s AND reimbursement_type = 'Medical'\r\n        GROUP BY employee, CAST(creation AS DATE)\r\n    \"\"\", (from_date, to_date))\r\nelse:\r\n    result = frappe.db.sql(\"\"\"\r\n        SELECT employee, employee_name, reimbursement_type, CAST(creation AS DATE) as creation, SUM(total_amount)\r\n        FROM `tabReimbursement`\r\n        GROUP BY employee, CAST(creation AS DATE)\r\n    \"\"\")",
+ "report_script": "def execute(filters=None):\r\n    columns = [\r\n        {\"label\": \"Employee\", \"fieldname\": \"employee\", \"fieldtype\": \"Link\", \"options\": \"Employee\"},\r\n        {\"label\": \"Employee Name\", \"fieldname\": \"employee_name\", \"fieldtype\": \"Data\"},\r\n        {\"label\": \"Reimbursement Type\", \"fieldname\": \"reimbursement_type\", \"fieldtype\": \"Link\", \"options\": \"Reimbursement Types\"},\r\n        {\"label\": \"Total Amount\", \"fieldname\": \"total_amount\", \"fieldtype\": \"Currency\"},\r\n    ]\r\n\r\n    conditions = \"\"\"\r\n        status = 'Approved' AND docstatus = 1\r\n    \"\"\"\r\n    params = []\r\n\r\n    if filters.get(\"from_date\"):\r\n        conditions += \" AND creation >= %s\"\r\n        params.append(filters[\"from_date\"])\r\n\r\n    if filters.get(\"to_date\"):\r\n        conditions += \" AND creation <= %s\"\r\n        params.append(filters[\"to_date\"])\r\n\r\n    query = f\"\"\"\r\n        SELECT \r\n            employee, \r\n            employee_name, \r\n            reimbursement_type, \r\n            SUM(total_amount) AS total_amount\r\n        FROM `tabReimbursement`\r\n        WHERE {conditions}\r\n        GROUP BY employee, reimbursement_type\r\n        ORDER BY employee\r\n    \"\"\"\r\n\r\n    data = frappe.db.sql(query, tuple(params), as_dict=True)\r\n\r\n    return columns, data\r\n",
  "report_type": "Script Report",
  "roles": [
   {

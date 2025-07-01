@@ -1,8 +1,17 @@
-// Copyright (c) 2025, Frappe Technologies Pvt. Ltd. and contributors
-// For license information, please see license.txt
+// your_app/report/employee_reimbursements/employee_reimbursements.js
 
 frappe.query_reports["Employee Reimbursements"] = {
-	"filters": [
-
+	filters: [
+	  {
+		fieldname: "from_date",
+		label: __("From Date"),
+		fieldtype: "Date",
+	  },
+	  {
+		fieldname: "to_date",
+		label: __("To Date"),
+		fieldtype: "Date",
+	  }
 	]
-};
+  };
+  

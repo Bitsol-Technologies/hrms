@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "format:RE-{MM}-{YYY}-{employee}-{employee_name}-{#####}",
+ "autoname": "RMB-.YY.MM.-.#####",
  "creation": "2023-08-10 16:34:36.173064",
  "default_view": "List",
  "doctype": "DocType",
@@ -11,18 +11,27 @@
  "field_order": [
   "employee",
   "employee_name",
-  "description",
   "reimbursement_type",
   "total_amount",
   "amended_from",
+  "column_break_qhkv",
   "custom_employee_user",
   "reimbursement_date",
-  "expense_department"
+  "expense_department",
+  "reimbursable_expenses_section",
+  "expense_details",
+  "section_break_trog",
+  "team_lead",
+  "lead_name",
+  "column_break_cxdn",
+  "status",
+  "reason_for_rejection"
  ],
  "fields": [
   {
    "fieldname": "employee",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "in_standard_filter": 1,
    "label": "Employee",
    "options": "Employee",
@@ -37,11 +46,6 @@
    "in_standard_filter": 1,
    "label": "Employee Name",
    "read_only": 1
-  },
-  {
-   "fieldname": "description",
-   "fieldtype": "Data",
-   "label": "Description"
   },
   {
    "fieldname": "amended_from",
@@ -63,17 +67,19 @@
    "fieldname": "total_amount",
    "fieldtype": "Currency",
    "label": "Total Amount",
-   "reqd": 1
+   "read_only": 1
   },
   {
+   "default": "Today",
    "fieldname": "reimbursement_date",
    "fieldtype": "Date",
-   "label": "Date",
+   "label": "Posting Date",
    "reqd": 1
   },
   {
    "fieldname": "expense_department",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Expense Department",
    "options": "Expense Department",
    "permlevel": 1
@@ -85,19 +91,79 @@
    "fieldtype": "Link",
    "label": "User Email",
    "options": "User"
+  },
+  {
+   "depends_on": "eval:doc.reimbursement_type != \"Medical\"",
+   "fetch_from": "employee.team_lead",
+   "fieldname": "team_lead",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Team Lead",
+   "options": "User"
+  },
+  {
+   "fieldname": "section_break_trog",
+   "fieldtype": "Section Break",
+   "label": "Approval"
+  },
+  {
+   "fieldname": "column_break_qhkv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.reimbursement_type != \"Medical\"",
+   "fetch_from": "team_lead.full_name",
+   "fieldname": "lead_name",
+   "fieldtype": "Data",
+   "ignore_user_permissions": 1,
+   "label": "Lead Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_cxdn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Open\nApproved\nRejected",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "reimbursable_expenses_section",
+   "fieldtype": "Section Break",
+   "label": "Reimbursable Expenses"
+  },
+  {
+   "fieldname": "expense_details",
+   "fieldtype": "Table",
+   "label": "Itemized Expenses",
+   "options": "Reimbursement Entries",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.status == \"Rejected\"",
+   "fieldname": "reason_for_rejection",
+   "fieldtype": "Small Text",
+   "label": "Reason For Rejection",
+   "permlevel": 1
   }
  ],
+ "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
  "max_attachments": 10,
- "modified": "2025-01-25 21:44:24.423720",
+ "modified": "2025-06-30 18:08:15.272974",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Reimbursement",
  "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []
