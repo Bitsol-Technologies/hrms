@@ -1188,8 +1188,7 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	compliance_data["checkout_time"] = emp_checkins.get("checkout")
 
 	# Get leave status from ERPNext (e.g., "On Leave", "Half Day", etc.)
-	# get_employee_leave_status takes ERPNext Employee ID and a date
-	leave_status = get_employee_leave_status(emp_data["employee"], start_dt.date())
+	leave_status = get_employee_leave_status(emp_data["employee"], start_dt.date(), status=["Open", "Approved"])
 	compliance_data["leave_type"] = leave_status if leave_status in ["On Leave", "Half Day"] else None
 	
 	#  if employee is on full day leave, skip the compliance check
@@ -1309,15 +1308,63 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	return compliance_data
 
 
-def get_employee_leave_status(emp_id, date):
+def get_employee_leave_status(emp_id, date, status="Approved"):
 	"""
 	Fetches the leave status for an employee on a given date.
 
 	:param emp_id: Employee ID
-	:param date: The date to check leave status (YYYY-MM-DD)
-	:return: "On Leave", "Half Day", or None if not on leave.
+	:param date: The date to check leave status (YYYY-MM-DD or date object)
+	:param status: Leave status or list of statuses (default: 'Approved')
+	:return: "On Leave", "Half Day"  or None if not on leave.
 	"""
-	return frappe.get_value("Attendance", {"employee": emp_id, "attendance_date": date, "docstatus": ["!=", 2]}, "status")
+	# Ensure date is a string in YYYY-MM-DD format
+	if not isinstance(date, str):
+		date_str = date.strftime("%Y-%m-%d")
+	else:
+		date_str = date
+
+	# Prepare status filter for frappe.db.get_value
+	if isinstance(status, list):
+		status_filter = ["in", status]
+	else:
+		status_filter = status
+
+	leave = frappe.db.get_value(
+		"Leave Application",
+		{
+			"employee": emp_id,
+			"status": status_filter,
+			"from_date": ["<=", date_str],
+			"to_date": [">=", date_str],
+			"docstatus": ["!=", 2],
+		},
+		["half_day", "half_day_date", "from_date", "to_date"],
+		order_by="modified desc"
+	)
+	if leave:
+		half_day, half_day_date, from_date, to_date = leave
+		if half_day:
+			# Single day leave (from_date == to_date)
+			if str(from_date) == str(to_date) and str(from_date) == date_str:
+				return "Half Day"
+			# Multi-day leave, half_day_date matches
+			elif half_day_date and str(half_day_date) == date_str:
+				return "Half Day"
+		# If not half day for this date, but still in range, it's a full day leave
+		if not half_day or (half_day and (
+			(str(from_date) == str(to_date) and str(from_date) != date_str) or
+			(half_day_date and str(half_day_date) != date_str)
+		)):
+			return "On Leave"
+		# If half_day is set but doesn't match, treat as full day leave
+		if half_day and (not half_day_date and str(from_date) != str(to_date)):
+			return "On Leave"
+		# Defensive: if logic above doesn't match, but still in range, treat as full day leave
+		if str(from_date) <= date_str <= str(to_date):
+			return "On Leave"
+
+	# Not on leave
+	return None
 
 def create_employee_compliance_reports(entries, report_date=None):
 	"""
@@ -1629,6 +1676,12 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 	shift_type = get_employee_shift_type(emp_data["employee"])
 	if not shift_type:
 		return None, None, None
+	# Subtract leave days from working days in week
+	leave_count = get_leave_count(emp_data["employee"], start_date, end_date, status="Approved")
+	working_days_in_week = working_days_in_week - leave_count
+	if working_days_in_week < 0:
+		working_days_in_week = 0
+	
 	hr_settings = frappe.get_single("HR Settings")
 	expected_hours = hr_settings.standard_working_hours
 
@@ -1639,7 +1692,7 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 	late_entries_count = get_late_entries_count(emp_data["employee"], start_date, end_date - timedelta(days=1))
 
 	# Fetch and process Work From Home in a week
-	wfh_days_count = get_wfh_days_count(emp_data["employee"], start_date, end_date - timedelta(days=1))
+	wfh_days_count = get_wfh_days_count(emp_data["employee"], start_date, end_date - timedelta(days=1), status="Approved")
 
 	# Process each workspace
 	for workspace_id in workspaces:
@@ -1650,8 +1703,6 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 				totals = report_data.get("totals", {})
 				chart = report_data.get("chart", {})
 				group_one = report_data.get("groupOne", {})
-			
-				# Process report data
 				weekly_report = generate_weekly_report(
 					start_date, 
 					end_date - timedelta(days=1), 
@@ -1722,6 +1773,8 @@ def generate_summary_section(weekly_report, report):
 	leave_count = sum(1 if day.get("leave_status") == "On Leave" else 0.5 if day.get("leave_status") == "Half Day" else 0 
 					for day in weekly_report.get("week_breakdown", []))
 	content += f"<strong>Total Leaves Taken:</strong> {leave_count:.1f}<br>"
+	if weekly_report.get('total_unapproved_leaves'):
+		content += f"<strong>Total Unapproved Leaves:</strong> {weekly_report.get('total_unapproved_leaves')}<br>"
 	content += f"<strong>Total WFH Days:</strong> {report['wfh_days_count'] if report['wfh_days_count'] else 0}<br>"
 	return content
 
@@ -1781,6 +1834,7 @@ def generate_weekly_report(start_date, end_date, employee_id, user_id, totals, c
 	weekly_report = {
 		"total_hours": totals[0]["totalTime"] / 3600,  # Convert seconds to hours
 		"expected_hours": expected_hours * working_days_in_week,
+		"total_unapproved_leaves": get_leave_count(employee_id, start_date, end_date, status="Open"),
 		"week_breakdown": [],
 		"project_breakdown": [],
 		"missing_days": [],
@@ -1849,7 +1903,8 @@ def process_daily_breakdown(start_date, end_date, employee_id, chart, public_hol
 	current_date = start_date
 	
 	while current_date <= end_date:
-		leave_status = get_employee_leave_status(employee_id, current_date.date())
+		# Only consider approved leaves for compliance
+		leave_status = get_employee_leave_status(employee_id, current_date.date(), status="Approved")
 		date_str = current_date.strftime("%Y-%m-%d")
 		daily_entries = chart.get(date_str, [])
 		day_total_time = sum(entry["totalTime"] for entry in daily_entries) / 3600  # in hours
@@ -1997,13 +2052,21 @@ def get_late_entries_count(employee_id, start_date, end_date):
 	)
 	return len(late_entries)
 
-def get_wfh_days_count(employee_id, start_date, end_date):
+def get_wfh_days_count(employee_id, start_date, end_date, status = "Approved"):
+	# status can be Approved, Requested, Approved , ["Approved", "Requested"]
+
+	# Prepare status filter for frappe.db.get_value
+	if isinstance(status, list):
+		status_filter = ["in", status]
+	else:
+		status_filter = status
+
 	wfh_days = frappe.get_all(
 		"Work From Home",
 		filters={
 			"employee": employee_id,
 			"docstatus": ["!=", 2],
-			"status": "Approved",
+			"status": status_filter,
 			"from_date": ["between", [start_date.date(), end_date.date()]]
 		},
 		fields=["total_days"]
@@ -2028,9 +2091,8 @@ def generate_weekly_compliance_report_content(report_data, start_date, end_date)
 
 	# Add summary table
 	header = (
-		f"{'Employee Name':<25} | {'Working Days':<15} | {'Expected Hours':<15} | "
-		f"{'Logged Hours':<15} | {'Hours Diff':<15} | {'Logged Daily Sum':<20} | "
-		f"{'Daily Weekly Diff':<20} | {'Status':<15}\n"
+		f"{'Employee Name':<20} | {'Working Days':<12} | {'Leave Requests':<15} | {'Expected Hours':<15} | " 
+		f"{'Daily Clockify Logged Hours':<20} | {'EOW Clockify Hours':<15} | {'Hours Difference':<15} | {'Status':<15}\n"
 	)
 	report_content += header
 	report_content += "-" * 158 + "\n"
@@ -2038,26 +2100,26 @@ def generate_weekly_compliance_report_content(report_data, start_date, end_date)
 	for employee in report_data:
 		# Calculate hours difference (logged - expected)
 		hours_diff = employee["logged_hours"] - employee["expected_hours"]
-		dw_diff = employee['daily_weekly_difference']
-		
+
 		# Since this report is for non-compliant employees, status is always "Non-Compliant"
 		status = "Non-Compliant"
 		hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
 
-		if dw_diff > 0:
-			dw_diff_display = f"-{format_hours_to_hhmm(dw_diff)}"
-		else:
-			dw_diff_display = f"+{format_hours_to_hhmm(abs(dw_diff))}"
 
 		row = (
-			f"{employee['name']:<25} | {str(employee['working_days_in_week']):<15} | "
+			f"{employee['name']:<20} | {str(employee['working_days_in_week']):<12} | "
+			f"{str(employee['open_leave_requests']):<15} | "
 			f"{format_hours_to_hhmm(employee['expected_hours']):<15} | "
-			f"{format_hours_to_hhmm(employee['logged_hours']):<15} | {hours_diff_display:<15} | "
-			f"{format_hours_to_hhmm(employee['logged_hours_daily_sum']):<20} | "
-			f"{dw_diff_display:<20} | {status:<15}\n"
+			f"{format_hours_to_hhmm(employee['logged_hours_daily_sum']):<27} | "
+			f"{format_hours_to_hhmm(employee['logged_hours']):<15} | "
+			f"{hours_diff_display:<15} | {status:<15}\n"
 		)
 		report_content += row
-
+	report_content += "\n\nNote: \n"
+	report_content += "Daily Clockify Logged Hours mean the total hours an employee logs each day saved in Employee Compliance Reports.\n"
+	report_content += "EOW Clockify Hours are the total hours recorded in Clockify at the end of the week.\n"
+	report_content += "Hours Difference is the difference between Expected Hours and EOW Clockify Hours.\n"
+	report_content += "If the Hours Difference is more than 10%, the employee is marked as Non-Compliant.\n"
 	return report_content
 
 
@@ -2082,7 +2144,7 @@ def process_weekly_employee_compliance_data(emp_data, start_date, end_date, cust
 	shift_type = get_employee_shift_type(emp_data["employee"])
 	if not shift_type:
 		return None
-	leave_count = get_leave_count(emp_data["employee"], start_date, end_date)
+	leave_count = get_leave_count(emp_data["employee"], start_date, end_date, status="Approved")
 	working_days_in_week = working_days_in_week - leave_count
 	hr_settings = frappe.get_single("HR Settings")
 	standard_working_hours = hr_settings.standard_working_hours
@@ -2117,6 +2179,7 @@ def process_weekly_employee_compliance_data(emp_data, start_date, end_date, cust
 	employee_report = {
 		"name": employee_name,
 		"working_days_in_week": working_days_in_week,
+		"open_leave_requests": get_leave_count(emp_data["employee"], start_date, end_date, status="Open"),
 		"logged_hours": round(total_logged_hours, 2),
 		"expected_hours": round(expected_hours, 2),
 		"hours_difference": round(hours_difference, 2),
@@ -2200,7 +2263,7 @@ def send_weekly_compliance_report_to_HR():
 			now=True
 		)
 
-def get_leave_count(employee, start_date, end_date):
+def get_leave_count(employee, start_date, end_date, status="Approved"):
 	"""
 	Calculate total leave days for an employee within a date range.
 	Full day leave counts as 1, half day leave counts as 0.5.
@@ -2217,7 +2280,7 @@ def get_leave_count(employee, start_date, end_date):
 	current_date = start_date
 	
 	while current_date < end_date:
-		leave_status = get_employee_leave_status(employee, current_date.date())
+		leave_status = get_employee_leave_status(employee, current_date.date(), status)
 		if leave_status == "On Leave":
 			leave_count += 1
 		elif leave_status == "Half Day":
@@ -2258,12 +2321,11 @@ def generate_weekly_compliance_email_content(report_data, start_date, end_date):
 	
 	report_content += "<table border='1' style='border-collapse: collapse; width: 100%;'>"
 	report_content += "<tr style='background-color: #f2f2f2;'>"
-	report_content += "<th>Employee Name</th><th>Working Days</th><th>Expected Hours</th><th>Logged Hours</th><th>Hours Difference</th><th>Logged Hours(Daily Sum)</th><th>Daily Weekly Difference</th><th>Status</th>"
+	report_content += "<th>Employee Name</th><th>Working Days</th><th>Open Leave Requests</th><th>Expected Hours</th><th>Daily Clockify Logged Hours</th><th>EOW Clockify Hours</th><th>Hours Difference</th><th>Status</th>"
 	report_content += "</tr>"
 
 	for employee in report_data:
 		hours_diff = employee["logged_hours"] - employee["expected_hours"]
-		dw_diff = employee['daily_weekly_difference']
 		
 		if hours_diff >= 0:
 			status = "Compliant"
@@ -2280,23 +2342,24 @@ def generate_weekly_compliance_email_content(report_data, start_date, end_date):
 				row_color = "#e6ffe6"  # Light green background
 				text_color = "#006600"  # Dark green text
 			hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
-
-		if dw_diff > 0:
-			dw_diff_display = f"-{format_hours_to_hhmm(dw_diff)}"
-		else:
-			dw_diff_display = f"+{format_hours_to_hhmm(abs(dw_diff))}"
 		
 		report_content += f"<tr style='background-color: {row_color}; color: {text_color};'>"
 		report_content += f"<td>{employee['name']}</td>"
 		report_content += f"<td>{employee['working_days_in_week']}</td>"
+		report_content += f"<td>{employee['open_leave_requests']}</td>"
 		report_content += f"<td>{format_hours_to_hhmm(employee['expected_hours'])}</td>"
+		report_content += f"<td>{format_hours_to_hhmm(employee['logged_hours_daily_sum'])}</td>"
 		report_content += f"<td>{format_hours_to_hhmm(employee['logged_hours'])}</td>"
 		report_content += f"<td>{hours_diff_display}</td>"
-		report_content += f"<td>{format_hours_to_hhmm(employee['logged_hours_daily_sum'])}</td>"
-		report_content += f"<td>{dw_diff_display}</td>"
 		report_content += f"<td>{status}</td>"
 		report_content += "</tr>"
-
 	report_content += "</table>"
+	report_content += "<br><br><strong>Note: </strong><br>"
+	report_content += "<strong>Daily Clockify Logged Hours</strong> mean the total hours an employee logs each day saved in <strong>Employee Compliance Reports</strong><br>"
+	report_content += "<strong>EOW Clockify Hours</strong> are the total hours recorded in <strong>Clockify</strong> at the end of the week.<br>"
+	report_content += "<strong>Hours Difference</strong> is the difference between <strong>Expected Hours</strong> and <strong>EOW Clockify Hours</strong>.<br>"
+	report_content += "If the <strong>Hours Difference</strong> is more than <strong>10%</strong>, the employee is marked as <strong>Non-Compliant</strong>.<br>"
+
 
 	return report_content
+
