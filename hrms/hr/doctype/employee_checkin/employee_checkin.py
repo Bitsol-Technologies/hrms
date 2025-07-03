@@ -1364,8 +1364,8 @@ def send_late_report_to_HR():
 		if report.report_type != "Query Report":
 			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
 			return
-
-		report_data = frappe.db.sql(report.query, as_dict=True)
+		sql_query = report.query.replace("%%","%")
+		report_data = frappe.db.sql(sql_query, as_dict=True)
 		email_message_html = f"<h3>Weekly Late Report ({today})</h3>"
 		if not report_data:
 			email_message_html += "<p>No late entries found for the week.</p>"
@@ -1415,8 +1415,8 @@ def send_leave_report_to_HR():
 		if report.report_type != "Query Report":
 			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
 			return
-	
-		report_data = frappe.db.sql(report.query, as_dict=True)
+		sql_query = report.query.replace("%%","%")
+		report_data = frappe.db.sql(sql_query, as_dict=True)
 		email_message_html = f"<h3>Weekly Leave Report ({today})</h3>"
 		if not report_data:
 			email_message_html += "<p>No leave entries found for the week.</p>"
@@ -1466,8 +1466,8 @@ def send_wfh_report_to_HR():
 		if report.report_type != "Query Report":
 			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
 			return
-	
-		report_data = frappe.db.sql(report.query, as_dict=True)
+		sql_query = report.query.replace("%%","%")
+		report_data = frappe.db.sql(sql_query, as_dict=True)
 		email_message_html = f"<h3>Weekly WFH Report ({today})</h3>"
 		if not report_data:
 			email_message_html += "<p>No WFH entries found for the week.</p>"
