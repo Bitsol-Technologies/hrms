@@ -310,10 +310,6 @@ def fetch_and_save_all_slack_ids():
 			)
 			updated += 1
 	frappe.db.commit()
-	frappe.log_error(
-		f"Slack ID Sync: found {len(employees)}, updated {updated}",
-		"SlackIDSync"
-	)
 
 @frappe.whitelist()
 def get_feedback_by_round(applicant: str):
