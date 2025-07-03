@@ -492,8 +492,8 @@ def notify_employees_to_checkin_or_checkout():
 			if not employee or not employee.user_id:
 				continue
 
-			# 1. Skip if on approved leave
-			leave_status = get_employee_leave_status(employee.name, today)
+			# 1. Skip if on leave
+			leave_status = get_employee_leave_status(employee.name, today, status=["Approved", "Open"])
 			if leave_status in ["On Leave", "Half Day"]:
 				continue
 
