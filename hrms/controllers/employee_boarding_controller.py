@@ -55,7 +55,6 @@ class EmployeeBoardingController(Document):
 			return
 		for activity in self.activities:
 			if activity.task:
-				print(f"DEBUG: Activity {getattr(activity, 'activity_name', None)} already has task {activity.task}, skipping")
 				continue
 
 			dates = self.get_task_dates(activity, holiday_list)
