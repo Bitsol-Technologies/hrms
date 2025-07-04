@@ -35,6 +35,14 @@ frappe.ui.form.on("Employee Separation", {
 				__("View"),
 			);
 		}
+		if (
+			frm.doc.docstatus === 1 &&
+			(frm.doc.boarding_status === "Pending" || frm.doc.boarding_status === "In Process")
+		) {
+			frm.add_custom_button(__("Mark as Completed"), function () {
+				frm.trigger("mark_as_completed");
+			});
+		}
 	},
 
 	employee_separation_template: function (frm) {
@@ -61,5 +69,16 @@ frappe.ui.form.on("Employee Separation", {
 				},
 			});
 		}
+	},
+	
+	mark_as_completed(frm) {
+		frm.call({
+			method: "mark_separation_as_completed",
+			doc: frm.doc,
+			freeze: true,
+			freeze_message: __("Completing Separation"),
+		}).then((r) => {
+			frm.refresh();
+		});
 	},
 });

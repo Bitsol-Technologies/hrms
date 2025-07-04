@@ -99,7 +99,14 @@ class EmployeeBoardingController(Document):
 			# assign the task the users
 			if users:
 				self.assign_task_to_users(task, users)
-				send_boarding_activity_notification(users, activity, self.applicant_name)
+				if self.doctype == "Employee Separation":
+					send_boarding_activity_notification(
+						users, activity, self.employee_name, "Employee", "Separation Task Notification"
+					)
+				else:
+					send_boarding_activity_notification(
+						users, activity, self.applicant_name, "Job Applicant", "Onboarding Task Notification"
+					)
 
 	def assign_task_to_users(self, task, users):
 		for user in users:
@@ -160,14 +167,16 @@ class EmployeeBoardingController(Document):
 			_("Linked Project {} and Tasks deleted.").format(project), alert=True, indicator="blue"
 		)
 from frappe.utils import format_datetime
-def send_boarding_activity_notification(users, activity, job_applicant, subject_prefix=""):
+def send_boarding_activity_notification(users, activity, entity_name, reference_doctype, email_template_name, subject_prefix=""):
 	"""
-	Sends an onboarding task notification email for a given activity.
+	Sends a task notification email for a given activity (onboarding or separation).
 	
 	Parameters:
 	users: List of user emails to notify.
 	activity: A dictionary or document object representing an Employee Boarding Activity row.
-	job_applicant: The employee or job applicant identifier.
+	entity_name: The employee or job applicant identifier.
+	reference_doctype: The reference doctype ("Job Applicant" or "Employee").
+	email_template_name: The email template to use.
 	subject_prefix: Optional prefix for the email subject (e.g., "RE: " for updates).
 	
 	The function checks if a user exists and if the notification_sent flag is false.
@@ -182,15 +191,15 @@ def send_boarding_activity_notification(users, activity, job_applicant, subject_
 			user_doc = frappe.get_doc("User", user)
 			frappe.sendmail(
 				recipients=[user],
-				email_template_name="Onboarding Task Notification",
+				email_template_name=email_template_name,
 				args={
 					"user_first_name": user_doc.first_name or user,
-					"job_applicant": job_applicant,
+					"entity_name": entity_name,
 					"activity_name": activity.get("activity_name"),
 					"description": activity.get("description"),
 					"begin_on": activity.get("begin_on"),
 				},
-				reference_doctype="Job Applicant",
+				reference_doctype=reference_doctype,
 				now=True
 			)
 	# Mark the activity as notified to avoid duplicate notifications
@@ -236,7 +245,7 @@ def reset_and_notify(child_name, parent, subject_prefix=""):
 					activity.role,
 				)
 				users = list(set(users + user_list))
-			send_boarding_activity_notification(users, activity, parent_doc.job_applicant, subject_prefix)
+			send_boarding_activity_notification(users, activity, parent_doc.job_applicant, "Job Applicant", "Onboarding Task Notification", "RE: ")
 			break
 
 
