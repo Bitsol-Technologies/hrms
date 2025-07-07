@@ -63,6 +63,8 @@ class EmployeeOnboarding(EmployeeBoardingController):
 
 	@frappe.whitelist()
 	def mark_onboarding_as_completed(self):
+		if not frappe.has_permission("Employee Onboarding", "write", self.name):
+			raise frappe.PermissionError(_("You do not have permission to complete this Employee Onboarding."))
 		for activity in self.activities:
 			frappe.db.set_value("Task", activity.task, "status", "Completed")
 		frappe.db.set_value("Project", self.project, "status", "Completed")
@@ -98,11 +100,15 @@ def make_employee(source_name, target_doc=None):
 
 @frappe.whitelist()
 def check_employee_onboarding_exists(job_applicant):
+	if not frappe.has_permission("Employee Onboarding", "read"):
+		raise frappe.PermissionError(_("You do not have permission to check Employee Onboarding."))
 	exists = frappe.db.exists("Employee Onboarding", {"job_applicant": job_applicant, "docstatus": ["!=", 2]})
 	return {"exists": bool(exists)}
 
 @frappe.whitelist()
 def create_employee_onboarding_from_applicant(job_applicant, company, date_of_joining, holiday_list, employee_onboarding_template):
+	if not frappe.has_permission("Employee Onboarding", "create"):
+		raise frappe.PermissionError(_("You do not have permission to create Employee Onboarding."))
 	doc = frappe.new_doc("Employee Onboarding")
 	doc.job_applicant = job_applicant
 	doc.company = company

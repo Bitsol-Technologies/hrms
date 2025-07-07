@@ -33,6 +33,8 @@ class EmployeeSeparation(EmployeeBoardingController):
 
 	@frappe.whitelist()
 	def mark_separation_as_completed(self):
+		if not frappe.has_permission("Employee Separation", "write", self.name):
+			raise frappe.PermissionError(_("You do not have permission to complete this Employee Separation."))
 		for activity in self.activities:
 			frappe.db.set_value("Task", activity.task, "status", "Completed")
 		frappe.db.set_value("Project", self.project, "status", "Completed")
@@ -41,6 +43,8 @@ class EmployeeSeparation(EmployeeBoardingController):
 
 @frappe.whitelist()
 def create_employee_separation_from_employee(employee, company, relieving_date, employee_separation_template):
+	if not frappe.has_permission("Employee Separation", "create"):
+		raise frappe.PermissionError(_("You do not have permission to create Employee Separation."))
 	doc = frappe.new_doc("Employee Separation")
 	doc.employee = employee
 	doc.company = company
@@ -59,6 +63,8 @@ def create_employee_separation_from_employee(employee, company, relieving_date, 
 
 @frappe.whitelist()
 def check_employee_separation_exists(employee):
+	if not frappe.has_permission("Employee Separation", "read"):
+		raise frappe.PermissionError(_("You do not have permission to check Employee Separation."))
 	exists = frappe.db.exists("Employee Separation", {"employee": employee, "docstatus": ["!=", 2]})
 	return {"exists": bool(exists)}
 
