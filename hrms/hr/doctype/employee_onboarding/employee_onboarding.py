@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.model.mapper import get_mapped_doc
 
-from hrms.controllers.employee_boarding_controller import EmployeeBoardingController
+from hrms.controllers.employee_boarding_controller import EmployeeBoardingController, get_onboarding_details
 
 
 class IncompleteTaskError(frappe.ValidationError):
@@ -55,14 +55,16 @@ class EmployeeOnboarding(EmployeeBoardingController):
 	def on_update_after_submit(self):
 		self.create_task_and_notify_user()
 
-	def on_update(self):
-		self.create_task_and_notify_user()
+	# def on_update(self):
+	# 	self.create_task_and_notify_user()
 		
 	def on_cancel(self):
 		super().on_cancel()
 
 	@frappe.whitelist()
 	def mark_onboarding_as_completed(self):
+		if not frappe.has_permission("Employee Onboarding", "write", self.name):
+			raise frappe.PermissionError(_("You do not have permission to complete this Employee Onboarding."))
 		for activity in self.activities:
 			frappe.db.set_value("Task", activity.task, "status", "Completed")
 		frappe.db.set_value("Project", self.project, "status", "Completed")
@@ -95,3 +97,32 @@ def make_employee(source_name, target_doc=None):
 		set_missing_values,
 	)
 	return doc
+
+@frappe.whitelist()
+def check_employee_onboarding_exists(job_applicant):
+	if not frappe.has_permission("Employee Onboarding", "read"):
+		raise frappe.PermissionError(_("You do not have permission to check Employee Onboarding."))
+	exists = frappe.db.exists("Employee Onboarding", {"job_applicant": job_applicant, "docstatus": ["!=", 2]})
+	return {"exists": bool(exists)}
+
+@frappe.whitelist()
+def create_employee_onboarding_from_applicant(job_applicant, company, date_of_joining, holiday_list, employee_onboarding_template):
+	if not frappe.has_permission("Employee Onboarding", "create"):
+		raise frappe.PermissionError(_("You do not have permission to create Employee Onboarding."))
+	doc = frappe.new_doc("Employee Onboarding")
+	doc.job_applicant = job_applicant
+	doc.company = company
+	doc.date_of_joining = date_of_joining
+	doc.boarding_begins_on = date_of_joining
+	doc.holiday_list = holiday_list
+	doc.employee_onboarding_template = employee_onboarding_template
+	doc.notify_users_by_email = 1
+
+	# Use the existing function to copy activities from the template
+	if employee_onboarding_template:
+		template_activities = get_onboarding_details(employee_onboarding_template, "Employee Onboarding Template")
+		for activity in template_activities:
+			doc.append("activities", activity)
+
+	doc.insert(ignore_permissions=True)
+	return doc.name

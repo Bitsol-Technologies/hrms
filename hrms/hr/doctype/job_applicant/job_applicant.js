@@ -98,6 +98,30 @@ frappe.ui.form.on("Job Applicant", {
 				);
 			}
 		}
+
+		// Add Employee Onboarding button if applicant_status is 'Joined'
+		if (!frm.doc.__islocal && frm.doc.applicant_status === "Joined") {
+			frappe.call({
+				method: "hrms.hr.doctype.employee_onboarding.employee_onboarding.check_employee_onboarding_exists",
+				args: { job_applicant: frm.doc.name },
+				callback: function(r) {
+					if (!r.message.exists) {
+						frm.add_custom_button(
+							__("Employee Onboarding"),
+							function () {
+								// Double-check status before showing dialog
+								if (frm.doc.applicant_status === "Joined") {
+									show_onboarding_dialog(frm);
+								} else {
+									frappe.msgprint(__("Applicant status must be 'Joined' to start onboarding."));
+								}
+							},
+							__("Create")
+						);
+					}
+				}
+			});
+		}
 	},
 
 	make_dashboard: function (frm) {
@@ -153,7 +177,49 @@ frappe.ui.form.on("Job Applicant", {
 			},
 		});
 	},
+
+	on_update: function(frm) {
+		if (frm.doc.applicant_status === "Joined" && !frm.doc.__islocal) {
+			frappe.call({
+				method: "hrms.hr.doctype.employee_onboarding.employee_onboarding.check_employee_onboarding_exists",
+				args: { job_applicant: frm.doc.name },
+				callback: function(r) {
+					if (!r.message.exists) {
+						show_onboarding_dialog(frm);
+					}
+				}
+			});
+		}
+	},
 });
+
+function show_onboarding_dialog(frm) {
+	let d = new frappe.ui.Dialog({
+		title: __("Start Employee Onboarding"),
+		fields: [
+			{ label: "Job Applicant", fieldname: "job_applicant", fieldtype: "Link", options: "Job Applicant", reqd: 1, default: frm.doc.name, read_only: 1 },
+			{ label: "Company", fieldname: "company", fieldtype: "Link", options: "Company", reqd: 1 },
+			{ label: "Date of Joining", fieldname: "date_of_joining", fieldtype: "Date", reqd: 1 },
+			{ label: "Holiday List", fieldname: "holiday_list", fieldtype: "Link", options: "Holiday List", reqd: 1 },
+			{ label: "Employee Onboarding Template", fieldname: "employee_onboarding_template", fieldtype: "Link", options: "Employee Onboarding Template", reqd: 1 },
+		],
+		primary_action_label: __("Create Onboarding"),
+		primary_action(values) {
+			frappe.call({
+				method: "hrms.hr.doctype.employee_onboarding.employee_onboarding.create_employee_onboarding_from_applicant",
+				args: values,
+				callback: function(r) {
+					if (r.message) {
+						frappe.msgprint(__("Employee Onboarding created: ") + r.message);
+						d.hide();
+						frappe.set_route("Form", "Employee Onboarding", r.message);
+					}
+				}
+			});
+		}
+	});
+	d.show();
+}
 
 frappe.ui.form.on("CV Reviewer", {
 	employee_id: function (frm) {
