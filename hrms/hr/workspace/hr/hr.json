@@ -421,7 +421,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-06-30 17:37:34.517932",
+ "modified": "2025-07-07 16:34:14.551162",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR",
@@ -439,6 +439,9 @@
    "role": "HR Manager"
   },
   {
+   "role": "System Manager"
+  },
+   {
    "role": "Talent and Growth Manager"
   }
  ],

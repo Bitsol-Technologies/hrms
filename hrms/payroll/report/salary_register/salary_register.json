@@ -1,13 +1,16 @@
 {
  "add_total_row": 1,
+ "add_translate_data": 0,
+ "columns": [],
  "creation": "2017-01-10 17:36:58.153863",
- "disable_prepared_report": 0,
  "disabled": 0,
  "docstatus": 0,
  "doctype": "Report",
+ "filters": [],
  "idx": 2,
  "is_standard": "Yes",
- "modified": "2020-05-28 00:07:18.576661",
+ "letterhead": null,
+ "modified": "2025-07-08 16:01:30.213190",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Register",
@@ -22,6 +25,10 @@
   },
   {
    "role": "HR Manager"
+  },
+  {
+   "role": "System Manager"
   }
- ]
+ ],
+ "timeout": 0
 }

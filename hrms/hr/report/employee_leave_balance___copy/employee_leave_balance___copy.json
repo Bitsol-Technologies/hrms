@@ -1,20 +1,21 @@
 {
  "add_total_row": 1,
+ "add_translate_data": 0,
  "columns": [],
  "creation": "2023-08-07 23:38:59.885425",
- "disable_prepared_report": 0,
  "disabled": 0,
  "docstatus": 0,
  "doctype": "Report",
  "filters": [],
  "idx": 0,
  "is_standard": "Yes",
- "modified": "2023-08-07 23:38:59.885425",
+ "letterhead": null,
+ "modified": "2025-07-08 16:01:24.305600",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Leave Balance - Copy",
  "owner": "Administrator",
- "prepared_report": 1,
+ "prepared_report": 0,
  "ref_doctype": "Employee",
  "report_name": "Employee Leave Balance - Copy",
  "report_type": "Script Report",
@@ -27,6 +28,10 @@
   },
   {
    "role": "Employee"
+  },
+  {
+   "role": "System Manager"
   }
- ]
+ ],
+ "timeout": 0
 }

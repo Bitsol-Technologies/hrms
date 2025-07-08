@@ -10,7 +10,7 @@
  "idx": 0,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2025-05-22 12:26:48.272588",
+ "modified": "2025-07-08 16:01:23.367696",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Cost by Cost Center",
@@ -26,6 +26,9 @@
   },
   {
    "role": "Employee Self Service"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "timeout": 0
