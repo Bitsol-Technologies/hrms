@@ -232,12 +232,13 @@
   },
   {
    "hidden": 0,
-   "is_query_report": 1,
+   "is_query_report": 0,
    "label": "Daily Work Summary Replies",
    "link_count": 0,
    "link_to": "Daily Work Summary Replies",
    "link_type": "Report",
    "onboard": 0,
+   "report_ref_doctype": "Daily Work Summary",
    "type": "Link"
   },
   {
@@ -289,7 +290,7 @@
    "type": "Link"
   }
  ],
- "modified": "2024-09-12 14:56:12.148138",
+ "modified": "2025-01-27 13:10:29.817603",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Lifecycle",
@@ -332,7 +333,7 @@
    "role": "HR User"
   }
  ],
- "sequence_id": 13.0,
+ "sequence_id": 17.0,
  "shortcuts": [
   {
    "color": "Grey",

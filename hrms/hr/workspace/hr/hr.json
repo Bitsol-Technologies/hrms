@@ -440,9 +440,12 @@
   },
   {
    "role": "System Manager"
+  },
+   {
+   "role": "Talent and Growth Manager"
   }
  ],
- "sequence_id": 10.0,
+ "sequence_id": 14.0,
  "shortcuts": [
   {
    "color": "Grey",

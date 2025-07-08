@@ -12,7 +12,7 @@
  "is_standard": 1,
  "message": "Project {{ doc.project_name }} is assigned to {{ doc.employee_name }}\n",
  "message_type": "Plain Text",
- "modified": "2025-01-29 10:13:03.328984",
+ "modified": "2025-06-03 14:54:06.752219",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Project Assigned to User",
@@ -23,9 +23,6 @@
   },
   {
    "receiver_by_document_field": "user"
-  },
-  {
-   "receiver_by_role": "HR Manager"
   },
   {
    "receiver_by_document_field": "team_lead_user"

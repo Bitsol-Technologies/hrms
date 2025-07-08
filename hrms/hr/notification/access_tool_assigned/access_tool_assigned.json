@@ -12,7 +12,7 @@
  "is_standard": 1,
  "message": "{{ doc.tool_name }} assigned to {{ doc.employee_name }} for Project {{ doc.project_name }}\n",
  "message_type": "Plain Text",
- "modified": "2025-01-28 17:27:44.043454",
+ "modified": "2025-04-28 11:43:33.850396",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Access Tool Assigned",
@@ -29,9 +29,6 @@
   },
   {
    "receiver_by_document_field": "user"
-  },
-  {
-   "receiver_by_role": "Operation Manager"
   }
  ],
  "send_system_notification": 1,

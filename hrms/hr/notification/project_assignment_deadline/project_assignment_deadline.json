@@ -13,7 +13,7 @@
  "is_standard": 1,
  "message": "Project {{ doc.project_name }} Ends in 1 day for {{ doc.employee_name }}",
  "message_type": "Plain Text",
- "modified": "2025-01-29 09:47:48.331077",
+ "modified": "2025-06-03 14:53:08.142011",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Project Assignment Deadline",
@@ -27,9 +27,6 @@
   },
   {
    "receiver_by_document_field": "team_lead_user"
-  },
-  {
-   "receiver_by_role": "HR Manager"
   }
  ],
  "send_system_notification": 1,
