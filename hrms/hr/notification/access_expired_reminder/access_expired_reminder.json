@@ -13,7 +13,7 @@
  "is_standard": 1,
  "message": "Access to {{ doc.tool_name }} has expired today ({{ doc.expiration_date }}). If needed renew, please review.",
  "message_type": "Plain Text",
- "modified": "2025-01-30 12:23:40.644874",
+ "modified": "2025-04-28 11:42:27.763131",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Access Expired Reminder",
@@ -30,9 +30,6 @@
   },
   {
    "receiver_by_document_field": "user"
-  },
-  {
-   "receiver_by_role": "Operation Manager"
   }
  ],
  "send_system_notification": 1,

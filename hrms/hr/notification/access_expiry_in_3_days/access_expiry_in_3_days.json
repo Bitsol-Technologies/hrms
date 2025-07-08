@@ -13,7 +13,7 @@
  "is_standard": 1,
  "message": "Access to {{ doc.tool_name }} will expire for {{ doc.employee_name }} on {{ doc.expiration_date }}",
  "message_type": "Plain Text",
- "modified": "2025-01-29 10:21:47.955251",
+ "modified": "2025-04-28 11:42:38.534304",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Access Expiry in 3 days",
@@ -30,9 +30,6 @@
   },
   {
    "receiver_by_document_field": "risk_owner"
-  },
-  {
-   "receiver_by_role": "Operation Manager"
   }
  ],
  "send_system_notification": 1,

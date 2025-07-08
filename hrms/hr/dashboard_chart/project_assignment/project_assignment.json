@@ -1,0 +1,44 @@
+{
+ "aggregate_function_based_on": "allocated_hours_daily",
+ "based_on": "",
+ "chart_name": "Project Assignment",
+ "chart_type": "Group By",
+ "creation": "2025-02-13 12:58:22.821680",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "document_type": "Project Assignment",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Project Assignment\",\"status\",\"=\",\"Active\",false],[\"Project Assignment\",\"docstatus\",\"=\",\"1\",false]]",
+ "group_by_based_on": "project",
+ "group_by_type": "Sum",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "last_synced_on": "2025-02-13 12:59:20.834505",
+ "modified": "2025-02-13 13:03:14.054779",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Project Assignment",
+ "number_of_groups": 0,
+ "owner": "Administrator",
+ "parent_document_type": "",
+ "roles": [
+  {
+   "role": "Project Manager"
+  },
+  {
+   "role": "HR"
+  },
+  {
+   "role": "Projects Manager"
+  }
+ ],
+ "source": "",
+ "time_interval": "Weekly",
+ "timeseries": 0,
+ "timespan": "Last Month",
+ "type": "Line",
+ "use_report_chart": 0,
+ "value_based_on": "",
+ "y_axis": []
+}

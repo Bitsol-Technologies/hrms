@@ -1,9 +1,9 @@
 {
  "attach_print": 0,
  "channel": "Email",
- "creation": "2024-10-21 11:42:41.876903",
+ "creation": "2025-01-27 14:14:59.869644",
  "date_changed": "end_date",
- "days_in_advance": 3,
+ "days_in_advance": 7,
  "docstatus": 0,
  "doctype": "Notification",
  "document_type": "Project Assignment",
@@ -11,12 +11,12 @@
  "event": "Days Before",
  "idx": 0,
  "is_standard": 1,
- "message": "<p>Your assignment to the Project {{doc.project_name}} for {{doc.employee_name}} will expire in 3 days</p>\n",
+ "message": "<p>Your assignment to the Project {{doc.project_name}} for {{doc.employee_name}} will expire in 7 days</p>\n",
  "message_type": "Markdown",
- "modified": "2025-01-27 14:17:50.457243",
+ "modified": "2025-01-27 14:18:33.271787",
  "modified_by": "Administrator",
  "module": "HR",
- "name": "Project Assignment Expiry",
+ "name": "Project Assignment Expiry 7 days",
  "owner": "Administrator",
  "recipients": [
   {
