@@ -7,10 +7,10 @@
  "docstatus": 0,
  "doctype": "Report",
  "filters": [],
- "idx": 0,
+ "idx": 3,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2025-05-09 11:35:30.689406",
+ "modified": "2025-07-08 16:01:23.416937",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Applicant Count by Status",
@@ -35,6 +35,9 @@
   },
   {
    "role": "Recruiter"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "timeout": 0

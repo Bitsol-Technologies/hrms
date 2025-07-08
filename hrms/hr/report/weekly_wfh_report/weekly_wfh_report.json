@@ -29,7 +29,7 @@
  "idx": 0,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2025-07-03 10:40:43.966263",
+ "modified": "2025-07-08 15:46:06.849078",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Weekly WFH Report",
@@ -48,6 +48,9 @@
   },
   {
    "role": "Project Manager"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "timeout": 0
