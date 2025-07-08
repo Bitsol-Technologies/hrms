@@ -665,7 +665,7 @@ def send_slack_message_for_employee(emails, message):
 		else:
 			user_id = get_slack_user_id(email)
 			if not user_id:
-				frappe.log_error(f"Could not fetch Slack user ID for {email}", "Slack Notification")
+				frappe.log(f"Could not fetch Slack user ID for {email}")
 				continue
 
 		payload = {
@@ -736,7 +736,7 @@ def check_today_checkins():
 
 			if not (custom_api_key and custom_user_id and workspace_ids):
 				msg = f"Employee {emp.name if emp else checkin.employee} missing one or more custom Clockify credentials."
-				frappe.log_error(message=msg, title="Clockify Reminder Check")
+				frappe.log(msg)
 				continue
 
 			# Check for active timer in any workspace
