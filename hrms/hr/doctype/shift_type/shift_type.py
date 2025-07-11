@@ -614,7 +614,7 @@ def _check_clockify_activity(employee):
 	if not (custom_api_key and custom_user_id and workspace_ids):
 		# Cannot check credentials, assume no activity to allow HR notification to proceed.
 		msg = f"Employee {employee.name} missing one or more custom Clockify credentials."
-		frappe.log_error(message=msg, title="Daily Check-in Reminder")
+		frappe.log(msg)
 		return False
 
 	# Check for an active timer in any workspace
