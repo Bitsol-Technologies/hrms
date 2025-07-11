@@ -195,7 +195,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-05-09 12:08:41.002099",
+ "modified": "2025-07-08 11:54:47.834606",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Recruitment",
@@ -222,6 +222,9 @@
   },
   {
    "role": "HR User"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "sequence_id": 16.0,

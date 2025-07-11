@@ -421,7 +421,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-06-30 17:37:34.517932",
+ "modified": "2025-07-08 11:53:51.517200",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR",
@@ -440,6 +440,9 @@
   },
   {
    "role": "Talent and Growth Manager"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "sequence_id": 14.0,

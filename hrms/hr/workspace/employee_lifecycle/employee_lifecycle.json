@@ -290,7 +290,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-01-27 13:10:29.817603",
+ "modified": "2025-07-08 11:55:04.383730",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Lifecycle",
@@ -331,6 +331,9 @@
   },
   {
    "role": "HR User"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "sequence_id": 17.0,
