@@ -72,14 +72,14 @@
   },
   {
    "fieldname": "total_hours",
-   "fieldtype": "Float",
+   "fieldtype": "Time",
    "label": "Total Hours",
    "precision": "2",
    "read_only": 1
   },
   {
    "fieldname": "expected_hours",
-   "fieldtype": "Float",
+   "fieldtype": "Time",
    "label": "Expected Hours",
    "precision": "2",
    "read_only": 1
@@ -121,7 +121,7 @@
    "link_fieldname": "employee_compliance_report"
   }
  ],
- "modified": "2025-06-03 11:58:45.925881",
+ "modified": "2025-07-14 11:18:53.703495",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Compliance Report",
