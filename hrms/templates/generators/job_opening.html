@@ -212,13 +212,13 @@
 
 	{%- if description -%}<p>{{ description }}</p>{% endif %}
 
-	<!-- Mobile Apply Now Button -->
+	<!-- Sticky Apply Now Button -->
 	<div id="sticky-div" class="position-sticky d-md-none" style="bottom: 0; ">
 		<div class="w-100 bg-white py-8">
 			{%- if status == "Open" -%}
 				<a
 					class="btn btn-primary btn-lg w-100"
-					href="/{{ job_application_route if job_application_route else 'job_application' }}/new?job_title={{ name }}"
+					href="/{{ job_application_route if job_application_route else 'job_application' }}/new?job_title={{ name }}&title={{ job_title }}"
 				>
 					{{ _("Apply Now") }}
 				</a>
