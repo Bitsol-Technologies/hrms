@@ -5,7 +5,7 @@ import requests
 import uuid
 from datetime import datetime, timedelta
 import json
-# from google.apps import meet_v2
+from google.apps import meet_v2
 from google.oauth2.service_account import Credentials
 
 import frappe
