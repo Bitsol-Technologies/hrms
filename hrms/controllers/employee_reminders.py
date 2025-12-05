@@ -98,8 +98,23 @@ def send_birthday_reminders():
 		birthday_person_emails = [get_employee_email(doc) for doc in birthday_persons]
 		recipients = list(set(employee_emails) - set(birthday_person_emails))
 
+		# Filter recipients based on their notification preference
+		filtered_recipients = []
+		for email in recipients:
+			try:
+				user_doc = frappe.get_doc("User", email)
+				send_birthday_notification = user_doc.get("is_birthday_notification_active")
+				if send_birthday_notification:
+					filtered_recipients.append(email)
+			except Exception:
+				# If user not found or error, skip this recipient
+				continue
+		
+		if not filtered_recipients:
+			continue
+
 		reminder_text, message = get_birthday_reminder_text_and_message(birthday_persons)
-		send_birthday_reminder(recipients, reminder_text, birthday_persons, message, sender)
+		send_birthday_reminder(filtered_recipients, reminder_text, birthday_persons, message, sender)
 
 		if len(birthday_persons) > 1:
 			# special email for people sharing birthdays
@@ -238,8 +253,23 @@ def send_work_anniversary_reminders():
 		anniversary_person_emails = [get_employee_email(doc) for doc in anniversary_persons]
 		recipients = list(set(employee_emails) - set(anniversary_person_emails))
 
+		# Filter recipients based on their notification preference
+		filtered_recipients = []
+		for email in recipients:
+			try:
+				user_doc = frappe.get_doc("User", email)
+				send_anniversary_notification = user_doc.get("is_anniversary_notification_active")
+				if send_anniversary_notification:
+					filtered_recipients.append(email)
+			except Exception:
+				# If user not found or error, skip this recipient
+				continue
+		
+		if not filtered_recipients:
+			continue
+
 		reminder_text = get_work_anniversary_reminder_text(anniversary_persons)
-		send_work_anniversary_reminder(recipients, reminder_text, anniversary_persons, message, sender)
+		send_work_anniversary_reminder(filtered_recipients, reminder_text, anniversary_persons, message, sender)
 
 		if len(anniversary_persons) > 1:
 			# email for people sharing work anniversaries
