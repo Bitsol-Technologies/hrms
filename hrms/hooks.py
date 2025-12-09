@@ -215,7 +215,6 @@ doc_events = {
 
 scheduler_events = {
 	"all": [
-		# "hrms.hr.doctype.interview.interview.send_interview_reminder",
 	],
 	"hourly": [
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.trigger_emails",
