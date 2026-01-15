@@ -21,6 +21,8 @@
   "to_time",
   "location",
   "meeting_link",
+  "calendar_event_uid",
+  "sequence_number",
   "resume_attachment",
   "section_break_hqvh",
   "interview_details",
@@ -196,6 +198,21 @@
    "fieldname": "meeting_link",
    "fieldtype": "Data",
    "label": "Meeting Link",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calendar_event_uid",
+   "fieldtype": "Data",
+   "label": "Calendar Event UID",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "default": 0,
+   "fieldname": "sequence_number",
+   "fieldtype": "Int",
+   "label": "Sequence Number",
+   "hidden": 1,
    "read_only": 1
   },
   {

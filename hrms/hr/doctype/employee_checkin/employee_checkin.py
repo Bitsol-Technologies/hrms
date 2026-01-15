@@ -779,7 +779,23 @@ def check_today_checkins():
 				msg = f"Employee {employee_identifier} missing email/user_id for Slack/Push notification."
 				frappe.log_error(message=msg, title="Clockify Reminder Check")
 				continue
-
+			# Check if user has clockify notifications enabled
+			try:
+				user_doc = frappe.get_doc("User", email_user_id)
+				is_clockify_active = user_doc.get("is_clockify_active")
+				
+				# Skip if clockify notifications are disabled for this user
+				if not is_clockify_active:
+					frappe.log(f"Clockify notifications disabled for user {email_user_id}. Skipping reminder.")
+					continue
+			except Exception as e:
+				# If there's an error fetching the user or field doesn't exist, log and skip
+				frappe.log_error(
+					message=f"Error checking is_clockify_active for user {email_user_id}: {str(e)}",
+					title="Clockify Notification Check"
+				)
+				continue
+			
 			push_title = "Clockify Timer Reminder"
 			
 			# Create Notification Log
@@ -795,7 +811,6 @@ def check_today_checkins():
 				"send_email": 0
 				}
 			).insert(ignore_permissions=True)
-
 		except Exception as e:
 			frappe.log_error(
 				message=f"Error processing Clockify reminder for check-in {checkin.name} (Employee: {checkin.employee}): {frappe.get_traceback()}",

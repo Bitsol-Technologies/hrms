@@ -39,6 +39,14 @@ class Interview(Document):
 	def after_insert(self):
 		meeting_link = get_meeting_link()
 		self.db_set("meeting_link", meeting_link)
+		# Generate and store calendar event UID for first time
+		if not self.calendar_event_uid:
+			calendar_uid = str(uuid.uuid4())
+			self.db_set("calendar_event_uid", calendar_uid)
+			self.db_set("sequence_number", 0)
+			# IMPORTANT: Set it in the object so create_ics_file can use it
+			self.calendar_event_uid = calendar_uid
+			self.sequence_number = 0
 		recipients = list(set(get_recipients(self.name)+ get_recruiter_emails())) 
 		ics_file = self.create_ics_file(recipients, meeting_link)
 		# Create a copy of recipients list before modification
@@ -172,61 +180,61 @@ class Interview(Document):
 			)
 			return
 
-
-		# Update interview timings
+		# Update interview timings in DB
 		self.db_set({"scheduled_on": scheduled_on, "from_time": from_time, "to_time": to_time})
 		self.notify_update()
+		
+		self.reload()
 
-		# Set the status to 'rescheduled'
 		schedule_status = "rescheduled"
-
 		recipients = list(set(get_recipients(self.name) + get_recruiter_emails())) 
 
 		template_name = "Interview Scheduling Template" if self.location == "Remote" else "Interview on site"
 		interview_template = frappe.get_doc("Email Template", template_name)
-		time = datetime.strptime(from_time, "%H:%M:%S").strftime("%I:%M %p")
+		
+		time = datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p")
 		ics_file = self.create_ics_file(recipients, self.meeting_link)
 
-		# Create the attachment tuple as expected by Frappe
 		attachment = {
 			"fname": "event.ics",
 			"fcontent": ics_file
 		}
-		# Step 2: Prepare email arguments 
+		
 		email_args = {
 			"name": self.applicant_name,
 			"title": self.job_title,
 			"location": self.location,
-			"date": scheduled_on,
+			"date": self.scheduled_on,
 			"interview_round": self.interview_round,
 			"time": time,
 			"meeting_link": self.meeting_link,
 			"interview_type": "Remote" if self.location == "Remote" else "On-Site",
 			"schedule_status": schedule_status,
 		}
+		
 		try:
 			message = frappe.render_template(interview_template.response, email_args)
 
 			frappe.sendmail(
 				recipients=recipients,
-				sender= frappe.get_single("HR Settings").sender_email,
-				subject=_("Rescheduled: {0} Interview for the position of {1} at {2}, at {3}").format(self.location, self.job_title, scheduled_on, time),
+				sender=frappe.get_single("HR Settings").sender_email,
+				subject=_("Rescheduled: {0} Interview for the position of {1} at {2}, at {3}").format(
+					self.location, self.job_title, self.scheduled_on, time  # Use reloaded value
+				),
 				message=message,
 				reference_doctype=self.doctype,
 				reference_name=self.name,
-				attachments=[attachment],  # Ensure it's a list
+				attachments=[attachment],
 			)
 			log_email_in_comments(
-			doc=self,
-			subject=f"Interview Rescheduled – {email_args['interview_type']}",
-			html_content=message,       # <-- pass that HTML here
-			recipients=recipients
+				doc=self,
+				subject=f"Interview Rescheduled – {email_args['interview_type']}",
+				html_content=message,
+				recipients=recipients
 			)
 		except Exception:
 			frappe.msgprint(
-				_(
-					"Failed to send the Interview Reschedule notification. Please configure your email account."
-				)
+				_("Failed to send the Interview Reschedule notification. Please configure your email account.")
 			)
 
 		frappe.msgprint(_("Interview Rescheduled successfully"), indicator="green")
@@ -253,6 +261,25 @@ class Interview(Document):
 		event_description = "Candidate Interview"
 		timezone = "Asia/Karachi"
 
+		# Use existing UID if available, otherwise generate a new one
+		calendar_uid = self.calendar_event_uid or frappe.db.get_value("Interview", self.name, "calendar_event_uid")
+		if not calendar_uid:
+			calendar_uid = str(uuid.uuid4())
+			self.db_set("calendar_event_uid", calendar_uid)
+			self.db_set("sequence_number", 0)
+			# Set in object so subsequent calls use the same UID
+			self.calendar_event_uid = calendar_uid
+			self.sequence_number = 0
+		else:
+			# Ensure object has the value from database
+			self.calendar_event_uid = calendar_uid
+
+		# Increment sequence number for updates
+		current_sequence = frappe.db.get_value("Interview", self.name, "sequence_number") or 0
+		new_sequence = current_sequence + 1
+		self.sequence_number = new_sequence  # Keep object in sync
+		self.db_set("sequence_number", new_sequence)
+
 		# Create ICS content
 		ics_content = f"""BEGIN:VCALENDAR
 PRODID:-//Google Inc//Google Calendar 70.9054//EN
@@ -274,7 +301,8 @@ DTSTART;TZID={timezone}:{start_time.strftime('%Y%m%dT%H%M%S')}
 DTEND;TZID={timezone}:{end_time.strftime('%Y%m%dT%H%M%S')}
 DTSTAMP:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
 ORGANIZER;CN=Bitsol:mailto:no-reply@bitsol.tech
-UID:{uuid.uuid4()}
+UID:{calendar_uid}
+SEQUENCE:{new_sequence}
 X-GOOGLE-CONFERENCE:{meeting_link}
 CREATED:{datetime.now().strftime('%Y%m%dT%H%M%SZ')}
 DESCRIPTION:{event_description}

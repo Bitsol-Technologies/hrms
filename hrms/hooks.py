@@ -215,7 +215,6 @@ doc_events = {
 
 scheduler_events = {
 	"all": [
-		"hrms.hr.doctype.interview.interview.send_interview_reminder",
 	],
 	"hourly": [
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.trigger_emails",
@@ -228,7 +227,6 @@ scheduler_events = {
 	],
 	"daily": [
 		"hrms.controllers.employee_reminders.send_birthday_reminders",
-		"hrms.controllers.employee_reminders.send_work_anniversary_reminders",
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.send_summary",
 		"hrms.hr.doctype.interview.interview.send_daily_feedback_reminder",
 		"hrms.hr.doctype.job_opening.job_opening.close_expired_job_openings",
@@ -249,8 +247,14 @@ scheduler_events = {
 		"0 2 * * *": ["hrms.hr.doctype.shift_type.shift_type.process_auto_attendance_for_all_shifts"],
 		"*/15 * * * *": ["hrms.hr.doctype.shift_type.shift_type.notify_employees_to_checkin_or_checkout"],
 		"0 10 * * *": ["hrms.hr.doctype.work_from_home.work_from_home.send_wfh_feedback_forms"],
-		"0 8 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report"],
-		"0 9 * * *": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_yesterday_compliance_report_to_slack"],
+		"0 8 * * *": [
+      		"hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report",
+            "hrms.hr.doctype.interview.interview.send_interview_reminder",
+        ],
+		"0 9 * * *": [
+			"hrms.hr.doctype.employee_checkin.employee_checkin.send_yesterday_compliance_report_to_slack",
+			"hrms.controllers.employee_reminders.send_work_anniversary_reminders",
+		],
 		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_late_report_to_HR"],
 		"1 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_leave_report_to_HR"],
 		"2 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_wfh_report_to_HR"],

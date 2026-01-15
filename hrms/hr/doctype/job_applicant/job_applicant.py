@@ -149,6 +149,28 @@ class JobApplicant(Document):
 					)
 				except Exception as e:
 					frappe.log_error(f"Error sending email: {e}")
+				try:
+					# Prepare email arguments
+					email_args = {
+						"name": self.applicant_name,
+						"title": job_opening_doc.get("job_title"),
+					}
+					
+					# Fetch & render the email template
+					email_template = frappe.get_doc("Email Template", "Rejection Email")
+					email_content = frappe.render_template(email_template.response, email_args)
+					
+					# Create notification log entry with email content
+					frappe.get_doc({
+						"doctype": "Notification Log",
+						"subject": f"Rejection Email - {self.applicant_name}",
+						"email_content": email_content,
+						"document_type": self.doctype,
+						"document_name": self.name,
+						"for_users": [self.email_id],
+					}).insert(ignore_permissions=True)
+				except Exception as e:
+					frappe.log_error(f"Error creating notification log: {e}")
 
 	def validate(self):
 		if self.email_id:

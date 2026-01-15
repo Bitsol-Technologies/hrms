@@ -340,5 +340,6 @@
  "sort_order": "DESC",
  "states": [],
  "subject_field": "notes",
- "title_field": "applicant_name"
+ "title_field": "applicant_name",
+ "track_changes": 1
 }
