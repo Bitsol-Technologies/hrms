@@ -1188,8 +1188,11 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		"is_wfh": False
 	}
 
+	user_doc = frappe.get_doc("User", emp_email)
+	is_clockify_active = user_doc.get("is_clockify_active")
+
 	# Validate required Clockify details
-	if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
+	if is_clockify_active and (not emp_data.get("user_id") or not emp_data.get("workspace_ids")):
 		compliance_data["is_compliant"] = False
 		compliance_data["reason"] = "Missing Clockify API User ID or Workspace ID"
 		return compliance_data
@@ -1308,6 +1311,9 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 			compliance_data["is_compliant"] = False
 			compliance_data["reason"] = "Absent"
 			return compliance_data
+
+	if not is_clockify_active:
+		return compliance_data
 
 	if total_logged_seconds == 0:
 		compliance_data["is_compliant"] = False
