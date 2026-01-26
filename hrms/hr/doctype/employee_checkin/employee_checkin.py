@@ -1715,6 +1715,12 @@ def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, 
 	# Fetch and process Work From Home in a week
 	wfh_days_count = get_wfh_days_count(emp_data["employee"], start_date, end_date - timedelta(days=1), status="Approved")
 
+	user_doc = frappe.get_doc("User", user_id)
+	is_clockify_active = user_doc.get("is_clockify_active")
+
+	if not is_clockify_active:
+		return employee_weekly_reports, late_entries_count, wfh_days_count
+
 	# Process each workspace
 	for workspace_id in workspaces:
 		task_id = get_clockify_report_task_id(workspace_id, start_date, end_date - timedelta(days=1), user_id, custom_api_key)
