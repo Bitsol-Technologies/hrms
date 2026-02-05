@@ -8,7 +8,19 @@ from frappe.utils import getdate
 
 
 def execute(filters=None):
-	data = get_data(filters)
+	data = []
+	provident_fund_components = ["Provident Fund", "Additional Provident Fund", "Provident Fund Loan"]
+	if not frappe.db.exists("Salary Component", {"component_type": ["in", provident_fund_components]}):
+		frappe.msgprint(
+			_(
+				"Salary components of type Provident Fund, Additional Provident Fund or Provident Fund Loan are not set up."
+			),
+			title=_("Missing Salary Components"),
+			indicator="red",
+		)
+	else:
+		data = get_data(filters)
+
 	columns = get_columns(filters) if len(data) else []
 
 	return columns, data
@@ -75,7 +87,6 @@ def prepare_data(entry, component_type_dict):
 	)
 
 	for d in entry:
-
 		component_type = component_type_dict.get(d.salary_component)
 
 		if data_list.get(d.name):
@@ -117,16 +128,16 @@ def get_data(filters):
 	if not len(component_type_dict):
 		return []
 
+	# nosemgrep: frappe-semgrep-rules.rules.frappe-using-db-sql
 	entry = frappe.db.sql(
 		""" select sal.name, sal.employee, sal.employee_name, ded.salary_component, ded.amount
 		from `tabSalary Slip` sal, `tabSalary Detail` ded
 		where sal.name = ded.parent
 		and ded.parentfield = 'deductions'
 		and ded.parenttype = 'Salary Slip'
-		and sal.docstatus = 1 %s
-		and ded.salary_component in (%s)
-	"""
-		% (conditions, ", ".join(["%s"] * len(component_type_dict))),
+		and sal.docstatus = 1 {}
+		and ded.salary_component in ({})
+		""".format(conditions, ", ".join(["%s"] * len(component_type_dict.keys()))),
 		tuple(component_type_dict.keys()),
 		as_dict=1,
 	)

@@ -62,7 +62,7 @@
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "Progress",
-   "read_only_depends_on": "eval:doc.is_group"
+   "read_only_depends_on": "eval:doc.is_group || doc.status=='Closed'"
   },
   {
    "default": "Pending",
@@ -71,7 +71,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "\nPending\nIn Progress\nCompleted\nArchived",
+   "options": "\nPending\nIn Progress\nCompleted\nArchived\nClosed",
    "read_only": 1
   },
   {
@@ -108,6 +108,7 @@
    "default": "0",
    "fieldname": "is_group",
    "fieldtype": "Check",
+   "in_list_view": 1,
    "label": "Is Group",
    "set_only_once": 1
   },
@@ -213,7 +214,7 @@
  "index_web_pages_for_search": 1,
  "is_tree": 1,
  "links": [],
- "modified": "2023-03-31 09:56:03.450215",
+ "modified": "2024-03-27 13:09:45.520429",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Goal",
@@ -273,7 +274,7 @@
  "search_fields": "employee, goal_name",
  "show_preview_popup": 1,
  "show_title_field_in_link": 1,
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
  "title_field": "goal_name",

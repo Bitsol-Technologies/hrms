@@ -39,15 +39,16 @@ class StaffingPlan(Document):
 
 		for detail in self.get("staffing_details"):
 			# Set readonly fields
-			self.set_number_of_positions(detail)
 			designation_counts = get_designation_counts(detail.designation, self.company)
 			detail.current_count = designation_counts["employee_count"]
 			detail.current_openings = designation_counts["job_openings"]
-
+			self.set_number_of_positions(detail)
 			detail.total_estimated_cost = 0
 			if detail.number_of_positions > 0:
 				if detail.vacancies and detail.estimated_cost_per_position:
-					detail.total_estimated_cost = cint(detail.vacancies) * flt(detail.estimated_cost_per_position)
+					detail.total_estimated_cost = cint(detail.vacancies) * flt(
+						detail.estimated_cost_per_position
+					)
 
 			self.total_estimated_budget += detail.total_estimated_cost
 
@@ -121,9 +122,7 @@ class StaffingPlan(Document):
 			< (cint(staffing_plan_detail.vacancies) + cint(all_sibling_details.vacancies))
 		) or (
 			flt(parent_plan_details[0].total_estimated_cost)
-			< (
-				flt(staffing_plan_detail.total_estimated_cost) + flt(all_sibling_details.total_estimated_cost)
-			)
+			< (flt(staffing_plan_detail.total_estimated_cost) + flt(all_sibling_details.total_estimated_cost))
 		):
 			frappe.throw(
 				_(
@@ -181,12 +180,14 @@ class StaffingPlan(Document):
 
 			self.staffing_details = []
 			for req in requisitions:
+				current_count = get_designation_counts(req.designation, self.company)["employee_count"]
 				self.append(
 					"staffing_details",
 					{
 						"designation": req.designation,
 						"vacancies": req.no_of_positions,
 						"estimated_cost_per_position": req.expected_compensation,
+						"number_of_positions": cint(current_count) + cint(req.no_of_positions),
 					},
 				)
 
@@ -236,9 +237,7 @@ def get_active_staffing_plan_details(company, designation, from_date=None, to_da
 	if not staffing_plan:
 		parent_company = frappe.get_cached_value("Company", company, "parent_company")
 		if parent_company:
-			staffing_plan = get_active_staffing_plan_details(
-				parent_company, designation, from_date, to_date
-			)
+			staffing_plan = get_active_staffing_plan_details(parent_company, designation, from_date, to_date)
 
 	# Only a single staffing plan can be active for a designation on given date
 	return staffing_plan if staffing_plan else None

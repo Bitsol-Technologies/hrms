@@ -1,5 +1,5 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import getdate
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -16,7 +16,7 @@ from hrms.payroll.doctype.salary_structure.test_salary_structure import make_sal
 from hrms.payroll.report.income_tax_computation.income_tax_computation import execute
 
 
-class TestIncomeTaxComputation(FrappeTestCase):
+class TestIncomeTaxComputation(IntegrationTestCase):
 	def setUp(self):
 		self.cleanup_records()
 		self.create_records()
@@ -41,9 +41,7 @@ class TestIncomeTaxComputation(FrappeTestCase):
 			date_of_joining=getdate("01-10-2021"),
 		)
 
-		self.payroll_period = create_payroll_period(
-			name="_Test Payroll Period 1", company="_Test Company"
-		)
+		self.payroll_period = create_payroll_period(name="_Test Payroll Period 1", company="_Test Company")
 
 		self.income_tax_slab = create_tax_slab(
 			self.payroll_period,
@@ -83,14 +81,14 @@ class TestIncomeTaxComputation(FrappeTestCase):
 			"employee_name": "employee_tax_computation@example.com",
 			"department": "All Departments",
 			"income_tax_slab": self.income_tax_slab,
-			"ctc": 936000.0,
+			"gross_earnings": 936000.0,
 			"professional_tax": 2400.0,
 			"standard_tax_exemption": 50000,
 			"total_exemption": 52400.0,
 			"total_taxable_amount": 883600.0,
 			"applicable_tax": 92789.0,
 			"total_tax_deducted": 17997.0,
-			"payable_tax": 74792,
+			"payable_tax": 74792.0,
 		}
 
 		for key, val in expected_data.items():
@@ -113,3 +111,38 @@ class TestIncomeTaxComputation(FrappeTestCase):
 
 		for key, val in expected_data.items():
 			self.assertEqual(result[1][0].get(key), val)
+
+	def test_get_report_for_all_employees(self):
+		frappe.db.delete("Employee")
+		users = [
+			{"email": "test_itrc1@example.com", "args": {"status": "Active"}},
+			{"email": "test_itrc2@example.com", "args": {"status": "Inactive"}},
+			{"email": "test_itrc3@example.com", "args": {"status": "Suspended"}},
+			{"email": "test_itrc4@example.com", "args": {"status": "Left", "relieving_date": getdate()}},
+		]
+
+		for user in users:
+			employee = make_employee(user["email"], company="_Test Company")
+			salary_structure = make_salary_structure(
+				"Monthly Salary Structure Test Income Tax Computation",
+				"Monthly",
+				employee=employee,
+				company="_Test Company",
+				currency="INR",
+				payroll_period=self.payroll_period,
+				test_tax=True,
+			)
+
+			create_salary_slips_for_payroll_period(
+				employee, salary_structure.name, self.payroll_period, deduct_random=False, num=3
+			)
+			frappe.db.set_value("Employee", employee, user["args"])
+
+		filters = frappe._dict(
+			{
+				"company": "_Test Company",
+				"payroll_period": self.payroll_period.name,
+			}
+		)
+		result = execute(filters)[1]
+		self.assertEqual(len(result), 4)

@@ -63,13 +63,13 @@
    "default": "Round off Work Experience",
    "fieldname": "work_experience_calculation_function",
    "fieldtype": "Select",
-   "label": "Work Experience Calculation method",
-   "options": "Round off Work Experience\nTake Exact Completed Years"
+   "label": "Work Experience Calculation Method",
+   "options": "Round off Work Experience\nTake Exact Completed Years\nManual"
   },
   {
    "default": "365",
    "fieldname": "total_working_days_per_year",
-   "fieldtype": "Int",
+   "fieldtype": "Float",
    "label": "Total working Days Per Year"
   },
   {
@@ -93,7 +93,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2023-01-05 12:36:32.412409",
+ "modified": "2025-07-21 13:59:20.212312",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Gratuity Rule",
@@ -125,7 +125,8 @@
    "write": 1
   }
  ],
- "sort_field": "modified",
+ "row_format": "Dynamic",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
  "track_changes": 1

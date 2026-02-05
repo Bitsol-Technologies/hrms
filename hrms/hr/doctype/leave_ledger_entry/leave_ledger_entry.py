@@ -1,23 +1,35 @@
 # Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import DATE_FORMAT, flt, getdate, today
+from frappe.utils import DATE_FORMAT, flt, formatdate, get_link_to_form, getdate, today
+
+
+class InvalidLeaveLedgerEntry(frappe.ValidationError):
+	pass
 
 
 class LeaveLedgerEntry(Document):
 	def validate(self):
 		if getdate(self.from_date) > getdate(self.to_date):
-			frappe.throw(_("To date needs to be before from date"))
+			frappe.throw(
+				_(
+					"Leave Ledger Entry's To date needs to be after From date. Currently, From Date is {0} and To Date is {1}"
+				).format(
+					frappe.bold(formatdate(self.from_date)),
+					frappe.bold(formatdate(self.to_date)),
+				),
+				exc=InvalidLeaveLedgerEntry,
+				title=_("Invalid Leave Ledger Entry"),
+			)
 
 	def on_cancel(self):
 		# allow cancellation of expiry leaves
 		if self.is_expired:
 			frappe.db.set_value("Leave Allocation", self.transaction_name, "expired", 0)
-		else:
+		elif self.transaction_type != "Leave Adjustment":
 			frappe.throw(_("Only expired allocation can be cancelled"))
 
 
@@ -40,7 +52,11 @@ def validate_leave_allocation_against_leave_application(ledger):
 	if leave_application_records:
 		frappe.throw(
 			_("Leave allocation {0} is linked with the Leave Application {1}").format(
-				ledger.transaction_name, ", ".join(leave_application_records)
+				ledger.transaction_name,
+				", ".join(
+					get_link_to_form("Leave Application", application)
+					for application in leave_application_records
+				),
 			)
 		)
 
@@ -130,7 +146,7 @@ def process_expired_allocation():
 	expire_allocation = frappe.db.sql(
 		"""
 		SELECT
-			leaves, to_date, employee, leave_type,
+			leaves, to_date, from_date, employee, leave_type,
 			is_carry_forward, transaction_name as name, transaction_type
 		FROM `tabLeave Ledger Entry` l
 		WHERE (NOT EXISTS
@@ -174,13 +190,19 @@ def get_remaining_leaves(allocation):
 			"to_date": ("<=", allocation.to_date),
 			"docstatus": 1,
 		},
-		fieldname=["SUM(leaves)"],
+		fieldname=[{"SUM": "leaves"}],
 	)
 
 
 @frappe.whitelist()
 def expire_allocation(allocation, expiry_date=None):
 	"""expires non-carry forwarded allocation"""
+	import json
+
+	if isinstance(allocation, str):
+		allocation = json.loads(allocation)
+		allocation = frappe.get_doc("Leave Allocation", allocation["name"])
+
 	leaves = get_remaining_leaves(allocation)
 	expiry_date = expiry_date if expiry_date else allocation.to_date
 
@@ -218,10 +240,14 @@ def expire_carried_forward_allocation(allocation):
 		args = frappe._dict(
 			transaction_name=allocation.name,
 			transaction_type="Leave Allocation",
-			leaves=allocation.leaves * -1,
+			leaves=leaves * -1,
 			is_carry_forward=allocation.is_carry_forward,
 			is_expired=1,
 			from_date=allocation.to_date,
 			to_date=allocation.to_date,
 		)
 		create_leave_ledger_entry(allocation, args)
+
+
+def on_doctype_update():
+	frappe.db.add_index("Leave Ledger Entry", ["transaction_type", "transaction_name"])

@@ -80,10 +80,11 @@ def create_interview(doc, interview_round):
 	interview.designation = doc.designation
 	interview.resume_link = doc.resume_link
 	interview.job_opening = doc.job_title
-	interviewer_detail = get_interviewers(interview_round)
 
-	for d in interviewer_detail:
+	interviewers = get_interviewers(interview_round)
+	for d in interviewers:
 		interview.append("interview_details", {"interviewer": d.interviewer})
+
 	return interview
 
 
@@ -108,6 +109,8 @@ def get_interview_details(job_applicant):
 
 @frappe.whitelist()
 def get_applicant_to_hire_percentage():
+	frappe.has_permission("Job Applicant", throw=True)
+
 	total_applicants = frappe.db.count("Job Applicant")
 	total_hired = frappe.db.count("Job Applicant", filters={"status": "Accepted"})
 

@@ -173,6 +173,7 @@ def create_appraisals_for_cycle(appraisal_cycle: AppraisalCycle, publish_progres
 			appraisal = frappe.get_doc(
 				{
 					"doctype": "Appraisal",
+					"company": appraisal_cycle.company,
 					"appraisal_template": employee.appraisal_template,
 					"employee": employee.employee,
 					"appraisal_cycle": appraisal_cycle.name,
@@ -197,11 +198,11 @@ def create_appraisals_for_cycle(appraisal_cycle: AppraisalCycle, publish_progres
 
 def validate_active_appraisal_cycle(appraisal_cycle: str) -> None:
 	if frappe.db.get_value("Appraisal Cycle", appraisal_cycle, "status") == "Completed":
-		msg = _("Cannot create or change transactions against a {0} Appraisal Cycle.").format(
-			frappe.bold("Completed")
+		msg = _("Cannot create or change transactions against an Appraisal Cycle with status {0}.").format(
+			frappe.bold(_("Completed"))
 		)
 		msg += "<br><br>"
-		msg += _("Mark the cycle as {0} if required.").format(frappe.bold("In Progress"))
+		msg += _("Set the status to {0} if required.").format(frappe.bold(_("In Progress")))
 
 		frappe.throw(msg, title=_("Not Allowed"))
 
@@ -247,10 +248,15 @@ def get_employees_without_goals(cycle_name: str) -> int:
 	return goals_missing[0].count
 
 
-def get_employees_without_feedback(cycle_name: str) -> int:
+@frappe.whitelist()
+def get_employees_without_feedback(cycle_name: str | None = None) -> int:
 	Feedback = frappe.qb.DocType("Employee Performance Feedback")
 	Appraisal = frappe.qb.DocType("Appraisal")
 	count = Count("*").as_("count")
+	if not cycle_name:
+		cycle_name = frappe.get_value(
+			"Appraisal Cycle", {"status": "In Progress"}, order_by="start_date desc"
+		)
 
 	filtered_records = SubQuery(
 		frappe.qb.from_(Feedback)

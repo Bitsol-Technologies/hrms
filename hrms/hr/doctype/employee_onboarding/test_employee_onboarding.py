@@ -2,7 +2,7 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate
 
 from hrms.hr.doctype.employee_onboarding.employee_onboarding import (
@@ -11,15 +11,17 @@ from hrms.hr.doctype.employee_onboarding.employee_onboarding import (
 )
 from hrms.hr.doctype.job_offer.test_job_offer import create_job_offer
 from hrms.payroll.doctype.salary_slip.test_salary_slip import make_holiday_list
+from hrms.tests.test_utils import create_company
 
 
-class TestEmployeeOnboarding(FrappeTestCase):
+class TestEmployeeOnboarding(IntegrationTestCase):
 	def setUp(self):
+		create_company()
 		if frappe.db.exists("Employee Onboarding", {"employee_name": "Test Researcher"}):
-			frappe.delete_doc("Employee Onboarding", {"employee_name": "Test Researcher"})
+			frappe.db.sql("delete from `tabEmployee Onboarding` where employee_name=%s", "Test Researcher")
 
 		project = "Employee Onboarding : test@researcher.com"
-		frappe.db.sql("delete from tabProject where name=%s", project)
+		frappe.db.sql("delete from tabProject where project_name=%s", project)
 		frappe.db.sql("delete from tabTask where project=%s", project)
 
 	def test_employee_onboarding_incomplete_task(self):
@@ -35,19 +37,15 @@ class TestEmployeeOnboarding(FrappeTestCase):
 		self.assertEqual(onboarding.boarding_status, "Pending")
 
 		# start and end dates
-		start_date, end_date = frappe.db.get_value(
-			"Task", onboarding.activities[0].task, ["exp_start_date", "exp_end_date"]
-		)
-		self.assertEqual(getdate(start_date), getdate(onboarding.boarding_begins_on))
-		self.assertEqual(getdate(end_date), add_days(start_date, onboarding.activities[0].duration))
+		start_date, end_date = get_task_dates(onboarding.activities[0].task)
+		self.assertEqual(start_date, onboarding.boarding_begins_on)
+		self.assertEqual(end_date, add_days(start_date, onboarding.activities[0].duration))
 
-		start_date, end_date = frappe.db.get_value(
-			"Task", onboarding.activities[1].task, ["exp_start_date", "exp_end_date"]
-		)
+		start_date, end_date = get_task_dates(onboarding.activities[1].task)
 		self.assertEqual(
-			getdate(start_date), add_days(onboarding.boarding_begins_on, onboarding.activities[0].duration)
+			start_date, add_days(onboarding.boarding_begins_on, onboarding.activities[0].duration)
 		)
-		self.assertEqual(getdate(end_date), add_days(start_date, onboarding.activities[1].duration))
+		self.assertEqual(end_date, add_days(start_date, onboarding.activities[1].duration))
 
 		# complete the task
 		project = frappe.get_doc("Project", onboarding.project)
@@ -69,6 +67,26 @@ class TestEmployeeOnboarding(FrappeTestCase):
 		employee.gender = "Female"
 		employee.insert()
 		self.assertEqual(employee.employee_name, "Test Researcher")
+
+	def test_mark_onboarding_as_completed(self):
+		onboarding = create_employee_onboarding()
+
+		# before marking as completed
+		self.assertEqual(onboarding.boarding_status, "Pending")
+		project = frappe.get_doc("Project", onboarding.project)
+		self.assertEqual(project.status, "Open")
+		for task_status in frappe.get_all("Task", dict(project=project.name), pluck="status"):
+			self.assertEqual(task_status, "Open")
+
+		onboarding.reload()
+		onboarding.mark_onboarding_as_completed()
+
+		# after marking as completed
+		self.assertEqual(onboarding.boarding_status, "Completed")
+		project.reload()
+		self.assertEqual(project.status, "Completed")
+		for task_status in frappe.get_all("Task", dict(project=project.name), pluck="status"):
+			self.assertEqual(task_status, "Completed")
 
 	def tearDown(self):
 		frappe.db.rollback()
@@ -132,3 +150,8 @@ def create_employee_onboarding():
 	onboarding.submit()
 
 	return onboarding
+
+
+def get_task_dates(task: str) -> tuple[str, str]:
+	start_date, end_date = frappe.db.get_value("Task", task, ["exp_start_date", "exp_end_date"])
+	return getdate(start_date), getdate(end_date)

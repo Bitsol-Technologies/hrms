@@ -2,18 +2,18 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, nowdate
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
 
 from hrms.hr.doctype.job_applicant.job_applicant import get_applicant_to_hire_percentage
-from hrms.hr.doctype.job_applicant.test_job_applicant import create_job_applicant
 from hrms.hr.doctype.job_offer.job_offer import get_offer_acceptance_rate
 from hrms.hr.doctype.staffing_plan.test_staffing_plan import make_company
+from hrms.tests.test_utils import create_job_applicant
 
 
-class TestJobOffer(FrappeTestCase):
+class TestJobOffer(IntegrationTestCase):
 	def setUp(self):
 		frappe.db.delete("Job Applicant")
 		frappe.db.delete("Job Offer")
@@ -51,7 +51,7 @@ class TestJobOffer(FrappeTestCase):
 		job_offer.status = "Rejected"
 		job_offer.submit()
 		job_applicant.reload()
-		self.assertEquals(job_applicant.status, "Rejected")
+		self.assertEqual(job_applicant.status, "Rejected")
 		frappe.db.set_single_value("HR Settings", "check_vacancies", 1)
 
 	def test_recruitment_metrics(self):
@@ -69,6 +69,13 @@ class TestJobOffer(FrappeTestCase):
 
 		self.assertEqual(get_offer_acceptance_rate().get("value"), 50)
 
+	def test_status_on_save(self):
+		job_offer = create_job_offer()
+		job_offer.save()
+		job_offer.discard()
+		job_offer.reload()
+		self.assertEqual(job_offer.status, "Cancelled")
+
 
 def create_job_offer(**args):
 	args = frappe._dict(args)
@@ -76,7 +83,7 @@ def create_job_offer(**args):
 		job_applicant = create_job_applicant()
 
 	if not frappe.db.exists("Designation", args.designation):
-		designation = create_designation(designation_name=args.designation)
+		create_designation(designation_name=args.designation)
 
 	job_offer = frappe.get_doc(
 		{

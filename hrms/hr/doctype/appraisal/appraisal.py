@@ -9,18 +9,19 @@ from frappe.utils import flt, get_link_to_form, now
 
 from hrms.hr.doctype.appraisal_cycle.appraisal_cycle import validate_active_appraisal_cycle
 from hrms.hr.utils import validate_active_employee
+from hrms.mixins.appraisal import AppraisalMixin
+from hrms.payroll.utils import sanitize_expression
 
 
-class Appraisal(Document):
+class Appraisal(Document, AppraisalMixin):
 	def validate(self):
-		if not self.status:
-			self.status = "Draft"
-
 		self.set_kra_evaluation_method()
 
 		validate_active_employee(self.employee)
 		validate_active_appraisal_cycle(self.appraisal_cycle)
 		self.validate_duplicate()
+		self.validate_total_weightage("appraisal_kra", "KRAs")
+		self.validate_total_weightage("self_ratings", "Self Ratings")
 
 		self.set_goal_score()
 		self.calculate_self_appraisal_score()
@@ -41,7 +42,10 @@ class Appraisal(Document):
 					| (
 						(Appraisal.start_date.between(self.start_date, self.end_date))
 						| (Appraisal.end_date.between(self.start_date, self.end_date))
-						| ((self.start_date >= Appraisal.start_date) & (self.start_date <= Appraisal.end_date))
+						| (
+							(self.start_date >= Appraisal.start_date)
+							& (self.start_date <= Appraisal.end_date)
+						)
 						| ((self.end_date >= Appraisal.start_date) & (self.end_date <= Appraisal.end_date))
 					)
 				)
@@ -53,9 +57,7 @@ class Appraisal(Document):
 			frappe.throw(
 				_(
 					"Appraisal {0} already exists for Employee {1} for this Appraisal Cycle or overlapping period"
-				).format(
-					get_link_to_form("Appraisal", duplicate), frappe.bold(self.employee_name)
-				),
+				).format(get_link_to_form("Appraisal", duplicate), frappe.bold(self.employee_name)),
 				exc=frappe.DuplicateEntryError,
 				title=_("Duplicate Entry"),
 			)
@@ -125,12 +127,15 @@ class Appraisal(Document):
 
 	def calculate_total_score(self):
 		total_weightage, total, goal_score_percentage = 0, 0, 0
-
+		meta = frappe.get_meta("Appraisal Goal")
+		number_of_stars = meta.get_options("score") or 5
 		if self.rate_goals_manually:
 			table = _("Goals")
 			for entry in self.goals:
-				if flt(entry.score) > 5:
-					frappe.throw(_("Row {0}: Goal Score cannot be greater than 5").format(entry.idx))
+				if flt(entry.score) > flt(number_of_stars):
+					frappe.throw(
+						_("Row {0}: Goal Score cannot be greater than {1}").format(entry.idx, number_of_stars)
+					)
 
 				entry.score_earned = flt(entry.score) * flt(entry.per_weightage) / 100
 				total += flt(entry.score_earned)
@@ -158,8 +163,10 @@ class Appraisal(Document):
 
 	def calculate_self_appraisal_score(self):
 		total = 0
+		meta = frappe.get_meta("Employee Feedback Rating")
+		number_of_stars = meta.get_options("rating") or 5
 		for entry in self.self_ratings:
-			score = flt(entry.rating) * 5 * flt(entry.per_weightage / 100)
+			score = flt(entry.rating) * flt(number_of_stars) * flt(entry.per_weightage / 100)
 			total += flt(score)
 
 		self.self_score = flt(total, self.precision("self_score"))
@@ -178,7 +185,27 @@ class Appraisal(Document):
 			self.db_update()
 
 	def calculate_final_score(self):
-		final_score = (flt(self.total_score) + flt(self.avg_feedback_score) + flt(self.self_score)) / 3
+		final_score = 0
+		appraisal_cycle_doc = frappe.get_cached_doc("Appraisal Cycle", self.appraisal_cycle)
+
+		formula = appraisal_cycle_doc.final_score_formula
+		based_on_formula = appraisal_cycle_doc.calculate_final_score_based_on_formula
+
+		if based_on_formula:
+			employee_doc = frappe.get_cached_doc("Employee", self.employee)
+			data = {
+				"goal_score": flt(self.total_score),
+				"average_feedback_score": flt(self.avg_feedback_score),
+				"self_appraisal_score": flt(self.self_score),
+			}
+			data.update(appraisal_cycle_doc.as_dict())
+			data.update(employee_doc.as_dict())
+			data.update(self.as_dict())
+
+			sanitized_formula = sanitize_expression(formula)
+			final_score = frappe.safe_eval(sanitized_formula, data)
+		else:
+			final_score = (flt(self.total_score) + flt(self.avg_feedback_score) + flt(self.self_score)) / 3
 
 		self.final_score = flt(final_score, self.precision("final_score"))
 
@@ -308,7 +335,7 @@ def get_kras_for_employee(doctype, txt, searchfield, start, page_len, filters):
 
 	return frappe.get_all(
 		"Appraisal KRA",
-		filters={"parent": appraisal, "kra": ("like", "{0}%".format(txt))},
+		filters={"parent": appraisal, "kra": ("like", f"{txt}%")},
 		fields=["kra"],
 		as_list=1,
 	)

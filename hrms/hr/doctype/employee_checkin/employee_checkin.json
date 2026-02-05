@@ -10,13 +10,24 @@
   "employee_name",
   "log_type",
   "shift",
+  "overtime_type",
   "column_break_4",
   "time",
   "device_id",
   "skip_auto_attendance",
   "attendance",
+  "location_section",
+  "latitude",
+  "column_break_yqpi",
+  "longitude",
+  "section_break_ksbo",
+  "fetch_geolocation",
+  "geolocation",
+  "shift_timings_section",
   "shift_start",
   "shift_end",
+  "offshift",
+  "column_break_vyyt",
   "shift_actual_start",
   "shift_actual_end"
  ],
@@ -24,6 +35,7 @@
   {
    "fieldname": "employee",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Employee",
    "options": "Employee",
    "reqd": 1,
@@ -63,6 +75,7 @@
    "in_list_view": 1,
    "label": "Time",
    "permlevel": 1,
+   "read_only_depends_on": "eval:doc.attendance;",
    "reqd": 1
   },
   {
@@ -106,10 +119,73 @@
    "fieldtype": "Datetime",
    "hidden": 1,
    "label": "Shift Actual End"
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "Location"
+  },
+  {
+   "fieldname": "geolocation",
+   "fieldtype": "Geolocation",
+   "label": "Geolocation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "shift_timings_section",
+   "fieldtype": "Section Break",
+   "label": "Shift Timings"
+  },
+  {
+   "fieldname": "column_break_vyyt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "7",
+   "read_only": 1
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "7",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_yqpi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_ksbo",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "fetch_geolocation",
+   "fieldtype": "Button",
+   "label": "Fetch Geolocation"
+  },
+  {
+   "default": "0",
+   "fieldname": "offshift",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Off-shift",
+   "read_only": 1
+  },
+  {
+   "fieldname": "overtime_type",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Overtime Type",
+   "options": "Overtime Type"
   }
  ],
  "links": [],
- "modified": "2023-05-12 14:52:22.660264",
+ "modified": "2025-07-09 10:47:34.591144",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Checkin",
@@ -204,7 +280,8 @@
    "role": "Employee"
   }
  ],
- "sort_field": "modified",
+ "row_format": "Dynamic",
+ "sort_field": "creation",
  "sort_order": "ASC",
  "states": [],
  "title_field": "employee_name",

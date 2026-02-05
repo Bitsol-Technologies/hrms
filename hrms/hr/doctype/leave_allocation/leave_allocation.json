@@ -30,6 +30,9 @@
   "carry_forwarded_leaves_count",
   "expired",
   "amended_from",
+  "earned_leave_schedule_section",
+  "earned_leave_schedule",
+  "retry_failed_allocations",
   "notes",
   "description"
  ],
@@ -230,6 +233,24 @@
    "options": "Company",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.earned_leave_schedule && doc.earned_leave_schedule.length;",
+   "fieldname": "earned_leave_schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Earned Leave Schedule"
+  },
+  {
+   "fieldname": "earned_leave_schedule",
+   "fieldtype": "Table",
+   "options": "Earned Leave Schedule",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retry_failed_allocations",
+   "fieldtype": "Button",
+   "hidden": 1,
+   "label": "Retry Failed Allocations"
   }
  ],
  "icon": "fa fa-ok",
@@ -237,7 +258,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2022-04-07 09:50:33.145825",
+ "modified": "2025-11-12 12:54:03.589896",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Leave Allocation",
@@ -275,9 +296,10 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee,employee_name,leave_type,total_leaves_allocated",
  "show_name_in_global_search": 1,
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
  "timeline_field": "employee",

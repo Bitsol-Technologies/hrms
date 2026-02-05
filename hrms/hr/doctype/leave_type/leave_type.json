@@ -27,7 +27,8 @@
   "expire_carry_forwarded_leaves_after_days",
   "encashment",
   "allow_encashment",
-  "encashment_threshold_days",
+  "max_encashable_leaves",
+  "non_encashable_leaves",
   "column_break_17",
   "earning_component",
   "earned_leave",
@@ -51,12 +52,13 @@
   {
    "fieldname": "max_leaves_allowed",
    "fieldtype": "Float",
-   "label": "Maximum Leave Allocation Allowed"
+   "label": "Maximum Leave Allocation Allowed per Leave Period"
   },
   {
+   "description": "Minimum working days required since Date of Joining to apply for this leave",
    "fieldname": "applicable_after",
    "fieldtype": "Int",
-   "label": "Applicable After (Working Days)"
+   "label": "Allow Leave Application After (Working Days)"
   },
   {
    "fieldname": "max_continuous_days_allowed",
@@ -138,12 +140,6 @@
   },
   {
    "depends_on": "allow_encashment",
-   "fieldname": "encashment_threshold_days",
-   "fieldtype": "Int",
-   "label": "Encashment Threshold Days"
-  },
-  {
-   "depends_on": "allow_encashment",
    "fieldname": "earning_component",
    "fieldtype": "Link",
    "label": "Earning Component",
@@ -219,12 +215,27 @@
    "fieldtype": "Select",
    "label": "Allocate on Day",
    "options": "First Day\nLast Day\nDate of Joining"
+  },
+  {
+   "depends_on": "allow_encashment",
+   "fieldname": "max_encashable_leaves",
+   "fieldtype": "Int",
+   "label": "Maximum Encashable Leaves",
+   "non_negative": 1
+  },
+  {
+   "depends_on": "allow_encashment",
+   "description": "Indicates the number of leaves that cannot be encashed from the leave balance. E.g. with a leave balance of 10 and 4 Non-Encashable Leaves, you can encash 6, while the remaining 4 can be carried forward or expired",
+   "fieldname": "non_encashable_leaves",
+   "fieldtype": "Int",
+   "label": "Non-Encashable Leaves",
+   "non_negative": 1
   }
  ],
  "icon": "fa fa-flag",
  "idx": 1,
  "links": [],
- "modified": "2023-05-26 14:15:29.695487",
+ "modified": "2024-12-18 19:51:44.162375",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Leave Type",
@@ -258,7 +269,7 @@
    "role": "Employee"
   }
  ],
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
  "track_changes": 1

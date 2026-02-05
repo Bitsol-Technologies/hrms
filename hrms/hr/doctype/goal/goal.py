@@ -81,19 +81,20 @@ class Goal(NestedSet):
 			frappe.throw(_("Goal progress percentage cannot be more than 100."))
 
 	def set_status(self, status=None):
-		if self.status != "Archived":
-			if flt(self.progress) == 0:
-				self.status = "Pending"
-			elif flt(self.progress) == 100:
-				self.status = "Completed"
-			elif flt(self.progress) < 100:
-				self.status = "In Progress"
+		if self.status in ["Archived", "Closed"]:
+			return
+		if flt(self.progress) == 0:
+			self.status = "Pending"
+		elif flt(self.progress) == 100:
+			self.status = "Completed"
+		elif flt(self.progress) < 100:
+			self.status = "In Progress"
 
 	def update_kra_in_child_goals(self, doc_before_save):
 		"""Aligns children's KRA to parent goal's KRA if parent goal's KRA is changed"""
 		if doc_before_save.kra != self.kra and self.is_group:
 			Goal = frappe.qb.DocType("Goal")
-			(frappe.qb.update(Goal).set(Goal.kra, self.kra).where((Goal.parent_goal == self.name))).run()
+			(frappe.qb.update(Goal).set(Goal.kra, self.kra).where(Goal.parent_goal == self.name)).run()
 
 			frappe.msgprint(_("KRA updated for all child goals."), alert=True, indicator="green")
 
@@ -203,6 +204,24 @@ def update_progress(progress: float, goal: str) -> None:
 	goal.save()
 
 	return goal
+
+
+@frappe.whitelist()
+def update_status(status: str, goals: str | list) -> None:
+	if isinstance(goals, str):
+		import json
+
+		goals = json.loads(goals)
+
+	for goal in goals:
+		goal = frappe.get_doc("Goal", goal)
+		goal.status = status
+		if status == "Completed":
+			goal.progress = 100
+		goal.flags.ignore_mandatory = True
+		goal.save()
+
+	return goals
 
 
 @frappe.whitelist()

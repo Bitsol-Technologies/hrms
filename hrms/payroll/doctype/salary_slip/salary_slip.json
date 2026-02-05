@@ -10,6 +10,7 @@
   "section_break_6",
   "employee",
   "employee_name",
+  "company",
   "department",
   "designation",
   "branch",
@@ -18,7 +19,8 @@
   "letter_head",
   "column_break_18",
   "status",
-  "company",
+  "salary_withholding",
+  "salary_withholding_cycle",
   "currency",
   "exchange_rate",
   "section_break_gsts",
@@ -28,11 +30,11 @@
   "column_break_ptcc",
   "salary_structure",
   "payroll_entry",
+  "current_payroll_period",
   "mode_of_payment",
   "column_break_wyhp",
   "salary_slip_based_on_timesheet",
   "section_break_gerh",
-  "deduct_tax_for_unclaimed_employee_benefits",
   "deduct_tax_for_unsubmitted_tax_exemption_proof",
   "payment_days_tab",
   "total_working_days",
@@ -41,6 +43,8 @@
   "column_break_geio",
   "absent_days",
   "payment_days",
+  "help_section",
+  "payment_days_calculation_help",
   "earnings_and_deductions_tab",
   "timesheets_section",
   "timesheets",
@@ -48,10 +52,12 @@
   "total_working_hours",
   "hour_rate",
   "base_hour_rate",
-  "earning_deduction",
+  "earning_deduction_sb",
   "earnings",
   "column_break_k1jz",
   "deductions",
+  "section_break_jgfy",
+  "accrued_benefits",
   "totals",
   "gross_pay",
   "base_gross_pay",
@@ -168,7 +174,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Draft\nSubmitted\nCancelled",
+   "options": "Draft\nSubmitted\nCancelled\nWithheld",
    "read_only": 1
   },
   {
@@ -193,7 +199,6 @@
    "in_standard_filter": 1,
    "label": "Company",
    "options": "Company",
-   "remember_last_selected_value": 1,
    "reqd": 1
   },
   {
@@ -273,7 +278,6 @@
    "options": "Salary Slip Timesheet"
   },
   {
-   "fetch_from": "timesheet.total_hours",
    "fieldname": "total_working_hours",
    "fieldtype": "Float",
    "label": "Total Working Hours",
@@ -298,20 +302,9 @@
   },
   {
    "default": "0",
-   "fieldname": "deduct_tax_for_unclaimed_employee_benefits",
-   "fieldtype": "Check",
-   "label": "Deduct Tax For Unclaimed Employee Benefits"
-  },
-  {
-   "default": "0",
    "fieldname": "deduct_tax_for_unsubmitted_tax_exemption_proof",
    "fieldtype": "Check",
    "label": "Deduct Tax For Unsubmitted Tax Exemption Proof"
-  },
-  {
-   "fieldname": "earning_deduction",
-   "fieldtype": "Section Break",
-   "oldfieldtype": "Section Break"
   },
   {
    "fieldname": "earnings",
@@ -548,11 +541,13 @@
   },
   {
    "fieldname": "section_break_6",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Employee Info"
   },
   {
    "fieldname": "section_break_gsts",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Payroll Info"
   },
   {
    "fieldname": "column_break_obdl",
@@ -593,24 +588,28 @@
    "fieldname": "ctc",
    "fieldtype": "Currency",
    "label": "CTC",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "income_from_other_sources",
    "fieldtype": "Currency",
    "label": "Income from Other Sources",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "total_earnings",
    "fieldtype": "Currency",
    "label": "Total Earnings",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "non_taxable_earnings",
    "fieldtype": "Currency",
    "label": "Non Taxable Earnings",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -621,30 +620,35 @@
    "fieldname": "deductions_before_tax_calculation",
    "fieldtype": "Currency",
    "label": "Deductions before tax calculation",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "tax_exemption_declaration",
    "fieldtype": "Currency",
    "label": "Tax Exemption Declaration",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "standard_tax_exemption_amount",
    "fieldtype": "Currency",
    "label": "Standard Tax Exemption Amount",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "annual_taxable_amount",
    "fieldtype": "Currency",
    "label": "Annual Taxable Amount",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "income_tax_deducted_till_date",
    "fieldtype": "Currency",
    "label": "Income Tax Deducted Till Date",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -660,6 +664,7 @@
    "fieldname": "future_income_tax_deductions",
    "fieldtype": "Currency",
    "label": "Future Income Tax",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -671,12 +676,14 @@
    "fieldname": "current_month_income_tax",
    "fieldtype": "Currency",
    "label": "Current Month Income Tax",
+   "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "total_income_tax",
    "fieldtype": "Currency",
    "label": "Total Income Tax",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -695,14 +702,68 @@
   {
    "depends_on": "eval:doc.salary_slip_based_on_timesheet",
    "fieldname": "timesheets_section",
+   "fieldtype": "Section Break",
+   "label": "Timesheet Details"
+  },
+  {
+   "fieldname": "help_section",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "payment_days_calculation_help",
+   "fieldtype": "HTML",
+   "label": "Payment Days Calculation Help"
+  },
+  {
+   "fieldname": "earning_deduction_sb",
+   "fieldtype": "Section Break",
+   "oldfieldtype": "Section Break"
+  },
+  {
+   "fieldname": "salary_withholding",
+   "fieldtype": "Link",
+   "label": "Salary Withholding",
+   "no_copy": 1,
+   "options": "Salary Withholding",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "salary_withholding_cycle",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Salary Withholding Cycle",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_payroll_period",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Current Payroll Period",
+   "options": "Payroll Period",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_break_jgfy",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "accrued_benefits",
+   "fieldtype": "Table",
+   "label": "Accrued Benefits",
+   "options": "Employee Benefit Detail",
+   "print_hide": 1,
+   "read_only": 1
   }
  ],
  "icon": "fa fa-file-text",
  "idx": 9,
  "is_submittable": 1,
  "links": [],
- "modified": "2023-06-20 20:04:00.131248",
+ "modified": "2025-09-19 21:25:42.584589",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Slip",
@@ -734,15 +795,34 @@
    "write": 1
   },
   {
+   "print": 1,
    "read": 1,
    "role": "Employee"
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee_name",
  "show_name_in_global_search": 1,
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
- "states": [],
+ "states": [
+  {
+   "color": "Red",
+   "title": "Draft"
+  },
+  {
+   "color": "Blue",
+   "title": "Submitted"
+  },
+  {
+   "color": "Gray",
+   "title": "Cancelled"
+  },
+  {
+   "color": "Yellow",
+   "title": "Withheld"
+  }
+ ],
  "timeline_field": "employee",
  "title_field": "employee_name"
 }

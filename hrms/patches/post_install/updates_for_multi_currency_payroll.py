@@ -7,7 +7,6 @@ from frappe.model.utils.rename_field import rename_field
 
 
 def execute():
-
 	frappe.reload_doc("payroll", "doctype", "Salary Component Account")
 	if frappe.db.has_column("Salary Component Account", "default_account"):
 		rename_field("Salary Component Account", "default_account", "account")
@@ -40,17 +39,12 @@ def execute():
 		"Employee Benefit Claim",
 	]:
 		frappe.db.sql(
-			"""
-			update `tab{doctype}`
-			set company = (select company from tabEmployee where name=`tab{doctype}`.employee)
+			f"""
+			update `tab{dt}`
+			set company = (select company from tabEmployee where name=`tab{dt}`.employee)
 			where company IS NULL
-		""".format(
-				doctype=dt
-			)
+		"""
 		)
-
-	# update exchange rate for employee advance
-	frappe.db.sql("update `tabEmployee Advance` set exchange_rate=1 where exchange_rate is NULL")
 
 	# get all companies and it's currency
 	all_companies = frappe.db.get_all(
@@ -89,9 +83,7 @@ def execute():
 
 		for dt in doctypes_for_currency:
 			frappe.db.sql(
-				"""update `tab{doctype}` set currency = %s where company=%s and currency IS NULL""".format(
-					doctype=dt
-				),
+				f"""update `tab{dt}` set currency = %s where company=%s and currency IS NULL""",
 				(company_currency, company),
 			)
 

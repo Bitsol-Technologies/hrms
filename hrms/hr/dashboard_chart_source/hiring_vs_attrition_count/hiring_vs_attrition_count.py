@@ -32,8 +32,19 @@ def get_data(
 	if not to_date:
 		to_date = getdate()
 
-	hiring = get_records(from_date, to_date, "date_of_joining", filters.get("company"))
-	attrition = get_records(from_date, to_date, "relieving_date", filters.get("company"))
+	permitted_fields = frappe.model.get_permitted_fields("Employee", user=frappe.session.user)
+
+	hiring = (
+		get_records(from_date, to_date, "date_of_joining", filters.get("company"))
+		if "date_of_joining" in permitted_fields
+		else []
+	)
+
+	attrition = (
+		get_records(from_date, to_date, "relieving_date", filters.get("company"))
+		if "relieving_date" in permitted_fields
+		else []
+	)
 
 	hiring_data = get_result(hiring, filters.get("time_interval"), from_date, to_date, "Count")
 	attrition_data = get_result(attrition, filters.get("time_interval"), from_date, to_date, "Count")
@@ -47,18 +58,16 @@ def get_data(
 	}
 
 
-def get_records(
-	from_date: str, to_date: str, datefield: str, company: str
-) -> tuple[tuple[str, float, int]]:
+def get_records(from_date: str, to_date: str, datefield: str, company: str) -> tuple[tuple[str, float, int]]:
 	filters = [
 		["Employee", "company", "=", company],
-		["Employee", datefield, ">=", from_date, False],
-		["Employee", datefield, "<=", to_date, False],
+		["Employee", datefield, ">=", from_date],
+		["Employee", datefield, "<=", to_date],
 	]
 
 	data = frappe.db.get_list(
 		"Employee",
-		fields=[f"{datefield} as _unit", "SUM(1)", "COUNT(*)"],
+		fields=[f"{datefield} as _unit", {"SUM": 1}, {"COUNT": "*"}],
 		filters=filters,
 		group_by="_unit",
 		order_by="_unit asc",

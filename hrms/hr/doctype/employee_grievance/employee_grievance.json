@@ -59,7 +59,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Open\nInvestigated\nResolved\nInvalid",
+   "options": "Open\nInvestigated\nResolved\nInvalid\nCancelled",
    "reqd": 1
   },
   {
@@ -143,6 +143,7 @@
    "fetch_from": "raised_by.reports_to",
    "fieldname": "reports_to",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Reports To",
    "options": "Employee",
    "read_only": 1
@@ -202,7 +203,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2021-06-21 12:51:01.499486",
+ "modified": "2025-11-21 17:25:40.972515",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Grievance",
@@ -251,11 +252,25 @@
    "role": "HR User",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Employee",
+   "share": 1,
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "subject,raised_by,grievance_against_party",
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
+ "states": [],
  "title_field": "subject",
  "track_changes": 1
 }

@@ -1,5 +1,5 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -13,7 +13,7 @@ from hrms.hr.report.appraisal_overview.appraisal_overview import execute
 from hrms.tests.test_utils import create_company
 
 
-class TestAppraisalOverview(FrappeTestCase):
+class TestAppraisalOverview(IntegrationTestCase):
 	def setUp(self):
 		frappe.db.delete("Goal")
 		frappe.db.delete("Appraisal")
@@ -28,15 +28,11 @@ class TestAppraisalOverview(FrappeTestCase):
 		consultant.appraisal_template = create_appraisal_template("Consultant").name
 		consultant.save()
 
-		self.employee1 = make_employee(
-			"employee1@example.com", company=self.company, designation="Engineer"
-		)
+		self.employee1 = make_employee("employee1@example.com", company=self.company, designation="Engineer")
 		self.employee2 = make_employee(
 			"employee3@example.com", company=self.company, designation="Consultant"
 		)
-		self.reviewer = make_employee(
-			"reviewer@example.com", company=self.company, designation="Engineer"
-		)
+		self.reviewer = make_employee("reviewer@example.com", company=self.company, designation="Engineer")
 
 	def test_appraisal_overview(self):
 		cycle = create_appraisal_cycle(kra_evaluation_method="Manual Rating")

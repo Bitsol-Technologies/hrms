@@ -4,14 +4,14 @@
 import frappe
 from frappe import _
 from frappe.model.naming import set_name_by_naming_series
-from frappe.utils import add_years, cint, getdate
+from frappe.utils import add_years, cint, get_link_to_form, getdate
 
 from erpnext.setup.doctype.employee.employee import Employee
 
 
 class EmployeeMaster(Employee):
 	def autoname(self):
-		naming_method = frappe.db.get_value("HR Settings", None, "emp_created_by")
+		naming_method = frappe.db.get_single_value("HR Settings", "emp_created_by")
 		if not naming_method:
 			frappe.throw(_("Please setup Employee Naming System in Human Resource > HR Settings"))
 		else:
@@ -45,6 +45,46 @@ def validate_onboarding_process(doc, method=None):
 		onboarding.db_set("employee", doc.name)
 
 
+def publish_update(doc, method=None):
+	import hrms
+
+	hrms.refetch_resource("hrms:employee", doc.user_id)
+
+
+def update_job_applicant_and_offer(doc, method=None):
+	"""Updates Job Applicant and Job Offer status as 'Accepted' and submits them"""
+	if not doc.job_applicant:
+		return
+
+	applicant_status_before_change = frappe.db.get_value("Job Applicant", doc.job_applicant, "status")
+	if applicant_status_before_change != "Accepted":
+		frappe.db.set_value("Job Applicant", doc.job_applicant, "status", "Accepted")
+		frappe.msgprint(
+			_("Updated the status of linked Job Applicant {0} to {1}").format(
+				get_link_to_form("Job Applicant", doc.job_applicant), frappe.bold(_("Accepted"))
+			)
+		)
+	offer_status_before_change = frappe.db.get_value(
+		"Job Offer", {"job_applicant": doc.job_applicant, "docstatus": ["!=", 2]}, "status"
+	)
+	if offer_status_before_change and offer_status_before_change != "Accepted":
+		job_offer = frappe.get_last_doc("Job Offer", filters={"job_applicant": doc.job_applicant})
+		job_offer.status = "Accepted"
+		job_offer.flags.ignore_mandatory = True
+		job_offer.flags.ignore_permissions = True
+		job_offer.save()
+
+		msg = _("Updated the status of Job Offer {0} for the linked Job Applicant {1} to {2}").format(
+			get_link_to_form("Job Offer", job_offer.name),
+			frappe.bold(doc.job_applicant),
+			frappe.bold(_("Accepted")),
+		)
+		if job_offer.docstatus == 0:
+			msg += "<br>" + _("You may add additional details, if any, and submit the offer.")
+
+		frappe.msgprint(msg)
+
+
 def update_approver_role(doc, method=None):
 	"""Adds relevant approver role for the user linked to Employee"""
 	if doc.leave_approver:
@@ -56,6 +96,18 @@ def update_approver_role(doc, method=None):
 		user = frappe.get_doc("User", doc.expense_approver)
 		user.flags.ignore_permissions = True
 		user.add_roles("Expense Approver")
+
+
+def update_approver_user_roles(doc, method=None):
+	approver_roles = set()
+	if frappe.db.exists("Employee", {"leave_approver": doc.name}):
+		approver_roles.add("Leave Approver")
+
+	if frappe.db.exists("Employee", {"expense_approver": doc.name}):
+		approver_roles.add("Expense Approver")
+
+	if approver_roles:
+		doc.append_roles(*approver_roles)
 
 
 def update_employee_transfer(doc, method=None):

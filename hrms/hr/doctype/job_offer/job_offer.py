@@ -54,6 +54,9 @@ class JobOffer(Document):
 			fields=["name"],
 		)
 
+	def on_discard(self):
+		self.db_set("status", "Cancelled")
+
 
 def update_job_applicant(status, job_applicant):
 	if status in ("Accepted", "Rejected"):
@@ -107,7 +110,9 @@ def make_employee(source_name, target_doc=None):
 
 
 @frappe.whitelist()
-def get_offer_acceptance_rate(company=None, department=None):
+def get_offer_acceptance_rate(company: str | None = None, department: str | None = None):
+	frappe.has_permission("Job Offer", throw=True)
+
 	filters = {"docstatus": 1}
 	if company:
 		filters["company"] = company

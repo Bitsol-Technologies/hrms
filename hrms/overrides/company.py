@@ -31,13 +31,11 @@ def delete_company_fixtures():
 		except (ImportError, AttributeError):
 			# regional file or method does not exist
 			pass
-		except Exception:
-			frappe.log_error("Unable to delete country fixtures for HRMS")
-			frappe.throw(
-				_("Failed to delete defaults for country {0}. Please contact support.").format(
-					frappe.bold(country)
-				)
-			)
+		except Exception as e:
+			frappe.log_error("Unable to delete country fixtures for Frappe HR")
+			msg = _("Failed to delete defaults for country {0}.").format(frappe.bold(country))
+			msg += "<br><br>" + _("{0}: {1}").format(frappe.bold(_("Error")), get_error_message(e))
+			frappe.throw(msg, title=_("Country Fixture Deletion Failed"))
 
 
 def run_regional_setup(country):
@@ -46,13 +44,24 @@ def run_regional_setup(country):
 		frappe.get_attr(module_name)()
 	except ImportError:
 		pass
+	except Exception as e:
+		frappe.log_error("Unable to setup country fixtures for Frappe HR")
+		msg = _("Failed to setup defaults for country {0}.").format(frappe.bold(country))
+		msg += "<br><br>" + _("{0}: {1}").format(frappe.bold(_("Error")), get_error_message(e))
+		frappe.throw(msg, title=_("Country Setup failed"))
+
+
+def get_error_message(error) -> str:
+	try:
+		message_log = frappe.message_log.pop() if frappe.message_log else str(error)
+		if isinstance(message_log, str):
+			error_message = json.loads(message_log).get("message")
+		else:
+			error_message = message_log.get("message")
 	except Exception:
-		frappe.log_error("Unable to setup country fixtures for HRMS")
-		frappe.throw(
-			_("Failed to setup defaults for country {0}. Please contact support.").format(
-				frappe.bold(country)
-			)
-		)
+		error_message = message_log
+
+	return error_message
 
 
 def make_salary_components(country):
@@ -82,9 +91,9 @@ def make_salary_components(country):
 
 def read_data_file(file_path):
 	try:
-		with open(file_path, "r") as f:
+		with open(file_path) as f:
 			return f.read()
-	except IOError:
+	except OSError:
 		return "{}"
 
 
@@ -120,6 +129,58 @@ def validate_default_accounts(doc, method=None):
 		if get_account_currency(doc.default_payroll_payable_account) != doc.default_currency:
 			frappe.throw(
 				_(
-					"{0} currency must be same as company's default currency. Please select another account."
-				).format(frappe.bold("Default Payroll Payable Account"))
+					"The currency of {0} should be same as the company's default currency. Please select another account."
+				).format(frappe.bold(_("Default Payroll Payable Account")))
 			)
+
+
+def handle_linked_docs(doc, method=None):
+	delete_docs_with_company_field(doc)
+	clear_company_field_for_single_doctypes(doc)
+
+
+def delete_docs_with_company_field(doc, method=None):
+	"""
+	Deletes records from linked doctypes where the 'company' field matches the company's name
+	"""
+	company_data_to_be_ignored = frappe.get_hooks("company_data_to_be_ignored") or []
+	for doctype in company_data_to_be_ignored:
+		records_to_delete = frappe.get_all(doctype, filters={"company": doc.name}, pluck="name")
+		if records_to_delete:
+			frappe.db.delete(doctype, {"name": ["in", records_to_delete]})
+
+
+def clear_company_field_for_single_doctypes(doc):
+	"""
+	Clears the 'company' value in Single doctypes where applicable
+	"""
+	single_docs = get_single_doctypes_with_company_field()
+	singles = frappe.qb.DocType("Singles")
+	(
+		frappe.qb.update(singles)
+		.set(singles.value, "")
+		.where(singles.doctype.isin(single_docs))
+		.where(singles.field == "company")
+		.where(singles.value == doc.name)
+	).run()
+
+
+def get_single_doctypes_with_company_field():
+	DocType = frappe.qb.DocType("DocType")
+	DocField = frappe.qb.DocType("DocField")
+
+	return (
+		frappe.qb.from_(DocField)
+		.select(DocField.parent)
+		.where(
+			(DocField.fieldtype == "Link")
+			& (DocField.options == "Company")
+			& (
+				DocField.parent.isin(
+					frappe.qb.from_(DocType)
+					.select(DocType.name)
+					.where((DocType.issingle == 1) & (DocType.module.isin(["HR", "Payroll"])))
+				)
+			)
+		)
+	).run(pluck=True)

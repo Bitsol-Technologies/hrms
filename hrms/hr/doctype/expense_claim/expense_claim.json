@@ -7,50 +7,65 @@
  "document_type": "Setup",
  "engine": "InnoDB",
  "field_order": [
+  "expenses_and_advances_tab",
   "naming_series",
   "employee",
   "employee_name",
   "department",
+  "company",
   "column_break_5",
   "expense_approver",
   "approval_status",
-  "delivery_trip",
-  "is_paid",
+  "currency_section",
+  "currency",
+  "column_break_imlz",
+  "exchange_rate",
   "expense_details",
   "expenses",
-  "sb1",
+  "taxes_and_charges_sb",
   "taxes",
+  "advance_payments_sb",
+  "advances",
   "transactions_section",
+  "column_break_nexp",
+  "base_total_sanctioned_amount",
+  "base_total_advance_amount",
+  "base_grand_total",
+  "base_total_claimed_amount",
+  "base_total_taxes_and_charges",
+  "column_break_quih",
   "total_sanctioned_amount",
-  "total_taxes_and_charges",
   "total_advance_amount",
-  "column_break_17",
   "grand_total",
   "total_claimed_amount",
+  "total_taxes_and_charges",
   "total_amount_reimbursed",
-  "section_break_16",
-  "posting_date",
-  "vehicle_log",
-  "task",
-  "cb1",
-  "remark",
-  "title",
-  "email_id",
+  "gain_loss_section",
+  "total_exchange_gain_loss",
+  "gain_loss_account",
+  "accounting_details_tab",
   "accounting_details",
-  "company",
+  "posting_date",
+  "is_paid",
   "mode_of_payment",
-  "clearance_date",
-  "column_break_24",
+  "bank_or_cash_account",
   "payable_account",
+  "column_break_24",
+  "clearance_date",
+  "remark",
   "accounting_dimensions_section",
   "project",
   "dimension_col_break",
   "cost_center",
+  "more_info_tab",
   "more_details",
   "status",
+  "task",
   "amended_from",
-  "advance_payments",
-  "advances"
+  "column_break_xdzn",
+  "delivery_trip",
+  "vehicle_log",
+  "dashboard_tab"
  ],
  "fields": [
   {
@@ -88,11 +103,11 @@
   },
   {
    "fetch_from": "employee.department",
+   "fetch_if_empty": 1,
    "fieldname": "department",
    "fieldtype": "Link",
    "label": "Department",
-   "options": "Department",
-   "read_only": 1
+   "options": "Department"
   },
   {
    "fieldname": "column_break_5",
@@ -110,7 +125,8 @@
    "fieldtype": "Select",
    "label": "Approval Status",
    "no_copy": 1,
-   "options": "Draft\nApproved\nRejected",
+   "options": "Draft\nApproved\nRejected\nCancelled",
+   "permlevel": 1,
    "search_index": 1
   },
   {
@@ -121,7 +137,7 @@
    "no_copy": 1,
    "oldfieldname": "total_claimed_amount",
    "oldfieldtype": "Currency",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "read_only": 1,
    "width": "160px"
   },
@@ -132,7 +148,7 @@
    "no_copy": 1,
    "oldfieldname": "total_sanctioned_amount",
    "oldfieldtype": "Currency",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "read_only": 1,
    "width": "160px"
   },
@@ -158,11 +174,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "sb1",
-   "fieldtype": "Section Break",
-   "options": "Simple"
-  },
-  {
    "default": "Today",
    "fieldname": "posting_date",
    "fieldtype": "Date",
@@ -180,6 +191,7 @@
    "read_only": 1
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "project",
    "fieldtype": "Link",
    "label": "Project",
@@ -193,16 +205,12 @@
    "remember_last_selected_value": 1
   },
   {
-   "fieldname": "cb1",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "total_amount_reimbursed",
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Total Amount Reimbursed",
    "no_copy": 1,
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -214,29 +222,13 @@
    "oldfieldtype": "Small Text"
   },
   {
-   "allow_on_submit": 1,
-   "default": "{employee_name}",
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Title",
-   "no_copy": 1
-  },
-  {
-   "fieldname": "email_id",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Employees Email Id",
-   "oldfieldname": "email_id",
-   "oldfieldtype": "Data",
-   "print_hide": 1
-  },
-  {
    "fieldname": "accounting_details",
    "fieldtype": "Section Break",
    "label": "Accounting Details"
   },
   {
+   "fetch_from": "employee.company",
+   "fetch_if_empty": 1,
    "fieldname": "company",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -244,7 +236,6 @@
    "oldfieldname": "company",
    "oldfieldtype": "Link",
    "options": "Company",
-   "remember_last_selected_value": 1,
    "reqd": 1
   },
   {
@@ -264,23 +255,25 @@
    "fieldtype": "Column Break"
   },
   {
+   "fetch_from": "company.default_expense_claim_payable_account",
+   "fetch_if_empty": 1,
    "fieldname": "payable_account",
    "fieldtype": "Link",
    "label": "Payable Account",
-   "options": "Account",
-   "reqd": 1
+   "options": "Account"
   },
   {
+   "allow_on_submit": 1,
+   "fetch_from": "company.cost_center",
+   "fetch_if_empty": 1,
    "fieldname": "cost_center",
    "fieldtype": "Link",
    "label": "Cost Center",
    "options": "Cost Center"
   },
   {
-   "collapsible": 1,
    "fieldname": "more_details",
-   "fieldtype": "Section Break",
-   "label": "More Details"
+   "fieldtype": "Section Break"
   },
   {
    "default": "Draft",
@@ -308,7 +301,9 @@
    "width": "160px"
   },
   {
-   "fieldname": "advance_payments",
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.advances?.length",
+   "fieldname": "advance_payments_sb",
    "fieldtype": "Section Break",
    "label": "Advance Payments"
   },
@@ -322,7 +317,7 @@
    "fieldname": "total_advance_amount",
    "fieldtype": "Currency",
    "label": "Total Advance Amount",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -341,30 +336,23 @@
    "options": "Expense Taxes and Charges"
   },
   {
-   "fieldname": "section_break_16",
-   "fieldtype": "Section Break"
-  },
-  {
    "fieldname": "transactions_section",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Totals"
   },
   {
    "fieldname": "grand_total",
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Grand Total",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "read_only": 1
-  },
-  {
-   "fieldname": "column_break_17",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "total_taxes_and_charges",
    "fieldtype": "Currency",
    "label": "Total Taxes and Charges",
-   "options": "Company:company:default_currency",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -373,17 +361,156 @@
    "fieldtype": "Link",
    "label": "Delivery Trip",
    "options": "Delivery Trip"
+  },
+  {
+   "fieldname": "column_break_xdzn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "accounting_details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Accounting"
+  },
+  {
+   "fieldname": "more_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "More Info"
+  },
+  {
+   "fieldname": "dashboard_tab",
+   "fieldtype": "Tab Break",
+   "label": "Dashboard",
+   "show_dashboard": 1
+  },
+  {
+   "fieldname": "expenses_and_advances_tab",
+   "fieldtype": "Tab Break",
+   "label": "Expenses & Advances"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.taxes?.length",
+   "fieldname": "taxes_and_charges_sb",
+   "fieldtype": "Section Break",
+   "label": "Taxes & Charges",
+   "options": "Simple"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "currency_section",
+   "fieldtype": "Section Break",
+   "label": "Currency"
+  },
+  {
+   "depends_on": "eval:(doc.docstatus==1 || doc.employee)",
+   "fetch_from": "employee.salary_currency",
+   "fetch_if_empty": 1,
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_imlz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "currency",
+   "fieldname": "exchange_rate",
+   "fieldtype": "Float",
+   "label": "Exchange Rate",
+   "precision": "9",
+   "print_hide": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "base_total_sanctioned_amount",
+   "fieldtype": "Currency",
+   "label": "Total Sanctioned Amount (Company Currency)",
+   "no_copy": 1,
+   "oldfieldname": "total_sanctioned_amount",
+   "oldfieldtype": "Currency",
+   "options": "Company:company:default_currency",
+   "read_only": 1,
+   "width": "160px"
+  },
+  {
+   "fieldname": "base_grand_total",
+   "fieldtype": "Currency",
+   "label": "Grand Total (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_nexp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "base_total_advance_amount",
+   "fieldtype": "Currency",
+   "label": "Total Advance Amount (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "base_total_taxes_and_charges",
+   "fieldtype": "Currency",
+   "label": "Total Taxes and Charges (Company Currency)",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "base_total_claimed_amount",
+   "fieldtype": "Currency",
+   "label": "Total Claimed Amount (Company Currency)",
+   "no_copy": 1,
+   "oldfieldname": "total_claimed_amount",
+   "oldfieldtype": "Currency",
+   "options": "Company:company:default_currency",
+   "read_only": 1,
+   "width": "160px"
+  },
+  {
+   "fieldname": "column_break_quih",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "mode_of_payment",
+   "fieldname": "bank_or_cash_account",
+   "fieldtype": "Link",
+   "label": "Bank / Cash Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "gain_loss_section",
+   "fieldtype": "Section Break",
+   "label": "Exchange Gain/Loss"
+  },
+  {
+   "depends_on": "total_exchange_gain_loss",
+   "fieldname": "gain_loss_account",
+   "fieldtype": "Link",
+   "label": "Gain Loss Account",
+   "options": "Account"
+  },
+  {
+   "depends_on": "total_exchange_gain_loss",
+   "fieldname": "total_exchange_gain_loss",
+   "fieldtype": "Currency",
+   "label": "Total Exchange Gain/Loss",
+   "options": "Company:company:default_currency",
+   "read_only": 1
   }
  ],
  "icon": "fa fa-money",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2021-11-22 16:26:57.787838",
+ "modified": "2025-11-24 11:45:16.354788",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Expense Claim",
- "name_case": "Title Case",
  "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
@@ -439,12 +566,72 @@
    "share": 1,
    "submit": 1,
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  },
+  {
+   "delete": 1,
+   "email": 1,
+   "permlevel": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Expense Approver",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "permlevel": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee,employee_name",
  "show_name_in_global_search": 1,
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Gray",
+   "title": "Draft"
+  },
+  {
+   "color": "Blue",
+   "title": "Submitted"
+  },
+  {
+   "color": "Red",
+   "title": "Cancelled"
+  },
+  {
+   "color": "Green",
+   "title": "Paid"
+  },
+  {
+   "color": "Yellow",
+   "title": "Unpaid"
+  },
+  {
+   "color": "Red",
+   "title": "Rejected"
+  }
+ ],
  "timeline_field": "employee",
- "title_field": "title"
+ "title_field": "employee_name"
 }

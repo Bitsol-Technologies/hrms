@@ -1,5 +1,5 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -12,14 +12,14 @@ from hrms.hr.report.employee_exits.employee_exits import execute
 from hrms.tests.test_utils import create_company
 
 
-class TestEmployeeExits(FrappeTestCase):
+class TestEmployeeExits(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		create_company()
-		frappe.db.sql("delete from `tabEmployee` where company='Test Company'")
-		frappe.db.sql("delete from `tabFull and Final Statement` where company='Test Company'")
-		frappe.db.sql("delete from `tabExit Interview` where company='Test Company'")
+		create_company("Test Company")
+		frappe.db.delete("Employee", {"company": "Test Company"})
+		frappe.db.delete("Full and Final Statement", {"company": "Test Company"})
+		frappe.db.delete("Exit Interview", {"company": "Test Company"})
 
 		cls.create_records()
 

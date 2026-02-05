@@ -3,21 +3,21 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - version-14
+      - version-16
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Entire Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v6
         with:
-          node-version: 18
+          node-version: 20
       - name: Setup dependencies
         run: |
           npm install @semantic-release/git @semantic-release/exec --no-save

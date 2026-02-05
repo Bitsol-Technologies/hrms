@@ -21,7 +21,6 @@
   "start_date",
   "end_date",
   "column_break_13",
-  "deduct_tax_for_unclaimed_employee_benefits",
   "deduct_tax_for_unsubmitted_tax_exemption_proof",
   "employees_tab",
   "section_break_17",
@@ -29,6 +28,7 @@
   "department",
   "column_break_21",
   "designation",
+  "grade",
   "number_of_employees",
   "section_break_24",
   "employees",
@@ -46,6 +46,7 @@
   "bank_account",
   "salary_slips_created",
   "salary_slips_submitted",
+  "overtime_step",
   "failure_details_section",
   "error_message",
   "section_break_41",
@@ -61,7 +62,6 @@
    "reqd": 1
   },
   {
-   "depends_on": "eval:doc.salary_slip_based_on_timesheet == 0",
    "fieldname": "payroll_frequency",
    "fieldtype": "Select",
    "label": "Payroll Frequency",
@@ -139,12 +139,6 @@
    "fieldtype": "Date",
    "label": "End Date",
    "reqd": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "deduct_tax_for_unclaimed_employee_benefits",
-   "fieldtype": "Check",
-   "label": "Deduct Tax For Unclaimed Employee Benefits"
   },
   {
    "default": "0",
@@ -324,12 +318,29 @@
    "fieldtype": "Tab Break",
    "label": "Connections",
    "show_dashboard": 1
+  },
+  {
+   "fieldname": "grade",
+   "fieldtype": "Link",
+   "label": "Grade",
+   "options": "Employee Grade"
+  },
+  {
+   "fieldname": "overtime_step",
+   "fieldtype": "Select",
+   "label": "Overtime Slip Step",
+   "options": "\nCreate\nSubmit"
   }
  ],
  "icon": "fa fa-cog",
  "is_submittable": 1,
- "links": [],
- "modified": "2023-07-13 12:27:33.418702",
+ "links": [
+  {
+   "link_doctype": "Overtime Slip",
+   "link_fieldname": "payroll_entry"
+  }
+ ],
+ "modified": "2025-08-25 20:05:37.733324",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Payroll Entry",
@@ -348,7 +359,8 @@
    "write": 1
   }
  ],
- "sort_field": "modified",
+ "row_format": "Dynamic",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": []
 }
