@@ -30,7 +30,8 @@
   "column_break_18",
   "late_entry",
   "early_exit",
-  "amended_from"
+  "amended_from",
+  "modify_half_day_status"
  ],
  "fields": [
   {
@@ -77,7 +78,7 @@
    "fieldname": "working_hours",
    "fieldtype": "Float",
    "label": "Working Hours",
-   "precision": "1",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -228,13 +229,20 @@
    "label": "Status for Other Half",
    "no_copy": 1,
    "options": "\nPresent\nAbsent"
+  },
+  {
+   "default": "0",
+   "fieldname": "modify_half_day_status",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "modify_half_day_status"
   }
  ],
  "icon": "fa fa-ok",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-03-06 15:15:13.866304",
+ "modified": "2025-12-16 17:44:13.859387",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Attendance",
@@ -293,6 +301,7 @@
    "share": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee,employee_name,attendance_date,status",
  "sort_field": "modified",
  "sort_order": "DESC",

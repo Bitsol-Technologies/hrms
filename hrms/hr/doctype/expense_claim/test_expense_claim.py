@@ -35,6 +35,10 @@ class TestExpenseClaim(FrappeTestCase):
 			).insert()
 
 			frappe.db.set_value("Company", company_name, "default_cost_center", cost_center)
+		frappe.db.set_value("Account", "Employee Advances - _TC", "account_type", "Receivable")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
 
 	def test_total_expense_claim_for_project(self):
 		frappe.db.delete("Task")
@@ -92,7 +96,6 @@ class TestExpenseClaim(FrappeTestCase):
 		self.assertEqual(len(gl_entry), 0)
 
 	def test_expense_claim_status_as_payment_from_payment_entry(self):
-		# Via Payment Entry
 		payable_account = get_payable_account(company_name)
 
 		expense_claim = make_expense_claim(payable_account, 300, 200, company_name, "Travel Expenses - _TC3")
@@ -633,6 +636,121 @@ class TestExpenseClaim(FrappeTestCase):
 		expense_claim.company = "_Test Company 3"
 		expense_claim.department = "Accounts - _TC2"
 		self.assertRaises(MismatchError, expense_claim.save)
+
+	def test_self_expense_approval(self):
+		frappe.db.set_single_value("HR Settings", "prevent_self_expense_approval", 0)
+
+		employee = frappe.get_doc(
+			"Employee",
+			make_employee("test_self_expense_approval@example.com", "_Test Company"),
+		)
+
+		from frappe.utils.user import add_role
+
+		add_role(employee.user_id, "Expense Approver")
+
+		payable_account = get_payable_account("_Test Company")
+		expense_claim = make_expense_claim(
+			payable_account,
+			300,
+			200,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=employee.name,
+		)
+
+		frappe.set_user(employee.user_id)
+		expense_claim.submit()
+
+		self.assertEqual(1, expense_claim.docstatus)
+
+	def test_self_expense_approval_not_allowed(self):
+		frappe.db.set_single_value("HR Settings", "prevent_self_expense_approval", 1)
+
+		expense_approver = "test_expense_approver@example.com"
+		make_employee(expense_approver, company="_Test Company")
+
+		employee = frappe.get_doc(
+			"Employee",
+			make_employee(
+				"test_self_expense_approval@example.com",
+				company="_Test Company",
+				expense_approver=expense_approver,
+			),
+		)
+
+		from frappe.utils.user import add_role
+
+		add_role(employee.user_id, "Expense Approver")
+		add_role(expense_approver, "Expense Approver")
+
+		payable_account = get_payable_account("_Test Company")
+		expense_claim = make_expense_claim(
+			payable_account,
+			300,
+			200,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=employee.name,
+		)
+
+		expense_claim.expense_approver = expense_approver
+		expense_claim.save()
+
+		frappe.set_user(employee.user_id)
+
+		self.assertRaises(frappe.ValidationError, expense_claim.submit)
+		expense_claim.reload()
+
+		frappe.set_user(expense_approver)
+		expense_claim.submit()
+
+		self.assertEqual(1, expense_claim.docstatus)
+
+	def test_expense_claim_status_as_payment_after_unreconciliation(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import make_payment_entry
+
+		payable_account = get_payable_account(company_name)
+
+		employee = frappe.db.get_value(
+			"Employee",
+			{"status": "Active", "company": company_name, "first_name": "test_employee1@expenseclaim.com"},
+			"name",
+		)
+		if not employee:
+			employee = make_employee("test_employee1@expenseclaim.com", company=company_name)
+
+		expense_claim = make_expense_claim(payable_account, 300, 200, company_name, "Travel Expenses - _TC3")
+		self.assertEqual(expense_claim.docstatus, 1)
+		self.assertEqual(expense_claim.status, "Unpaid")
+
+		pe = make_payment_entry(expense_claim, 200)
+		expense_claim.reload()
+		self.assertEqual(expense_claim.status, "Paid")
+
+		unreconcile_doc = frappe.new_doc("Unreconcile Payment")
+		unreconcile_doc.company = company_name
+		unreconcile_doc.voucher_type = "Payment Entry"
+		unreconcile_doc.voucher_no = pe.name
+		unreconcile_doc.append(
+			"allocations",
+			{
+				"account": "Travel Expenses - _TC3",
+				"party_type": "Employee",
+				"party": employee,
+				"reference_doctype": "Expense Claim",
+				"reference_name": expense_claim.name,
+				"allocated_amount": 200,
+				"unlinked": 1,
+			},
+		)
+		unreconcile_doc.insert()
+		unreconcile_doc.submit()
+
+		expense_claim.reload()
+		self.assertEqual(expense_claim.status, "Unpaid")
 
 
 def get_payable_account(company):

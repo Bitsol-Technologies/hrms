@@ -5,6 +5,7 @@
 import frappe
 from frappe import _
 from frappe.model.mapper import get_mapped_doc
+from frappe.model.workflow import get_workflow_name
 from frappe.query_builder.functions import Sum
 from frappe.utils import cstr, flt, get_link_to_form
 
@@ -38,6 +39,10 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 		self.get("__onload").make_payment_via_journal_entry = frappe.db.get_single_value(
 			"Accounts Settings", "make_payment_via_journal_entry"
 		)
+		self.set_onload(
+			"self_expense_approval_not_allowed",
+			frappe.db.get_single_value("HR Settings", "prevent_self_expense_approval"),
+		)
 
 	def after_insert(self):
 		self.notify_approver()
@@ -49,6 +54,7 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 		self.calculate_total_amount()
 		self.validate_advances()
 		self.set_expense_account(validate=True)
+		self.set_default_accounting_dimension()
 		self.calculate_taxes()
 		self.set_status()
 		self.validate_company_and_department()
@@ -97,6 +103,18 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 					exc=MismatchError,
 				)
 
+	def validate_for_self_approval(self):
+		self_expense_approval_not_allowed = frappe.db.get_single_value(
+			"HR Settings", "prevent_self_expense_approval"
+		)
+		employee_user = frappe.db.get_value("Employee", self.employee, "user_id")
+		if (
+			self_expense_approval_not_allowed
+			and employee_user == frappe.session.user
+			and not get_workflow_name("Expense Claim")
+		):
+			frappe.throw(_("Self-approval for Expense Claims is not allowed"))
+
 	def on_update(self):
 		share_doc_with_approver(self, self.expense_approver)
 		self.publish_update()
@@ -109,9 +127,12 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 		if not self.payable_account and not self.is_paid:
 			frappe.throw(_("Payable Account is mandatory to submit an Expense Claim"))
 
+		self.validate_for_self_approval()
+
 	def publish_update(self):
 		employee_user = frappe.db.get_value("Employee", self.employee, "user_id", cache=True)
 		hrms.refetch_resource("hrms:my_claims", employee_user)
+		hrms.refetch_resource("hrms:team_claims")
 
 	def on_submit(self):
 		if self.approval_status == "Draft":
@@ -125,7 +146,7 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 		self.update_claimed_amount_in_employee_advance()
 
 	def on_update_after_submit(self):
-		if self.check_if_fields_updated([], {"taxes": ("account_head")}):
+		if self.check_if_fields_updated([], {"taxes": ("account_head",), "expenses": ()}):
 			validate_docs_for_voucher_types(["Expense Claim"])
 			self.repost_accounting_entries()
 
@@ -220,6 +241,8 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 						"party": self.employee,
 						"against_voucher_type": "Employee Advance",
 						"against_voucher": data.employee_advance,
+						"cost_center": self.cost_center,
+						"project": self.project,
 					}
 				)
 			)
@@ -236,6 +259,8 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 						"credit": self.grand_total,
 						"credit_in_account_currency": self.grand_total,
 						"against": self.employee,
+						"cost_center": self.cost_center,
+						"project": self.project,
 					},
 					item=self,
 				)
@@ -252,6 +277,8 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 						"debit_in_account_currency": self.grand_total,
 						"against_voucher": self.name,
 						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
+						"project": self.project,
 					},
 					item=self,
 				)
@@ -277,6 +304,26 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 					item=tax,
 				)
 			)
+
+	def set_default_accounting_dimension(self):
+		from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+			get_checks_for_pl_and_bs_accounts,
+		)
+
+		for dim in get_checks_for_pl_and_bs_accounts():
+			if dim.company != self.company:
+				continue
+
+			field = frappe.scrub(dim.fieldname)
+
+			if self.meta.get_field(field):
+				if not self.get(field) and dim.mandatory_for_bs:
+					self.set(field, dim.default_dimension)
+
+			for row in self.get("expenses") or []:
+				if row.meta.get_field(field):
+					if not row.get(field) and dim.mandatory_for_pl:
+						row.set(field, dim.default_dimension)
 
 	def validate_account_details(self):
 		for data in self.expenses:
@@ -332,6 +379,7 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 
 	def validate_advances(self):
 		self.total_advance_amount = 0
+		precision = self.precision("total_advance_amount")
 
 		for d in self.get("advances"):
 			self.round_floats_in(d)
@@ -347,8 +395,8 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 			d.advance_paid = ref_doc.paid_amount
 			d.unclaimed_amount = flt(ref_doc.paid_amount) - flt(ref_doc.claimed_amount)
 
-			if d.allocated_amount and flt(d.allocated_amount) > (
-				flt(d.unclaimed_amount) - flt(d.return_amount)
+			if d.allocated_amount and flt(d.allocated_amount) > flt(
+				flt(d.unclaimed_amount) - flt(d.return_amount), precision
 			):
 				frappe.throw(
 					_("Row {0}# Allocated amount {1} cannot be greater than unclaimed amount {2}").format(
@@ -360,7 +408,6 @@ class ExpenseClaim(AccountsController, PWANotificationsMixin):
 
 		if self.total_advance_amount:
 			self.round_floats_in(self, ["total_advance_amount"])
-			precision = self.precision("total_advance_amount")
 			amount_with_taxes = flt(
 				(flt(self.total_sanctioned_amount, precision) + flt(self.total_taxes_and_charges, precision)),
 				precision,
@@ -412,6 +459,8 @@ def get_total_reimbursed_amount(doc):
 
 
 def get_outstanding_amount_for_claim(claim):
+	precision = frappe.get_precision("Expense Claim", "grand_total")
+
 	if isinstance(claim, str):
 		claim = frappe.db.get_value(
 			"Expense Claim",
@@ -432,7 +481,7 @@ def get_outstanding_amount_for_claim(claim):
 		- flt(claim.total_advance_amount)
 	)
 
-	return outstanding_amt
+	return flt(outstanding_amt, precision)
 
 
 @frappe.whitelist()
@@ -570,8 +619,13 @@ def update_payment_for_expense_claim(doc, method=None):
 	if doc.doctype == "Payment Entry" and not (doc.payment_type == "Pay" and doc.party):
 		return
 
-	payment_table = "accounts" if doc.doctype == "Journal Entry" else "references"
-	doctype_field = "reference_type" if doc.doctype == "Journal Entry" else "reference_doctype"
+	doctype_field_map = {
+		"Journal Entry": ["accounts", "reference_type"],
+		"Payment Entry": ["references", "reference_doctype"],
+		"Unreconcile Payment": ["allocations", "reference_doctype"],
+	}
+
+	payment_table, doctype_field = doctype_field_map[doc.doctype]
 
 	for d in doc.get(payment_table):
 		if d.get(doctype_field) == "Expense Claim" and d.reference_name:

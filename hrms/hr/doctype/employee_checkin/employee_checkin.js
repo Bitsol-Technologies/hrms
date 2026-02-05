@@ -4,6 +4,7 @@
 frappe.ui.form.on("Employee Checkin", {
 	refresh: async (frm) => {
 		if (frm.doc.offshift) {
+			frm.dashboard.clear_headline();
 			frm.dashboard.set_headline(
 				__(
 					"This check-in is outside assigned shift hours and will not be considered for attendance. If a shift is assigned, adjust its time window and Fetch Shift again.",
@@ -48,7 +49,7 @@ frappe.ui.form.on("Employee Checkin", {
 	},
 
 	add_fetch_shift_button(frm) {
-		if (frm.doc.attendace) return;
+		if (frm.doc.attendance) return;
 		frm.add_custom_button(__("Fetch Shift"), function () {
 			frappe.call({
 				method: "fetch_shift",

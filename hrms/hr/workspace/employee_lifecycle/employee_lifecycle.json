@@ -53,7 +53,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Journey",
+   "label": "Employee Journey",
    "link_count": 2,
    "onboard": 0,
    "type": "Card Break"
@@ -109,7 +109,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Exit",
+   "label": "Employee Exit",
    "link_count": 4,
    "onboard": 0,
    "type": "Card Break"
@@ -137,7 +137,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Full and Final Settlement",
+   "label": "Full and Final Statement",
    "link_count": 0,
    "link_to": "Full and Final Statement",
    "link_type": "DocType",

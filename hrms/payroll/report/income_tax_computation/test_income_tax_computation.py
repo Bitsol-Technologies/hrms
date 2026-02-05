@@ -81,14 +81,14 @@ class TestIncomeTaxComputation(FrappeTestCase):
 			"employee_name": "employee_tax_computation@example.com",
 			"department": "All Departments",
 			"income_tax_slab": self.income_tax_slab,
-			"ctc": 936000.0,
+			"gross_earnings": 936000.0,
 			"professional_tax": 2400.0,
 			"standard_tax_exemption": 50000,
 			"total_exemption": 52400.0,
 			"total_taxable_amount": 883600.0,
 			"applicable_tax": 92789.0,
 			"total_tax_deducted": 17997.0,
-			"payable_tax": 74792,
+			"payable_tax": 74792.0,
 		}
 
 		for key, val in expected_data.items():

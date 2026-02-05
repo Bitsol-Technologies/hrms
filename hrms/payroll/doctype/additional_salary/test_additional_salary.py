@@ -26,7 +26,10 @@ class TestAdditionalSalary(FrappeTestCase):
 		emp_id = make_employee("test_additional@salary.com")
 		frappe.db.set_value("Employee", emp_id, "relieving_date", add_days(nowdate(), 1800))
 		salary_structure = make_salary_structure(
-			"Test Salary Structure Additional Salary", "Monthly", employee=emp_id
+			"Test Salary Structure Additional Salary",
+			"Monthly",
+			employee=emp_id,
+			from_date=add_days(nowdate(), -50),
 		)
 		add_sal = get_additional_salary(emp_id)
 
@@ -44,7 +47,10 @@ class TestAdditionalSalary(FrappeTestCase):
 		emp_id = make_employee("test_additional@salary.com")
 
 		salary_structure = make_salary_structure(
-			"Test Salary Structure Additional Salary", "Monthly", employee=emp_id
+			"Test Salary Structure Additional Salary",
+			"Monthly",
+			employee=emp_id,
+			from_date=add_days(nowdate(), -50),
 		)
 		add_sal = get_additional_salary(emp_id)
 		ss = make_employee_salary_slip(emp_id, "Monthly", salary_structure=salary_structure.name)
@@ -146,6 +152,29 @@ class TestAdditionalSalary(FrappeTestCase):
 		tds_component = _get_tds_component(salary_slip)
 		self.assertIsNone(tds_component.additional_salary)
 		self.assertNotEqual(tds_component.amount, 5000)
+
+	def test_validate_duplicate_or_overlapping_additional_salary(self):
+		emp_id = make_employee("test_additional@salary.com")
+		date = nowdate()
+		make_salary_structure(
+			"Test Salary Structure Additional Salary",
+			"Monthly",
+			employee=emp_id,
+			from_date=add_days(date, -50),
+		)
+		get_additional_salary(emp_id, overwrite_salary_structure=1)
+		additional_salary_doc = frappe.get_doc(
+			{
+				"doctype": "Additional Salary",
+				"employee": emp_id,
+				"salary_component": "Recurring Salary Component",
+				"payroll_date": date,
+				"amount": 5000,
+				"overwrite_salary_structure_amount": 1,
+			}
+		)
+		with self.assertRaises(frappe.ValidationError):
+			additional_salary_doc.save()
 
 
 def get_additional_salary(

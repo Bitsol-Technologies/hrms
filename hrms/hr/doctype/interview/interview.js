@@ -56,7 +56,7 @@ frappe.ui.form.on("Interview", {
             frm._previous_status = new_status;
         }
     },
-	
+
 	add_inline_feedback_button: async function (frm) {
 		if (!frm.fields_dict.custom_feedback_button) return;
 
@@ -364,26 +364,26 @@ frappe.ui.form.on("Interview", {
 	calculate_reviews_per_rating(frm) {
 		// 1. Initialize an array to store the count of reviews for each rating (0 to 5).
 		const reviews_per_rating = [0, 0, 0, 0, 0, 0];
-	
+
 		// 2. Check if there is any feedback to process.
 		if (frm.feedback && frm.feedback.length > 0) {
 			// 3. Iterate through each feedback item.
 			frm.feedback.forEach((x) => {
 				// 4. Get the integer part of the total score (which is now 0 to 5).
 				const rating = Math.floor(x.total_score);
-	
+
 				// 5. Categorize the review based on the rating.
 				if (rating >= 0 && rating <= 5) {
 					// If the rating is 0, 1, 2, 3, 4, or 5, increment the count for that rating.
 					reviews_per_rating[rating] += 1;
 				}
 			});
-	
+
 			// 6. Calculate the percentage of reviews for each rating.
 			frm.reviews_per_rating = reviews_per_rating.map((x) =>
 				// (Count of reviews for this rating * 100) / (Total number of feedback items), rounded to 1 decimal place.
 				flt((x * 100) / frm.feedback.length, 1)
 			);
-		} 
+		}
 	},
 });

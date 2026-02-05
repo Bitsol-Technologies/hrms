@@ -66,14 +66,19 @@ def execute(filters=None):
 			row.update(
 				{
 					"gross_pay": flt(ss.gross_pay) * flt(ss.exchange_rate),
-					"total_deduction": flt(ss.total_deduction) * flt(ss.exchange_rate),
+					"total_deduction": (flt(ss.total_deduction) + flt(ss.total_loan_repayment))
+					* flt(ss.exchange_rate),
 					"net_pay": flt(ss.net_pay) * flt(ss.exchange_rate),
 				}
 			)
 
 		else:
 			row.update(
-				{"gross_pay": ss.gross_pay, "total_deduction": ss.total_deduction, "net_pay": ss.net_pay}
+				{
+					"gross_pay": ss.gross_pay,
+					"total_deduction": flt(ss.total_deduction) + flt(ss.total_loan_repayment),
+					"net_pay": ss.net_pay,
+				}
 			)
 
 		data.append(row)
@@ -292,6 +297,15 @@ def get_salary_slips(filters, company_currency):
 
 	if filters.get("currency") and filters.get("currency") != company_currency:
 		query = query.where(salary_slip.currency == filters.get("currency"))
+
+	if filters.get("department"):
+		query = query.where(salary_slip.department == filters["department"])
+
+	if filters.get("designation"):
+		query = query.where(salary_slip.designation == filters["designation"])
+
+	if filters.get("branch"):
+		query = query.where(salary_slip.branch == filters["branch"])
 
 	salary_slips = query.run(as_dict=1)
 

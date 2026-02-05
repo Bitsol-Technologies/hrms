@@ -10,6 +10,7 @@
  "engine": "InnoDB",
  "field_order": [
   "job_details_section",
+  "job_opening_template",
   "job_title",
   "designation",
   "attachment",
@@ -255,6 +256,12 @@
    "label": "Publish Applications Received"
   },
   {
+   "fieldname": "job_opening_template",
+   "fieldtype": "Link",
+   "label": "Job Opening Template",
+   "options": "Job Opening Template"
+  },
+  {
    "fieldname": "attachment",
    "fieldtype": "Attach",
    "label": "Attachment"
@@ -272,7 +279,7 @@
  "is_published_field": "publish",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-11 22:41:14.873299",
+ "modified": "2025-12-11 19:18:36.145062",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Opening",
@@ -291,6 +298,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "ASC",
  "states": [

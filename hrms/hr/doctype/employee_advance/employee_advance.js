@@ -27,14 +27,7 @@ frappe.ui.form.on("Employee Advance", {
 					is_group: 0,
 					company: frm.doc.company,
 					account_currency: ["in", currencies],
-				},
-			};
-		});
-
-		frm.set_query("salary_component", function () {
-			return {
-				filters: {
-					type: "Deduction",
+					account_type: "Receivable",
 				},
 			};
 		});
