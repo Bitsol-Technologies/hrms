@@ -55,10 +55,10 @@
    "wildcard_filter": 0
   }
  ],
- "idx": 0,
+ "idx": 3,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2025-06-11 14:55:20.645213",
+ "modified": "2026-01-12 12:50:08.840091",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Reminder Activity",
@@ -75,6 +75,9 @@
   },
   {
    "role": "HR Manager"
+  },
+  {
+   "role": "Operation Manager"
   }
  ],
  "timeout": 0

@@ -4,13 +4,13 @@
    "card": "Job Openings"
   },
   {
-   "card": "Total Applicants (This Week)"
-  },
-  {
    "card": "Accepted Job Applicants(This Week)"
   },
   {
    "card": "Rejected Job Applicants(This Week)"
+  },
+  {
+   "card": "Total Applicants (This month)"
   }
  ],
  "charts": [
@@ -33,16 +33,20 @@
   {
    "chart": "Department Wise Openings",
    "width": "Half"
+  },
+  {
+   "chart": "Applicant Count by Status",
+   "width": "Half"
   }
  ],
  "creation": "2022-08-20 21:07:07.337973",
  "dashboard_name": "Recruitment",
  "docstatus": 0,
  "doctype": "Dashboard",
- "idx": 1,
- "is_default": 0,
+ "idx": 2,
+ "is_default": 1,
  "is_standard": 1,
- "modified": "2025-05-09 12:03:56.520866",
+ "modified": "2025-09-16 14:11:07.658475",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Recruitment",

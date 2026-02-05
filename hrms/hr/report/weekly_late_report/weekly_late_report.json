@@ -29,7 +29,7 @@
  "idx": 0,
  "is_standard": "Yes",
  "letterhead": null,
- "modified": "2025-07-03 10:43:12.305513",
+ "modified": "2026-01-07 12:08:02.440843",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Weekly Late Report",
@@ -60,6 +60,9 @@
   },
   {
    "role": "Employee Self Service"
+  },
+  {
+   "role": "Operation Manager"
   }
  ],
  "timeout": 0
