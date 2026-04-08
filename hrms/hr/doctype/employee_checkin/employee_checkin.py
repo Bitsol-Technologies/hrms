@@ -1191,15 +1191,6 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	user_doc = frappe.get_doc("User", emp_email)
 	is_clockify_active = user_doc.get("is_clockify_active")
 
-	# Validate required Clockify details
-	if is_clockify_active and (not emp_data.get("user_id") or not emp_data.get("workspace_ids")):
-		compliance_data["is_compliant"] = False
-		compliance_data["reason"] = "Missing Clockify API User ID or Workspace ID"
-		return compliance_data
-
-	user_id = emp_data["user_id"]
-	workspaces = emp_data["workspace_ids"]
-
 	# Fetch employee check-ins (from ERPNext) using the unique identifier (email here)
 	emp_checkins = get_employee_checkin(emp_email, start_dt, end_dt)
 	compliance_data["checkin_time"] = emp_checkins.get("checkin")
@@ -1268,13 +1259,28 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 			if checkin_time_obj > grace_end_dt.time():
 				compliance_data["is_late_entry"] = True
 
+	# If clockify is not active for this user, skip all Clockify-based compliance checks
+	if not is_clockify_active:
+		if not compliance_data["checkin_time"]:
+			compliance_data["is_compliant"] = False
+			compliance_data["reason"] = "Absent"
+		return compliance_data
+
+	# Validate required Clockify details
+	if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"] = "Missing Clockify API User ID or Workspace ID"
+		return compliance_data
+
+	user_id = emp_data["user_id"]
+	workspaces = emp_data["workspace_ids"]
+
 	# Check if an active timer is running in any workspace
 	try:
 		if any(is_clockify_timer_active(api_key, ws, user_id) for ws in workspaces):
 			# If there's an active timer, we assume the employee is compliant for now.
 			return compliance_data
 	except Exception as e:
-		# print("Error checking active timer for {emp_email}")
 		frappe.log(f"Error checking active timer for {emp_email}", "Clockify Compliance Check")
 		compliance_data["is_compliant"] = False
 		compliance_data["reason"]= "Invalid API Key in the system"
@@ -1289,7 +1295,6 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		compliance_data["total_hours"] = round(total_logged_seconds / 3600, 2)
 		hours, minutes = divmod(total_logged_seconds // 60, 60)
 	except Exception as e:
-		# print("Clockify API sum log error for {emp_email}")
 		frappe.log_error(f"Clockify API error for {emp_email}", "Clockify Compliance Check")
 		compliance_data["is_compliant"] = False
 		compliance_data["reason"]= "Invalid API Key in the system"
@@ -1307,13 +1312,9 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 			compliance_data["reason"] = f"No check-in recorded. {hours} hr {minutes} mins logged{half_day_message}"
 			return compliance_data
 		else:
-			# No check-in, No Clockify logs, No leave recorded
 			compliance_data["is_compliant"] = False
 			compliance_data["reason"] = "Absent"
 			return compliance_data
-
-	if not is_clockify_active:
-		return compliance_data
 
 	if total_logged_seconds == 0:
 		compliance_data["is_compliant"] = False

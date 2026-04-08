@@ -524,7 +524,7 @@ def send_slack_message(emails, location, applicant_name, job_title, scheduled_on
 	for email in emails:
 		slack_user_id = frappe.db.get_value("Employee", {"user_id": email}, "custom_slack_user_id")
 		if slack_user_id:
-			message = f"Hey <@{slack_user_id}>, Just a quick reminder — you have {location} Interview scheduled with { applicant_name } for the position {job_title} on {scheduled_on} {from_time}.\nLet me know if you need anything before the call. Good luck!\n\nMashal Farman"
+			message = f"Hey <@{slack_user_id}>, Just a quick reminder — you have {location} Interview scheduled with { applicant_name } for the position {job_title} on {scheduled_on} {from_time}.\nLet me know if you need anything before the call. Good luck!"
 			payload = {
 				"channel": slack_user_id,
 				"text": message
