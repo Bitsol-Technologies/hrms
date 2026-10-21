@@ -635,12 +635,21 @@ def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, st
 	# Format in ISO 8601 with a trailing "Z" to indicate UTC timezone
 	start_str = start_dt.isoformat() + "Z"
 	end_str = end_dt.isoformat() + "Z"
-	entries_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries?start={start_str}&end={end_str}"
+	entries_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries"
+	page_size = 1000
+	max_pages = 50  # safety cap against an endless loop
 
 	try:
-		response = requests.get(entries_url, headers=headers)
-		response.raise_for_status()
-		entries = response.json()
+		# Clockify paginates time entries (default 50 per page), so fetch until a short page is returned
+		entries = []
+		for page in range(1, max_pages + 1):
+			params = {"start": start_str, "end": end_str, "page": page, "page-size": page_size}
+			response = requests.get(entries_url, headers=headers, params=params)
+			response.raise_for_status()
+			page_entries = response.json()
+			entries.extend(page_entries)
+			if len(page_entries) < page_size:
+				break
 		return entries
 	except Exception as e:
 		if raise_on_error:
