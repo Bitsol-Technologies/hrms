@@ -554,19 +554,31 @@ def get_default_workspace_id(custom_api_key):
 def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
 	"""
 	Looks up the Clockify user ID for a given email within a workspace.
+	The workspace user list is cached for the current request/job so that
+	looking up many employees does not hit the Clockify rate limit.
 	"""
-	headers = {"X-Api-Key": custom_api_key}
-	url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users?page-size=500"
-	try:
-		response = requests.get(url, headers=headers)
-		response.raise_for_status()
-		users = response.json()
-		for user in users:
-			if user.get("email") == email:
-				return user.get("id")
-	except Exception as e:
-		frappe.log(f"Error fetching Clockify user for email {email} for workspace {workspace_id}", "Clockify Task")
-	return None
+	if not hasattr(frappe.local, "clockify_workspace_users"):
+		frappe.local.clockify_workspace_users = {}
+	cache = frappe.local.clockify_workspace_users
+
+	if workspace_id not in cache:
+		headers = {"X-Api-Key": custom_api_key}
+		url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users?page-size=500"
+		try:
+			response = requests.get(url, headers=headers)
+			response.raise_for_status()
+			cache[workspace_id] = {
+				user.get("email").lower(): user.get("id") for user in response.json() if user.get("email")
+			}
+		except Exception:
+			frappe.log_error(
+				message=f"Error fetching Clockify user for email {email} for workspace {workspace_id}\n{frappe.get_traceback()}",
+				title="Clockify Task",
+			)
+			# Cache the failure for this job so other employees don't retry and worsen rate limiting
+			cache[workspace_id] = {}
+
+	return cache[workspace_id].get((email or "").lower())
 
 
 def get_employee_clockify_details(employee_id):
@@ -592,10 +604,11 @@ def get_employee_clockify_details(employee_id):
 	return (custom_api_key, custom_user_id, workspace_ids, emp, user_id)
 
 
-def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
+def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id, raise_on_error=False):
 	"""
 	Check Clockify for an active timer for the given user.
 	Returns True if an active (in-progress) timer is found, else False.
+	If raise_on_error is True, API errors are raised instead of returning False.
 	"""
 	headers = {"X-Api-Key": custom_api_key}
 	active_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries?in-progress=true"
@@ -606,16 +619,17 @@ def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id):
 		active_entries = response.json()
 		return bool(active_entries)
 	except Exception as e:
-		title = "Clockify Task"
-		message = f"Error for user {clockify_user_id} checking for active timer"
-		frappe.log(message)
+		if raise_on_error:
+			raise
+		frappe.log(f"Error for user {clockify_user_id} checking for active timer")
 		return False
 
 
-def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, start_dt, end_dt):
+def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, start_dt, end_dt, raise_on_error=False):
 	"""
 	Fetch all Clockify time entries for the given user between start_dt and end_dt.
 	Returns a list of time entry objects.
+	If raise_on_error is True, API errors are raised instead of returning an empty list.
 	"""
 	headers = {"X-Api-Key": custom_api_key}
 	# Format in ISO 8601 with a trailing "Z" to indicate UTC timezone
@@ -629,6 +643,8 @@ def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, st
 		entries = response.json()
 		return entries
 	except Exception as e:
+		if raise_on_error:
+			raise
 		frappe.log(f"Error fetching Clockify entries for user {clockify_user_id} and workspace = {workspace_id}")
 		return []
 
@@ -679,7 +695,10 @@ def send_slack_message_for_employee(emails, message):
 		response = requests.post(slack_post_message_url, headers=headers, data=json.dumps(payload))
 		result = response.json()
 		if not result.get("ok"):
-			frappe.log(f"Error sending Slack message to {email}", "Slack Notification")
+			frappe.log_error(
+				message=f"Error sending Slack message to {email}: {result.get('error')}",
+				title="Slack Notification",
+			)
 
 
 # send reminder to turn on clockify timer
@@ -732,6 +751,28 @@ def check_today_checkins():
 			)
 			if subsequent_checkout_exists:
 				continue
+
+			# Check if user has clockify notifications enabled before making any Clockify API calls
+			email_user_id = frappe.db.get_value("Employee", checkin.employee, "user_id")
+			if not email_user_id:
+				msg = f"Employee {checkin.employee} missing email/user_id for Slack/Push notification."
+				frappe.log_error(message=msg, title="Clockify Reminder Check")
+				continue
+			try:
+				user_doc = frappe.get_doc("User", email_user_id)
+				is_clockify_active = user_doc.get("is_clockify_active")
+
+				# Skip if clockify notifications are disabled for this user
+				if not is_clockify_active:
+					continue
+			except Exception as e:
+				# If there's an error fetching the user or field doesn't exist, log and skip
+				frappe.log_error(
+					message=f"Error checking is_clockify_active for user {email_user_id}: {str(e)}",
+					title="Clockify Notification Check"
+				)
+				continue
+
 			custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
 
 			if not (custom_api_key and custom_user_id and workspace_ids):
@@ -768,34 +809,6 @@ def check_today_checkins():
 				"Reminder: You are checked in, but no time is logged in Clockify for the past 4 hours. "
 				"Please start your Clockify timer to ensure compliance."
 			)
-			# Ensure 'emp' object exists before trying to access attributes from it for email
-			email_user_id = emp.get("user") or emp.get("user_id") if emp else None
-			if not email_user_id:
-				# If emp object itself is None from get_employee_clockify_details (e.g. if employee was deleted)
-				# or if email/user_id is not set on the employee doc.
-				employee_identifier = checkin.employee # Fallback to employee ID from checkin
-				if emp and emp.name: # Prefer emp.name if available
-					employee_identifier = emp.name
-				msg = f"Employee {employee_identifier} missing email/user_id for Slack/Push notification."
-				frappe.log_error(message=msg, title="Clockify Reminder Check")
-				continue
-			# Check if user has clockify notifications enabled
-			try:
-				user_doc = frappe.get_doc("User", email_user_id)
-				is_clockify_active = user_doc.get("is_clockify_active")
-				
-				# Skip if clockify notifications are disabled for this user
-				if not is_clockify_active:
-					frappe.log(f"Clockify notifications disabled for user {email_user_id}. Skipping reminder.")
-					continue
-			except Exception as e:
-				# If there's an error fetching the user or field doesn't exist, log and skip
-				frappe.log_error(
-					message=f"Error checking is_clockify_active for user {email_user_id}: {str(e)}",
-					title="Clockify Notification Check"
-				)
-				continue
-			
 			push_title = "Clockify Timer Reminder"
 			
 			# Create Notification Log
@@ -841,7 +854,7 @@ def get_all_active_employees():
 	employees = frappe.get_all(
 		"Employee",
 		filters={"status": "Active", "user_id": ["is", "set"]},
-		fields=["user_id", "name"]
+		fields=["user_id", "name", "employee_name"]
 	)
 	return employees
 
@@ -944,7 +957,7 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 	employee_records = {}
 	headers = {"X-Api-Key": api_key}
 	# Convert active_employees list into a dictionary for quick lookups
-	active_employee_map = {emp["user_id"].lower(): emp["name"] for emp in active_employees}
+	active_employee_map = {emp["user_id"].lower(): emp for emp in active_employees}
 	for ws in workspace_ids:
 		url = f"https://api.clockify.me/api/v1/workspaces/{ws}/users?page-size=500"
 		try:
@@ -952,10 +965,12 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 			response.raise_for_status()
 			users = response.json()
 			for user in users:
-				email = user.get("email")
+				email = (user.get("email") or "").lower()
 				if not email or email not in active_employee_map:
-					# print(f"User {user.get('name')} missing email")
 					continue
+				# Use the ERPNext user_id as the key so downstream lookups match the User record
+				employee = active_employee_map[email]
+				email = employee["user_id"]
 				if email in employee_records:
 					if ws not in employee_records[email]["workspace_ids"]:
 						employee_records[email]["workspace_ids"].append(ws)
@@ -965,7 +980,7 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 						"workspace_ids": [ws],
 						"user_id": user.get("id"),
 						"employee_name": user.get("name"),
-						"employee": active_employee_map[email]
+						"employee": employee["name"]
 					}
 		except Exception as e:
 			frappe.log_error(
@@ -1031,17 +1046,38 @@ def send_daily_compliance_report():
 	# fetch users across all workspaces
 	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
 
+	# Include active employees without a Clockify account so they are still checked on check-ins
+	for emp in active_employees:
+		if emp["user_id"] not in workspace_users:
+			workspace_users[emp["user_id"]] = {
+				"workspace_ids": [],
+				"user_id": None,
+				"employee_name": emp.get("employee_name") or emp["name"],
+				"employee": emp["name"],
+			}
+
 	report_data = []
 	is_holiday = is_public_holiday(report_date_obj) or report_date_obj.weekday() in (5, 6)
 
 	for email, emp_data in workspace_users.items():
-		compliance_info = check_non_compliance(email, emp_data, custom_api_key, report_start_dt, report_end_dt)
+		try:
+			compliance_info = check_non_compliance(email, emp_data, custom_api_key, report_start_dt, report_end_dt)
+		except Exception:
+			frappe.log_error(
+				message=f"Error checking compliance for {email}\n{frappe.get_traceback()}",
+				title="Clockify Compliance Check",
+			)
+			continue
 		if not compliance_info:
 			continue
 
 		if is_holiday:
-			if not compliance_info["total_hours"]:
-				continue  # skip on holidays if employee has no hours otherwise, add to doctype
+			# skip on holidays if employee has no hours (or, without Clockify, no check-in); otherwise add to doctype
+			if compliance_info["is_clockify_active"]:
+				if not compliance_info["total_hours"]:
+					continue
+			elif not compliance_info["checkin_time"]:
+				continue
 
 		report_data.append({
 			"employee_id": emp_data["employee"],
@@ -1185,11 +1221,13 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 		"expected_hours": 0,
 		"leave_type": None,
 		"is_late_entry": False,
-		"is_wfh": False
+		"is_wfh": False,
+		"is_clockify_active": False
 	}
 
 	user_doc = frappe.get_doc("User", emp_email)
 	is_clockify_active = user_doc.get("is_clockify_active")
+	compliance_data["is_clockify_active"] = bool(is_clockify_active)
 
 	# Fetch employee check-ins (from ERPNext) using the unique identifier (email here)
 	emp_checkins = get_employee_checkin(emp_email, start_dt, end_dt)
@@ -1220,7 +1258,6 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	# Fetch Shift Type linked to the employee (using the first shift found)
 	shift_type = get_employee_shift_type(employee_id)
 	if not shift_type:
-		print("No shift assigned or no valid shift found for", employee_id)
 		# If no shift assigned or no valid shift found, skip the compliance check
 		return None
 
@@ -1238,6 +1275,10 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 	
 	FULL_DAY_SECONDS = working_hours_full_day * 3600  # Convert full day hours to seconds
 	HALF_DAY_SECONDS = working_hours_half_day * 3600      # Convert half day hours to seconds
+
+	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
+	compliance_data["expected_hours"] = working_hours_half_day if leave_status == "Half Day" else working_hours_full_day
+	half_day_message = " (Half Day)" if min_seconds == HALF_DAY_SECONDS else ""
 
 	#  Check for late entry if there's a checkin time
 	if compliance_data["checkin_time"]:
@@ -1277,33 +1318,37 @@ def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
 
 	# Check if an active timer is running in any workspace
 	try:
-		if any(is_clockify_timer_active(api_key, ws, user_id) for ws in workspaces):
+		if any(is_clockify_timer_active(api_key, ws, user_id, raise_on_error=True) for ws in workspaces):
 			# If there's an active timer, we assume the employee is compliant for now.
 			return compliance_data
 	except Exception as e:
-		frappe.log(f"Error checking active timer for {emp_email}", "Clockify Compliance Check")
+		frappe.log_error(
+			message=f"Error checking active timer for {emp_email}\n{frappe.get_traceback()}",
+			title="Clockify Compliance Check",
+		)
 		compliance_data["is_compliant"] = False
-		compliance_data["reason"]= "Invalid API Key in the system"
+		compliance_data["reason"] = "Clockify API error - could not verify logs"
 		return compliance_data
 
 	# Fetch Clockify logs (total logged time across all workspaces)
 	try:
 		total_logged_seconds = sum(
-			sum_clockify_durations(get_clockify_time_entries(api_key, ws, user_id, start_dt, end_dt))
+			sum_clockify_durations(
+				get_clockify_time_entries(api_key, ws, user_id, start_dt, end_dt, raise_on_error=True)
+			)
 			for ws in workspaces
 		)
 		compliance_data["total_hours"] = round(total_logged_seconds / 3600, 2)
 		hours, minutes = divmod(total_logged_seconds // 60, 60)
 	except Exception as e:
-		frappe.log_error(f"Clockify API error for {emp_email}", "Clockify Compliance Check")
+		frappe.log_error(
+			message=f"Clockify API error for {emp_email}\n{frappe.get_traceback()}",
+			title="Clockify Compliance Check",
+		)
 		compliance_data["is_compliant"] = False
-		compliance_data["reason"]= "Invalid API Key in the system"
+		compliance_data["reason"] = "Clockify API error - could not verify logs"
 		return compliance_data
 
-
-	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
-	compliance_data["expected_hours"] = working_hours_half_day if leave_status == "Half Day" else working_hours_full_day
-	half_day_message = " (Half Day)" if min_seconds == HALF_DAY_SECONDS else ""
 
 	# Compliance Checks
 	if not compliance_data["checkin_time"]:
