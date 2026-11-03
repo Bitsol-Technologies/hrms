@@ -192,7 +192,7 @@ class Interview(Document):
 		template_name = "Interview Scheduling Template" if self.location == "Remote" else "Interview on site"
 		interview_template = frappe.get_doc("Email Template", template_name)
 		
-		time = datetime.strptime(self.from_time, "%H:%M:%S").strftime("%I:%M %p")
+		time = self.parse_time(from_time).strftime("%I:%M %p")
 		ics_file = self.create_ics_file(recipients, self.meeting_link)
 
 		attachment = {
@@ -242,6 +242,9 @@ class Interview(Document):
 
 	def parse_time(self,time_str):
 		try:
+			# Values reloaded from the database are timedelta objects
+			if isinstance(time_str, timedelta):
+				return (datetime.min + time_str).time()
 			# Try to parse with microseconds
 			return datetime.strptime(time_str, "%H:%M:%S.%f").time()
 		except ValueError:
@@ -249,7 +252,7 @@ class Interview(Document):
 			return datetime.strptime(time_str, "%H:%M:%S").time()
 		
 	def create_ics_file(self, recipients, meeting_link):
-		event_date = datetime.strptime(self.scheduled_on, "%Y-%m-%d").date()
+		event_date = getdate(self.scheduled_on)
 		start_time_obj = self.parse_time(self.from_time)
 		end_time_obj = self.parse_time(self.to_time)
 
