@@ -16,7 +16,7 @@ from hrms.payroll.doctype.salary_slip.test_salary_slip import (
 	make_holiday_list,
 	make_leave_application,
 )
-from hrms.tests.test_utils import create_company, get_first_day_for_prev_month
+from hrms.tests.test_utils import create_company, create_department, get_first_day_for_prev_month
 
 
 class TestMonthlyAttendanceSheet(FrappeTestCase):
@@ -210,16 +210,61 @@ class TestMonthlyAttendanceSheet(FrappeTestCase):
 		row = report[1][0]
 		self.assertEqual(row["employee"], self.employee)
 
-		# 4 present + half day absent 0.5
+		# 4 present + half day worked 0.5 (not leave-backed)
 		self.assertEqual(row["total_present"], 4.5)
-		# 1 present
-		self.assertEqual(row["total_absent"], 1)
-		# leave days + half day leave 0.5
-		self.assertEqual(row["total_leaves"], leave_application.total_leave_days + 0.5)
+		# 1 absent + half day absent 0.5 (not leave-backed, defaults to absent)
+		self.assertEqual(row["total_absent"], 1.5)
+		# leave days only, half day isn't leave-backed
+		self.assertEqual(row["total_leaves"], leave_application.total_leave_days)
 
 		self.assertEqual(row["_test_leave_type"], leave_application.total_leave_days)
 		self.assertEqual(row["total_late_entries"], 1)
 		self.assertEqual(row["total_early_exits"], 1)
+
+	@set_holiday_list("Salary Slip Test Holiday List", "_Test Company")
+	def test_summarized_view_with_leave_backed_half_day(self):
+		previous_month_first = get_first_day_for_prev_month()
+
+		mark_attendance(self.employee, previous_month_first, "Absent")
+		mark_attendance(self.employee, previous_month_first + relativedelta(days=1), "Present")
+
+		year_start = getdate(get_year_start(previous_month_first))
+		year_end = getdate(get_year_ending(previous_month_first))
+		try:
+			make_allocation_record(employee=self.employee, from_date=year_start, to_date=year_end)
+		except OverlapError:
+			pass
+
+		leave_backed_day = previous_month_first + relativedelta(days=5)
+		make_leave_application(
+			self.employee,
+			leave_backed_day,
+			leave_backed_day,
+			"_Test Leave Type",
+			half_day=True,
+			half_day_date=leave_backed_day,
+		)
+
+		filters = frappe._dict(
+			{
+				"month": previous_month_first.month,
+				"year": previous_month_first.year,
+				"company": self.company,
+				"summarized_view": 1,
+				"filter_based_on": self.filter_based_on,
+			}
+		)
+		report = execute(filters=filters)
+
+		row = report[1][0]
+		self.assertEqual(row["employee"], self.employee)
+
+		# 1 present + half day worked 0.5 (leave-backed)
+		self.assertEqual(row["total_present"], 1.5)
+		# 1 absent, half day doesn't count as absent (leave-backed)
+		self.assertEqual(row["total_absent"], 1)
+		# half day leave 0.5 (leave-backed)
+		self.assertEqual(row["total_leaves"], 0.5)
 
 	@set_holiday_list("Salary Slip Test Holiday List", "_Test Company")
 	def test_attendance_with_group_by_filter(self):
@@ -474,16 +519,60 @@ class TestMonthlyAttendanceSheet(FrappeTestCase):
 		row = report[1][0]
 		self.assertEqual(row["employee"], self.employee)
 
-		# 4 present + half day absent 0.5
+		# 4 present + half day worked 0.5 (not leave-backed)
 		self.assertEqual(row["total_present"], 4.5)
-		# 1 present
-		self.assertEqual(row["total_absent"], 1)
-		# leave days + half day leave 0.5
-		self.assertEqual(row["total_leaves"], leave_application.total_leave_days + 0.5)
+		# 1 absent + half day absent 0.5 (not leave-backed, defaults to absent)
+		self.assertEqual(row["total_absent"], 1.5)
+		# leave days only, half day isn't leave-backed
+		self.assertEqual(row["total_leaves"], leave_application.total_leave_days)
 
 		self.assertEqual(row["_test_leave_type"], leave_application.total_leave_days)
 		self.assertEqual(row["total_late_entries"], 1)
 		self.assertEqual(row["total_early_exits"], 1)
+
+	def test_summarised_view_with_date_range_across_month_boundary(self):
+		"""
+		Total Holidays must count a holiday even if an earlier date
+		in a different month shares its day-of-month.
+		"""
+		previous_month_first = get_first_day_for_prev_month()
+
+		start_date = previous_month_first.replace(day=5)
+		end_date = start_date + relativedelta(months=1)  # same day-of-month, next month
+
+		hl = make_holiday_list(
+			"Test Cross Month HL",
+			from_date=add_days(start_date, -1),
+			to_date=add_days(end_date, 1),
+			add_weekly_offs=False,
+		)
+
+		holiday_list = frappe.get_doc("Holiday List", hl)
+		holiday_list.append(
+			"holidays", {"holiday_date": end_date, "description": "Test Holiday"}
+		)  # holiday only on the later, colliding day-of-month
+		holiday_list.save()
+
+		frappe.db.set_value("Employee", self.employee, "holiday_list", hl)
+
+		# attendance on the earlier date sharing the same day-of-month as the holiday
+		mark_attendance(self.employee, start_date, "Present")
+
+		filters = frappe._dict(
+			{
+				"filter_based_on": "Date Range",
+				"start_date": start_date,
+				"end_date": end_date,
+				"company": self.company,
+				"summarized_view": 1,
+			}
+		)
+		report = execute(filters=filters)
+		row = report[1][0]
+
+		# end_date's holiday must still be counted despite start_date (same day-of-month, different month)
+		# already having an attendance record
+		self.assertEqual(row["total_holidays"], 1)
 
 	def test_detailed_view_with_date_range_filter(self):
 		today = getdate()
@@ -518,6 +607,112 @@ class TestMonthlyAttendanceSheet(FrappeTestCase):
 			== row_without_shift[date_key(add_days(today, 2))]
 			== "L"
 		)
+
+	def test_attendance_with_department_filter(self):
+		previous_month_first = get_first_day_for_prev_month()
+
+		dept1 = create_department("Test Dept Alpha")
+		dept2 = create_department("Test Dept Beta")
+
+		emp_dept1 = make_employee("emp_dept1@example.com", company=self.company, department=dept1)
+		emp_dept2 = make_employee("emp_dept2@example.com", company=self.company, department=dept2)
+
+		mark_attendance(emp_dept1, previous_month_first, "Present")
+		mark_attendance(emp_dept2, previous_month_first, "Present")
+
+		filters = frappe._dict(
+			{
+				"month": previous_month_first.month,
+				"year": previous_month_first.year,
+				"company": self.company,
+				"department": dept1,
+				"filter_based_on": self.filter_based_on,
+			}
+		)
+		report = execute(filters=filters)
+
+		employees_in_report = [row.get("employee") for row in report[1] if row.get("employee")]
+
+		# only emp_dept1 should appear; emp_dept2 belongs to a different department
+		self.assertIn(emp_dept1, employees_in_report)
+		self.assertNotIn(emp_dept2, employees_in_report)
+
+	def test_attendance_with_branch_filter(self):
+		previous_month_first = get_first_day_for_prev_month()
+
+		branch1 = create_branch("Test Branch Alpha")
+		branch2 = create_branch("Test Branch Beta")
+
+		emp_branch1 = make_employee("emp_branch1@example.com", company=self.company, branch=branch1)
+		emp_branch2 = make_employee("emp_branch2@example.com", company=self.company, branch=branch2)
+
+		mark_attendance(emp_branch1, previous_month_first, "Present")
+		mark_attendance(emp_branch2, previous_month_first, "Present")
+
+		filters = frappe._dict(
+			{
+				"month": previous_month_first.month,
+				"year": previous_month_first.year,
+				"company": self.company,
+				"branch": branch1,
+				"filter_based_on": self.filter_based_on,
+			}
+		)
+		report = execute(filters=filters)
+
+		employees_in_report = [row.get("employee") for row in report[1] if row.get("employee")]
+
+		# only emp_branch1 should appear; emp_branch2 belongs to a different branch
+		self.assertIn(emp_branch1, employees_in_report)
+		self.assertNotIn(emp_branch2, employees_in_report)
+
+	def test_attendance_with_department_and_branch_filter_combined(self):
+		previous_month_first = get_first_day_for_prev_month()
+
+		dept = create_department("Test Dept Combined")
+		branch = create_branch("Test Branch Combined")
+
+		# employee matching both department and branch
+		emp_match = make_employee(
+			"emp_match@example.com", company=self.company, department=dept, branch=branch
+		)
+		# employee with correct department but wrong branch
+		emp_wrong_branch = make_employee(
+			"emp_wrong_branch@example.com",
+			company=self.company,
+			department=dept,
+			branch=create_branch("Test Branch Other"),
+		)
+		# employee with correct branch but wrong department
+		emp_wrong_dept = make_employee(
+			"emp_wrong_dept@example.com",
+			company=self.company,
+			department=create_department("Test Dept Other"),
+			branch=branch,
+		)
+
+		mark_attendance(emp_match, previous_month_first, "Present")
+		mark_attendance(emp_wrong_branch, previous_month_first, "Present")
+		mark_attendance(emp_wrong_dept, previous_month_first, "Present")
+
+		filters = frappe._dict(
+			{
+				"month": previous_month_first.month,
+				"year": previous_month_first.year,
+				"company": self.company,
+				"department": dept,
+				"branch": branch,
+				"filter_based_on": self.filter_based_on,
+			}
+		)
+		report = execute(filters=filters)
+
+		employees_in_report = [row.get("employee") for row in report[1] if row.get("employee")]
+
+		# only the employee matching both department and branch should appear
+		self.assertIn(emp_match, employees_in_report)
+		self.assertNotIn(emp_wrong_branch, employees_in_report)
+		self.assertNotIn(emp_wrong_dept, employees_in_report)
 
 	def test_detailed_view_with_date_range_and_group_by_filter(self):
 		today = getdate()
@@ -589,3 +784,9 @@ def execute_report_with_invalid_filters(invalid_filter_name):
 
 def date_key(date_obj):
 	return date_obj.strftime("%d-%m-%Y")
+
+
+def create_branch(branch_name):
+	if not frappe.db.exists("Branch", branch_name):
+		frappe.get_doc({"doctype": "Branch", "branch": branch_name}).insert(ignore_permissions=True)
+	return branch_name

@@ -37,6 +37,7 @@ class ShiftAssignment(Document):
 	def on_cancel(self):
 		self.validate_employee_checkin()
 		self.validate_attendance()
+		self.db_set("status", "Inactive", update_modified=False)
 
 	def validate_employee_checkin(self):
 		checkins = frappe.get_all(
@@ -176,6 +177,25 @@ def get_events(start, end, filters=None):
 	return get_shift_events(assignments)
 
 
+def mark_expired_shift_assignments_as_inactive():
+	yesterday = add_days(getdate(), -1)
+	shift_assignment = frappe.qb.DocType("Shift Assignment")
+
+	expired_assignments = (
+		frappe.qb.from_(shift_assignment)
+		.select(shift_assignment.name)
+		.where(
+			(shift_assignment.docstatus == 1)
+			& (shift_assignment.status == "Active")
+			& (shift_assignment.end_date.isnotnull())
+			& (shift_assignment.end_date < yesterday)
+		)
+	).run(pluck=True)
+
+	for assignment in expired_assignments:
+		frappe.db.set_value("Shift Assignment", assignment, "status", "Inactive")
+
+
 def get_shift_assignments(start: str, end: str, filters: str | list | None = None) -> list[dict]:
 	import json
 
@@ -256,8 +276,8 @@ def get_shift_type_timing(shift_types):
 	return shift_timing_map
 
 
-def get_shift_for_time(shifts: list[dict], for_timestamp: datetime) -> dict:
-	"""Returns shift with details for given timestamp"""
+def get_valid_shifts_for_time(shifts: list[dict], for_timestamp: datetime) -> list[dict]:
+	"""Returns all shifts active at the given timestamp, sorted with overlapping timings adjusted"""
 	valid_shifts = []
 
 	for assignment in shifts:
@@ -272,7 +292,12 @@ def get_shift_for_time(shifts: list[dict], for_timestamp: datetime) -> dict:
 	valid_shifts.sort(key=lambda x: x["actual_start"])
 	_adjust_overlapping_shifts(valid_shifts)
 
-	return get_exact_shift(valid_shifts, for_timestamp)
+	return valid_shifts
+
+
+def get_shift_for_time(shifts: list[dict], for_timestamp: datetime) -> dict:
+	"""Returns shift with details for given timestamp"""
+	return get_exact_shift(get_valid_shifts_for_time(shifts, for_timestamp), for_timestamp)
 
 
 def _is_shift_outside_assignment_period(shift_details: dict, assignment: dict) -> bool:

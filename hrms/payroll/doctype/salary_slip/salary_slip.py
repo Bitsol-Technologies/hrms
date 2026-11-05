@@ -920,7 +920,7 @@ class SalarySlip(TransactionBase):
 		# get taxable_earnings for current period (all days)
 		self.current_taxable_earnings = self.get_taxable_earnings(self.tax_slab.allow_tax_exemption)
 		self.future_structured_taxable_earnings = self.current_taxable_earnings.taxable_earnings * (
-			ceil(self.remaining_sub_periods) - 1
+			round(self.remaining_sub_periods) - 1
 		)
 
 		current_taxable_earnings_before_exemption = (
@@ -928,7 +928,7 @@ class SalarySlip(TransactionBase):
 			+ self.current_taxable_earnings.amount_exempted_from_income_tax
 		)
 		self.future_structured_taxable_earnings_before_exemption = (
-			current_taxable_earnings_before_exemption * (ceil(self.remaining_sub_periods) - 1)
+			current_taxable_earnings_before_exemption * (round(self.remaining_sub_periods) - 1)
 		)
 
 		# get taxable_earnings, addition_earnings for current actual payment days
@@ -1230,6 +1230,11 @@ class SalarySlip(TransactionBase):
 
 		# shallow copy of data to store default amounts (without payment days) for tax calculation
 		default_data = data.copy()
+		# reset to a full, un-prorated cycle so formulas like base/total_working_days*payment_days
+		# resolve consistently with the un-prorated component defaults set below
+		default_data.payment_days = default_data.total_working_days
+		default_data.leave_without_pay = 0
+		default_data.absent_days = 0
 
 		for key in ("earnings", "deductions"):
 			for d in self.get(key):
@@ -1334,12 +1339,28 @@ class SalarySlip(TransactionBase):
 		)
 
 		for additional_salary in additional_salaries:
+			component_data = get_salary_component_data(additional_salary.component)
+			# keep a zero tax overwrite so tax is not recalculated from the slabs
+			remove_if_zero_valued = (
+				frappe.get_cached_value(
+					"Salary Component", additional_salary.component, "remove_if_zero_valued"
+				)
+				and not component_data.variable_based_on_taxable_salary
+			)
+			# apply a zero overwrite so the structure amount is removed
+			if (
+				flt(additional_salary.amount) == 0
+				and remove_if_zero_valued
+				and not additional_salary.overwrite
+			):
+				continue
 			self.update_component_row(
-				get_salary_component_data(additional_salary.component),
+				component_data,
 				additional_salary.amount,
 				component_type,
 				additional_salary,
 				is_recurring=additional_salary.is_recurring,
+				remove_if_zero_valued=remove_if_zero_valued,
 			)
 
 	def add_tax_components(self):
@@ -1509,7 +1530,7 @@ class SalarySlip(TransactionBase):
 			):
 				component_row.set(attr, component_data.get(attr))
 
-		if additional_salary and amount:
+		if additional_salary:
 			if additional_salary.overwrite:
 				component_row.additional_amount = flt(
 					flt(amount) - flt(component_row.get("default_amount", 0)),
@@ -1577,10 +1598,12 @@ class SalarySlip(TransactionBase):
 
 		if has_additional_salary_tax_component:
 			self.current_structured_tax_amount = self.additional_salary_amount
-		else:
+		elif self.remaining_sub_periods > 0:
 			self.current_structured_tax_amount = (
 				self.total_structured_tax_amount - self.previous_total_paid_taxes
 			) / self.remaining_sub_periods
+		else:
+			self.current_structured_tax_amount = 0.0
 
 		# Total taxable earnings with additional earnings with full tax
 		self.full_tax_on_additional_earnings = 0.0
@@ -1849,7 +1872,11 @@ class SalarySlip(TransactionBase):
 			and cint(row.depends_on_payment_days)
 		):
 			amount, additional_amount = 0, 0
-		elif not row.amount and row.additional_amount:
+		elif (
+			not row.amount
+			and row.additional_amount
+			and not (row.additional_salary and row.default_amount)  # overwritten amount is final
+		):
 			amount = flt(row.additional_amount)
 
 		# apply rounding
@@ -1962,6 +1989,7 @@ class SalarySlip(TransactionBase):
 				).format(payroll_settings.password_policy)
 
 		if receiver:
+			posting_date = getdate(self.posting_date)
 			email_args = {
 				"sender": payroll_settings.sender_email,
 				"recipients": [receiver],
@@ -1972,6 +2000,7 @@ class SalarySlip(TransactionBase):
 				],
 				"reference_doctype": self.doctype,
 				"reference_name": self.name,
+				"send_after": posting_date if posting_date > getdate() else None,
 			}
 			if not frappe.flags.in_test:
 				enqueue(method=frappe.sendmail, queue="short", timeout=300, is_async=True, **email_args)
@@ -2196,9 +2225,11 @@ def get_salary_component_data(component):
 			"depends_on_payment_days",
 			"salary_component_abbr as abbr",
 			"do_not_include_in_total",
+			"do_not_include_in_accounts",
 			"is_tax_applicable",
 			"is_flexible_benefit",
 			"variable_based_on_taxable_salary",
+			"exempted_from_income_tax",
 		),
 		as_dict=1,
 		cache=True,
@@ -2408,7 +2439,7 @@ def _check_attributes(code: str) -> None:
 		if attribute in code:
 			raise SyntaxError(f'Illegal rule {frappe.bold(code)}. Cannot use "{attribute}"')
 
-	BLOCKED_NODES = (ast.NamedExpr,)
+	BLOCKED_NODES = (ast.NamedExpr, ast.Lambda)
 
 	tree = ast.parse(code, mode="eval")
 	for node in ast.walk(tree):
@@ -2418,7 +2449,7 @@ def _check_attributes(code: str) -> None:
 			raise SyntaxError(f'Illegal rule {frappe.bold(code)}. Cannot use "{node.attr}"')
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def enqueue_email_salary_slips(names) -> None:
 	"""enqueue bulk emailing salary slips"""
 	import json

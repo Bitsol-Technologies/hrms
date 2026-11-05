@@ -9,7 +9,11 @@ from hrms.hr.doctype.leave_allocation.leave_allocation import (
 	BackDatedAllocationError,
 	OverAllocationError,
 )
-from hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry import process_expired_allocation
+from hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry import (
+	expire_allocation,
+	process_expired_allocation,
+)
+from hrms.hr.doctype.leave_period.test_leave_period import create_leave_period
 from hrms.hr.doctype.leave_type.test_leave_type import create_leave_type
 
 
@@ -67,6 +71,24 @@ class TestLeaveAllocation(FrappeTestCase):
 
 		# invalid period
 		self.assertRaises(frappe.ValidationError, doc.save)
+
+	def test_single_day_allocation(self):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Leave Allocation",
+				"__islocal": 1,
+				"employee": self.employee.name,
+				"employee_name": self.employee.employee_name,
+				"leave_type": "_Test Leave Type",
+				"from_date": getdate("2015-09-1"),
+				"to_date": getdate("2015-09-1"),
+				"new_leaves_allocated": 1,
+			}
+		)
+
+		# from_date and to_date on the same day should be allowed
+		doc.save()
+		self.assertEqual(doc.from_date, doc.to_date)
 
 	def test_validation_for_over_allocation(self):
 		leave_type = create_leave_type(leave_type_name="Test Over Allocation", is_carry_forward=1)
@@ -204,6 +226,29 @@ class TestLeaveAllocation(FrappeTestCase):
 		# total leaves = 40 which is more than `max_leaves_allowed` setting i.e. 30
 		allocation.new_leaves_allocated = 25
 		self.assertRaises(OverAllocationError, allocation.save)
+
+	def test_max_leaves_allowed_for_allocation_spanning_two_leave_periods(self):
+		create_leave_period(getdate("2030-01-01"), getdate("2030-12-31"), "_Test Company")
+		create_leave_period(getdate("2031-01-01"), getdate("2031-12-31"), "_Test Company")
+		leave_type = create_leave_type(leave_type_name="_Test Spanning Max Leaves", max_leaves_allowed=12)
+
+		create_leave_allocation(
+			leave_type=leave_type.name,
+			employee=self.employee.name,
+			from_date="2029-02-01",
+			to_date="2030-01-31",
+			new_leaves_allocated=12,
+		).submit()
+
+		allocation = create_leave_allocation(
+			leave_type=leave_type.name,
+			employee=self.employee.name,
+			from_date="2030-02-01",
+			to_date="2031-01-31",
+			new_leaves_allocated=12,
+		)
+		allocation.submit()
+		self.assertEqual(allocation.docstatus, 1)
 
 	def test_validate_back_dated_allocation_update(self):
 		create_leave_type(leave_type_name="_Test_CF_leave", is_carry_forward=1)
@@ -614,6 +659,34 @@ class TestLeaveAllocation(FrappeTestCase):
 		leave_allocation.new_leaves_allocated = leave_application.total_leave_days - 1
 		leave_allocation.total_leaves_allocated = leave_application.total_leave_days - 1
 		self.assertRaises(frappe.ValidationError, leave_allocation.submit)
+
+	def test_reallocation_after_expired_allocation(self):
+		from hrms.hr.doctype.leave_allocation.test_earned_leaves import make_policy_assignment
+
+		create_leave_type(leave_type_name="_Test_Expired_Reallocation")
+
+		leave_policy_assignment = make_policy_assignment(self.employee)[0]
+		leave_allocation = frappe.get_doc(
+			"Leave Allocation", {"leave_policy_assignment": leave_policy_assignment}
+		)
+
+		# expire allocation
+		expire_allocation(leave_allocation)
+		leave_allocation.reload()
+		self.assertEqual(leave_allocation.new_leaves_allocated, 0)
+		self.assertEqual(leave_allocation.total_leaves_allocated, 0)
+
+		# allocate 6 new leaves after expiry
+		leave_allocation.allocate_leaves_manually(6)
+		leave_allocation.reload()
+		self.assertEqual(leave_allocation.new_leaves_allocated, 0)
+		self.assertEqual(leave_allocation.total_leaves_allocated, 6)
+
+		# allocate 3 more leaves
+		leave_allocation.allocate_leaves_manually(3)
+		leave_allocation.reload()
+		self.assertEqual(leave_allocation.new_leaves_allocated, 0)
+		self.assertEqual(leave_allocation.total_leaves_allocated, 9)
 
 
 def create_leave_allocation(**args):

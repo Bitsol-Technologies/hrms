@@ -61,7 +61,7 @@ class EmployeeOnboarding(EmployeeBoardingController):
 	def on_cancel(self):
 		super().on_cancel()
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def mark_onboarding_as_completed(self):
 		if not frappe.has_permission("Employee Onboarding", "write", self.name):
 			raise frappe.PermissionError(_("You do not have permission to complete this Employee Onboarding."))

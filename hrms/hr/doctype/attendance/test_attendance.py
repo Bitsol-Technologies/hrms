@@ -16,6 +16,7 @@ from frappe.utils import (
 	getdate,
 	nowdate,
 )
+from frappe.utils.user import add_role
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
@@ -24,6 +25,7 @@ from hrms.hr.doctype.attendance.attendance import (
 	OverlappingShiftAttendanceError,
 	get_unmarked_days,
 	mark_attendance,
+	mark_bulk_attendance,
 )
 from hrms.tests.test_utils import get_first_sunday
 
@@ -34,6 +36,7 @@ class TestAttendance(FrappeTestCase):
 	def setUp(self):
 		from hrms.payroll.doctype.salary_slip.test_salary_slip import make_holiday_list
 
+		frappe.set_user("Administrator")
 		from_date = get_year_start(add_months(getdate(), -1))
 		to_date = get_year_ending(getdate())
 		self.holiday_list = make_holiday_list(from_date=from_date, to_date=to_date)
@@ -240,6 +243,17 @@ class TestAttendance(FrappeTestCase):
 			},
 		)
 		self.assertEqual(len(attendances), 1)
+
+	def test_unmarked_days_of_another_employee(self):
+		user = "test_unmarked_days_user@example.com"
+		make_employee(user)
+		employee = make_employee("test_unmarked_days_other@example.com")
+
+		frappe.set_user(user)
+		try:
+			self.assertRaises(frappe.PermissionError, get_unmarked_days, employee, getdate(), getdate())
+		finally:
+			frappe.set_user("Administrator")
 
 	def tearDown(self):
 		frappe.db.rollback()

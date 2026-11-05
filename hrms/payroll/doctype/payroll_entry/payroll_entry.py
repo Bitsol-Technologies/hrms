@@ -38,7 +38,7 @@ class PayrollEntry(Document):
 			return
 
 		# check if salary slips were manually submitted
-		entries = frappe.db.count("Salary Slip", {"payroll_entry": self.name, "docstatus": 1}, ["name"])
+		entries = frappe.db.count("Salary Slip", {"payroll_entry": self.name, "docstatus": 1})
 		if cint(entries) == len(self.employees):
 			self.set_onload("submitted_ss", True)
 
@@ -151,7 +151,33 @@ class PayrollEntry(Document):
 
 		# cancel Journal Entries
 		for je in journal_entries:
-			frappe.get_doc("Journal Entry", je).cancel()
+			journal_entry_payment_ledgers = frappe.get_all(
+				"Payment Ledger Entry",
+				{"voucher_type": "Journal Entry", "voucher_no": je, "docstatus": 1},
+				distinct=True,
+			)
+			# cancel linked payment ledger entry
+			for pl in journal_entry_payment_ledgers:
+				payment_ledger_entry = frappe.get_doc("Payment Ledger Entry", pl)
+				payment_ledger_entry.flags.ignore_permissions = True
+				payment_ledger_entry.cancel()
+
+			journal_entry = frappe.get_doc("Journal Entry", je)
+			journal_entry.flags.ignore_permissions = True
+			journal_entry.cancel()
+
+	def cancel_linked_payment_ledger_entries(self):
+		payment_ledgers = frappe.get_all(
+			"Payment Ledger Entry",
+			{"against_voucher_type": self.doctype, "against_voucher_no": self.name, "docstatus": 1},
+			distinct=True,
+		)
+
+		# cancel payment ledger entry
+		for pl in payment_ledgers:
+			payment_ledger_entry = frappe.get_doc("Payment Ledger Entry", pl)
+			payment_ledger_entry.flags.ignore_permissions = True
+			payment_ledger_entry.cancel()
 
 	def get_linked_salary_slips(self):
 		return frappe.get_all("Salary Slip", {"payroll_entry": self.name}, ["name", "docstatus"])
@@ -214,7 +240,7 @@ class PayrollEntry(Document):
 			if employee.employee in withheld_salaries:
 				employee.is_salary_withheld = 1
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def create_salary_slips(self):
 		"""
 		Creates salary slip for selected employees if already not created
@@ -278,7 +304,7 @@ class PayrollEntry(Document):
 
 		return ss_list
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def submit_salary_slips(self):
 		self.check_permission("write")
 		salary_slips = self.get_sal_slip_list(ss_status=0)
@@ -865,7 +891,7 @@ class PayrollEntry(Document):
 			.on(je.name == jea.parent)
 			.select(je.name)
 			.where(
-				(je.voucher_type == "Bank Entry")
+				((je.voucher_type == "Bank Entry") | (je.voucher_type == "Cash Entry"))
 				& (jea.reference_name == self.name)
 				& (jea.reference_type == "Payroll Entry")
 			)
@@ -878,7 +904,7 @@ class PayrollEntry(Document):
 			),
 		}
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def make_bank_entry(self, for_withheld_salaries=False):
 		self.check_permission("write")
 		self.employee_based_payroll_payable_entries = {}
@@ -1098,7 +1124,9 @@ class PayrollEntry(Document):
 		return self.make_journal_entry(
 			accounts,
 			currencies,
-			voucher_type="Bank Entry",
+			voucher_type="Cash Entry"
+			if frappe.get_cached_value("Account", self.payment_account, "account_type") == "Cash"
+			else "Bank Entry",
 			user_remark=_("Payment of {0} from {1} to {2}").format(
 				_(user_remark), self.start_date, self.end_date
 			),

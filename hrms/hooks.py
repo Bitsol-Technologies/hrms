@@ -234,6 +234,7 @@ scheduler_events = {
 		"hrms.controllers.employee_reminders.send_birthday_reminders",
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.send_summary",
 		"hrms.hr.doctype.interview.interview.send_daily_feedback_reminder",
+		"hrms.hr.doctype.shift_assignment.shift_assignment.mark_expired_shift_assignments_as_inactive",
 		"hrms.hr.doctype.job_opening.job_opening.close_expired_job_openings",
 		"hrms.hr.doctype.employee_boarding_activity.employee_boarding_activity.send_onboarding_reminder",
 	],
@@ -283,6 +284,10 @@ accounting_dimension_doctypes = [
 ]
 
 bank_reconciliation_doctypes = ["Expense Claim"]
+
+audit_trail_doctypes = ["Expense Claim", "Payroll Entry", "Salary Slip", "Leave Encashment", "Gratuity"]
+
+repost_allowed_doctypes = ["Expense Claim"]
 
 # Testing
 # -------
@@ -398,3 +403,6 @@ company_data_to_be_ignored = [
 	"Employee Onboarding Template",
 	"Employee Separation Template",
 ]
+
+# List of apps whose translatable strings should be excluded from this app's translations.
+ignore_translatable_strings_from = ["frappe", "erpnext"]

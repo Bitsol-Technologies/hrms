@@ -193,7 +193,7 @@ class SalaryStructure(Document):
 
 		return employees
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def assign_salary_structure(
 		self,
 		branch=None,
@@ -364,6 +364,29 @@ def make_salary_slip(
 	as_print=False,
 	print_format=None,
 	for_preview=0,
+):
+	if employee:
+		frappe.has_permission("Employee", "read", employee, throw=True)
+
+	return _make_salary_slip(
+		source_name,
+		target_doc=target_doc,
+		employee=employee,
+		posting_date=posting_date,
+		as_print=as_print,
+		print_format=print_format,
+		for_preview=for_preview,
+	)
+
+
+def _make_salary_slip(
+	source_name,
+	target_doc=None,
+	employee=None,
+	posting_date=None,
+	as_print=False,
+	print_format=None,
+	for_preview=0,
 	ignore_permissions=False,
 ):
 	def postprocess(source, target):
@@ -425,6 +448,7 @@ def get_employees(salary_structure):
 
 
 @frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
 def get_salary_component(doctype, txt, searchfield, start, page_len, filters):
 	sc = frappe.qb.DocType("Salary Component")
 	sca = frappe.qb.DocType("Salary Component Account")

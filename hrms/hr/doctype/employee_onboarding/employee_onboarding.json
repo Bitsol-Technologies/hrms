@@ -71,7 +71,7 @@
    "default": "Pending",
    "fieldname": "boarding_status",
    "fieldtype": "Select",
-   "label": "Status",
+   "label": "Boarding Status",
    "options": "Pending\nIn Process\nCompleted",
    "read_only": 1
   },
@@ -185,11 +185,11 @@
  "grid_page_length": 50,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-07-03 17:41:20.552371",
+ "modified": "2026-02-05 13:46:25.874832",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Onboarding",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
@@ -221,7 +221,7 @@
   }
  ],
  "row_format": "Dynamic",
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
  "title_field": "employee_name",
