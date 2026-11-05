@@ -860,10 +860,14 @@ def get_all_active_employees():
 	Fetch all employees from ERPNext where status is 'Active'.
 	Returns a list of dictionaries with 'user_id' mapping to Clockify user ID.
 	"""
+	fields = ["user_id", "name", "employee_name"]
+	if frappe.db.has_column("Employee", "custom_clockify_user_id"):
+		fields.append("custom_clockify_user_id")
+
 	employees = frappe.get_all(
 		"Employee",
 		filters={"status": "Active", "user_id": ["is", "set"]},
-		fields=["user_id", "name", "employee_name"]
+		fields=fields
 	)
 	return employees
 
@@ -965,8 +969,11 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 	"""
 	employee_records = {}
 	headers = {"X-Api-Key": api_key}
-	# Convert active_employees list into a dictionary for quick lookups
+	# Convert active_employees list into dictionaries for quick lookups
 	active_employee_map = {emp["user_id"].lower(): emp for emp in active_employees}
+	clockify_id_map = {
+		emp["custom_clockify_user_id"]: emp for emp in active_employees if emp.get("custom_clockify_user_id")
+	}
 	for ws in workspace_ids:
 		url = f"https://api.clockify.me/api/v1/workspaces/{ws}/users?page-size=500"
 		try:
@@ -974,11 +981,17 @@ def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
 			response.raise_for_status()
 			users = response.json()
 			for user in users:
-				email = (user.get("email") or "").lower()
-				if not email or email not in active_employee_map:
+				# Prefer the Clockify user ID stored on the Employee, fall back to email
+				employee = clockify_id_map.get(user.get("id"))
+				if not employee:
+					email = (user.get("email") or "").lower()
+					employee = active_employee_map.get(email) if email else None
+					# Employees with a stored Clockify ID are matched only by that ID
+					if employee and employee.get("custom_clockify_user_id"):
+						employee = None
+				if not employee:
 					continue
 				# Use the ERPNext user_id as the key so downstream lookups match the User record
-				employee = active_employee_map[email]
 				email = employee["user_id"]
 				if email in employee_records:
 					if ws not in employee_records[email]["workspace_ids"]:
