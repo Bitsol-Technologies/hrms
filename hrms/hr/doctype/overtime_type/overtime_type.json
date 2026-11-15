@@ -1,9 +1,11 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "Prompt",
  "creation": "2024-10-12 23:46:31.408000",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/overtime",
  "engine": "InnoDB",
  "field_order": [
   "section_break_pai1",
@@ -72,7 +74,6 @@
    "fieldname": "applicable_for_weekend",
    "fieldtype": "Check",
    "label": "Apply for Weekend",
-   "non_negative": 1,
    "reqd": 1
   },
   {
@@ -107,7 +108,8 @@
    "fieldname": "hourly_rate",
    "fieldtype": "Currency",
    "label": "Hourly Rate",
-   "mandatory_depends_on": "eval: doc.overtime_calculation_method == \"Fixed Hourly Rate\";"
+   "mandatory_depends_on": "eval: doc.overtime_calculation_method == \"Fixed Hourly Rate\";",
+   "non_negative": 1
   },
   {
    "fieldname": "section_break_xxdv",
@@ -119,7 +121,7 @@
   },
   {
    "default": "Salary Component Based",
-   "description": "Choose how the hourly overtime amount is calculated:\n<ol style=\"padding-left:15px;\"><li>Fixed Hourly Rate: A fixed, manually entered hourly rate.</li>\n<li>Salary Component-Based:\n\n(Sum of selected component amounts) \u00f7 (Payment Days) \u00f7 (Standard Daily Hours)</li></ol>",
+   "description": "Choose how the hourly overtime amount is calculated:\n<ol style=\"padding-left:15px\"><li>Fixed Hourly Rate: A fixed, manually entered hourly rate.</li>\n<li>Salary Component-Based:\n\n(Sum of selected component amounts) \u00f7 (Payment Days) \u00f7 (Standard Daily Hours)</li></ol>",
    "fieldname": "overtime_calculation_method",
    "fieldtype": "Select",
    "label": "Overtime Amount Calculation",
@@ -130,9 +132,10 @@
    "fieldtype": "Column Break"
   }
  ],
+ "icon": "tag",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-11 12:05:23.356474",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Overtime Type",
@@ -150,6 +153,17 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "role": "HR User",
+   "select": 1
   }
  ],
  "row_format": "Dynamic",

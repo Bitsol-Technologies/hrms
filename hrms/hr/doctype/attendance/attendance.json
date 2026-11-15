@@ -1,9 +1,11 @@
 {
  "actions": [],
+ "allow_bulk_edit": 1,
  "allow_import": 1,
  "autoname": "naming_series:",
  "creation": "2013-01-10 16:34:13",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/attendance",
  "document_type": "Setup",
  "engine": "InnoDB",
  "field_order": [
@@ -162,6 +164,7 @@
    "fieldname": "attendance_request",
    "fieldtype": "Link",
    "label": "Attendance Request",
+   "no_copy": 1,
    "options": "Attendance Request",
    "read_only": 1
   },
@@ -255,11 +258,11 @@
    "read_only": 1
   }
  ],
- "icon": "fa fa-ok",
+ "icon": "calendar-check",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-12-16 17:44:13.859387",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Attendance",

@@ -8,7 +8,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Avg
-from frappe.utils import cint, cstr, get_datetime, get_link_to_form, getdate, nowtime
+from frappe.utils import cint, cstr, get_datetime, get_link_to_form, get_time, getdate, nowtime
 
 
 class DuplicateInterviewRoundError(frappe.ValidationError):
@@ -16,6 +16,33 @@ class DuplicateInterviewRoundError(frappe.ValidationError):
 
 
 class Interview(Document):
+	# begin: auto-generated types
+	# This code is auto-generated. Do not modify anything in this block.
+
+	from typing import TYPE_CHECKING
+
+	if TYPE_CHECKING:
+		from frappe.types import DF
+
+		from hrms.hr.doctype.interview_detail.interview_detail import InterviewDetail
+
+		amended_from: DF.Link | None
+		average_rating: DF.Rating
+		designation: DF.Link | None
+		expected_average_rating: DF.Rating
+		from_time: DF.Time
+		interview_details: DF.Table[InterviewDetail]
+		interview_summary: DF.Text | None
+		interview_type: DF.Link
+		job_applicant: DF.Link
+		job_opening: DF.Link | None
+		reminded: DF.Check
+		resume_link: DF.Data | None
+		scheduled_on: DF.Date
+		status: DF.Literal["Pending", "Under Review", "Cleared", "Rejected", "Cancelled"]
+		to_time: DF.Time
+	# end: auto-generated types
+
 	def validate(self):
 		self.validate_duplicate_interview()
 		self.validate_designation()
@@ -31,13 +58,13 @@ class Interview(Document):
 	def validate_duplicate_interview(self):
 		duplicate_interview = frappe.db.exists(
 			"Interview",
-			{"job_applicant": self.job_applicant, "interview_round": self.interview_round, "docstatus": 1},
+			{"job_applicant": self.job_applicant, "interview_type": self.interview_type, "docstatus": 1},
 		)
 
 		if duplicate_interview:
 			frappe.throw(
 				_(
-					"Job Applicants are not allowed to appear twice for the same Interview round. Interview {0} already scheduled for Job Applicant {1}"
+					"Job Applicants are not allowed to appear twice for the same Interview Type. Interview {0} already scheduled for Job Applicant {1}"
 				).format(
 					frappe.bold(get_link_to_form("Interview", duplicate_interview)),
 					frappe.bold(self.job_applicant),
@@ -50,8 +77,8 @@ class Interview(Document):
 			if self.designation != applicant_designation:
 				frappe.throw(
 					_(
-						"Interview Round {0} is only for Designation {1}. Job Applicant has applied for the role {2}"
-					).format(self.interview_round, frappe.bold(self.designation), applicant_designation),
+						"Interview Type {0} is only for Designation {1}. Job Applicant has applied for the role {2}"
+					).format(self.interview_type, frappe.bold(self.designation), applicant_designation),
 					exc=DuplicateInterviewRoundError,
 				)
 		else:
@@ -80,9 +107,15 @@ class Interview(Document):
 		status_map = {"Cleared": "Accepted", "Rejected": "Rejected"}
 		return status_map.get(self.status, None)
 
-	@frappe.whitelist()
-	def reschedule_interview(self, scheduled_on, from_time, to_time):
-		if scheduled_on == self.scheduled_on and from_time == self.from_time and to_time == self.to_time:
+	@frappe.whitelist(methods=["POST"])
+	def reschedule_interview(
+		self, scheduled_on: datetime.date, from_time: datetime.time, to_time: datetime.time
+	) -> None:
+		if (
+			getdate(scheduled_on) == getdate(self.scheduled_on)
+			and get_time(from_time) == get_time(self.from_time)
+			and get_time(to_time) == get_time(self.to_time)
+		):
 			frappe.msgprint(
 				_("No changes found in timings."), indicator="orange", title=_("Interview Not Rescheduled")
 			)
@@ -126,8 +159,9 @@ class Interview(Document):
 
 
 @frappe.whitelist()
-def get_interviewers(interview_round: str) -> list[str]:
-	return frappe.get_all("Interviewer", filters={"parent": interview_round}, fields=["user as interviewer"])
+def get_interviewers(interview_type: str) -> list[dict]:
+	frappe.has_permission("Interview Type", "read", interview_type, throw=True)
+	return frappe.get_all("Interviewer", filters={"parent": interview_type}, fields=["user as interviewer"])
 
 
 def get_recipients(name, for_feedback=0):
@@ -148,6 +182,9 @@ def get_recipients(name, for_feedback=0):
 
 @frappe.whitelist()
 def get_feedback(interview: str) -> list[dict]:
+	frappe.has_permission("Interview", "read", interview, throw=True)
+	frappe.has_permission("Interview Feedback", "read", throw=True)
+
 	interview_feedback = frappe.qb.DocType("Interview Feedback")
 	employee = frappe.qb.DocType("Employee")
 
@@ -171,6 +208,7 @@ def get_feedback(interview: str) -> list[dict]:
 
 @frappe.whitelist()
 def get_skill_wise_average_rating(interview: str) -> list[dict]:
+	frappe.has_permission("Interview", "read", interview, throw=True)
 	skill_assessment = frappe.qb.DocType("Skill Assessment")
 	interview_feedback = frappe.qb.DocType("Interview Feedback")
 	return (
@@ -187,23 +225,23 @@ def get_skill_wise_average_rating(interview: str) -> list[dict]:
 	).run(as_dict=True)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_job_applicant_status(status: str, job_applicant: str):
 	try:
 		if not job_applicant:
 			frappe.throw(_("Please specify the job applicant to be updated."))
 
-		job_applicant = frappe.get_doc("Job Applicant", job_applicant)
-		job_applicant.status = status
-		job_applicant.save()
+		doc = frappe.get_doc("Job Applicant", job_applicant)
+		doc.status = status
+		doc.save()
 
 		frappe.msgprint(
-			_("Updated the Job Applicant status to {0}").format(job_applicant.status),
+			_("Updated the Job Applicant status to {0}").format(doc.status),
 			alert=True,
 			indicator="green",
 		)
 	except Exception:
-		job_applicant.log_error("Failed to update Job Applicant status")
+		frappe.log_error("Failed to update Job Applicant status")
 		frappe.msgprint(
 			_("Failed to update the Job Applicant status"),
 			alert=True,
@@ -308,14 +346,15 @@ def send_daily_feedback_reminder():
 
 
 @frappe.whitelist()
-def get_expected_skill_set(interview_round):
+def get_expected_skill_set(interview_type: str) -> list[dict]:
+	frappe.has_permission("Interview Type", "read", interview_type, throw=True)
 	return frappe.get_all(
-		"Expected Skill Set", filters={"parent": interview_round}, fields=["skill"], order_by="idx"
+		"Expected Skill Set", filters={"parent": interview_type}, fields=["skill"], order_by="idx"
 	)
 
 
-@frappe.whitelist()
-def create_interview_feedback(data, interview_name, interviewer, job_applicant):
+@frappe.whitelist(methods=["POST"])
+def create_interview_feedback(data: str | dict, interview_name: str, interviewer: str, job_applicant: str):
 	import json
 
 	if isinstance(data, str):
@@ -348,7 +387,9 @@ def create_interview_feedback(data, interview_name, interviewer, job_applicant):
 
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
-def get_interviewer_list(doctype, txt, searchfield, start, page_len, filters):
+def get_interviewer_list(
+	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict
+) -> list:
 	filters = [
 		["Has Role", "parent", "like", f"%{txt}%"],
 		["Has Role", "role", "=", "interviewer"],
@@ -369,7 +410,7 @@ def get_interviewer_list(doctype, txt, searchfield, start, page_len, filters):
 
 
 @frappe.whitelist()
-def get_events(start, end, filters=None):
+def get_events(start: str, end: str, filters: str | None = None):
 	"""Returns events for Gantt / Calendar view rendering.
 
 	:param start: Start date-time.
@@ -393,7 +434,7 @@ def get_events(start, end, filters=None):
 	interviews = frappe.db.sql(
 		f"""
 			SELECT DISTINCT
-				`tabInterview`.name, `tabInterview`.job_applicant, `tabInterview`.interview_round,
+				`tabInterview`.name, `tabInterview`.job_applicant, `tabInterview`.interview_type,
 				`tabInterview`.scheduled_on, `tabInterview`.status, `tabInterview`.from_time as from_time,
 				`tabInterview`.to_time as to_time
 			from
@@ -410,7 +451,7 @@ def get_events(start, end, filters=None):
 
 	for d in interviews:
 		subject_data = []
-		for field in ["name", "job_applicant", "interview_round"]:
+		for field in ["name", "job_applicant", "interview_type"]:
 			if not d.get(field):
 				continue
 			subject_data.append(d.get(field))

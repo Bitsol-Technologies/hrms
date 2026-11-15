@@ -5,6 +5,7 @@
  "autoname": "field:expense_type",
  "creation": "2012-03-27 14:35:55",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/expense-claim",
  "document_type": "Setup",
  "engine": "InnoDB",
  "field_order": [
@@ -45,10 +46,10 @@
    "label": "Deferred Expense Account"
   }
  ],
- "icon": "fa fa-flag",
+ "icon": "tag",
  "idx": 1,
  "links": [],
- "modified": "2024-03-27 13:09:44.229749",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Expense Claim Type",
@@ -67,8 +68,15 @@
   {
    "read": 1,
    "role": "Employee"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "ASC",
  "states": []

@@ -6,6 +6,7 @@
  "creation": "2013-01-15 16:13:36",
  "description": "Description of a Job Opening",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/job-opening",
  "document_type": "Document",
  "engine": "InnoDB",
  "field_order": [
@@ -31,17 +32,18 @@
   "vacancies",
   "section_break_6",
   "publish",
+  "prevent_duplicate_applicant",
   "route",
   "publish_applications_received",
   "column_break_12",
   "job_application_route",
   "section_break_14",
   "description",
-  "section_break_16",
+  "pay_details_tab",
   "currency",
   "lower_range",
   "upper_range",
-  "column_break_20",
+  "column_break_pfir",
   "salary_per",
   "publish_salary_range"
  ],
@@ -56,6 +58,8 @@
   {
    "fieldname": "company",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Company",
    "options": "Company",
    "reqd": 1
@@ -63,6 +67,7 @@
   {
    "fieldname": "status",
    "fieldtype": "Select",
+   "hidden": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
@@ -75,6 +80,8 @@
   {
    "fieldname": "designation",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Designation",
    "options": "Designation",
    "reqd": 1
@@ -82,6 +89,8 @@
   {
    "fieldname": "department",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Department",
    "options": "Department"
   },
@@ -107,6 +116,8 @@
    "default": "0",
    "fieldname": "publish",
    "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Publish on website"
   },
   {
@@ -132,11 +143,6 @@
    "fieldtype": "Section Break"
   },
   {
-   "collapsible": 1,
-   "fieldname": "section_break_16",
-   "fieldtype": "Section Break"
-  },
-  {
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",
@@ -146,6 +152,7 @@
    "fieldname": "lower_range",
    "fieldtype": "Currency",
    "label": "Lower Range",
+   "non_negative": 1,
    "options": "currency",
    "precision": "0"
   },
@@ -153,19 +160,16 @@
    "fieldname": "upper_range",
    "fieldtype": "Currency",
    "label": "Upper Range",
+   "non_negative": 1,
    "options": "currency",
    "precision": "0"
-  },
-  {
-   "fieldname": "column_break_20",
-   "fieldtype": "Column Break"
   },
   {
    "depends_on": "publish",
    "description": "Route to the custom Job Application Webform",
    "fieldname": "job_application_route",
    "fieldtype": "Data",
-   "label": "Job Application Route"
+   "label": "Application Web Form Route"
   },
   {
    "default": "0",
@@ -210,6 +214,8 @@
   {
    "fieldname": "employment_type",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Employment Type",
    "options": "Employment Type"
   },
@@ -254,27 +260,55 @@
    "label": "Publish Applications Received"
   },
   {
+   "default": "0",
+   "depends_on": "publish",
+   "description": "If enabled, candidates who have already applied with the same email address will not be allowed to apply again",
+   "fieldname": "prevent_duplicate_applicant",
+   "fieldtype": "Check",
+   "label": "Prevent Duplicate Applications"
+  },
+  {
    "fieldname": "job_opening_template",
    "fieldtype": "Link",
    "label": "Job Opening Template",
    "options": "Job Opening Template"
+  },
+  {
+   "fieldname": "pay_details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Pay Details"
+  },
+  {
+   "fieldname": "column_break_pfir",
+   "fieldtype": "Column Break"
   }
  ],
  "has_web_view": 1,
- "icon": "fa fa-bookmark",
+ "icon": "briefcase-business",
  "idx": 1,
  "is_published_field": "publish",
  "links": [],
- "modified": "2025-12-11 19:18:36.145062",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Opening",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
    "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
    "email": 1,
    "print": 1,
    "read": 1,
@@ -282,9 +316,22 @@
    "role": "HR User",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
   }
  ],
  "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
  "sort_field": "creation",
  "sort_order": "ASC",
  "states": [

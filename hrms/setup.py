@@ -6,9 +6,10 @@ from frappe.desk.page.setup_wizard.install_fixtures import (
 	_,  # NOTE: this is not the real translation function
 )
 from frappe.desk.page.setup_wizard.setup_wizard import make_records
-from frappe.installer import update_site_config
+from frappe.permissions import add_permission, update_permission_property
 
 from hrms.overrides.company import delete_company_fixtures
+from hrms.subscription_utils import is_new_hr_site, set_hrms_as_default_app
 
 
 def after_install():
@@ -19,8 +20,13 @@ def after_install():
 	update_hr_defaults()
 	add_non_standard_user_types()
 	set_single_defaults()
+	setup_repost_defaults()
 	create_default_role_profiles()
 	run_post_install_patches()
+	add_default_hr_permissions()
+
+	if is_new_hr_site():
+		set_hrms_as_default_app()
 
 
 def before_uninstall():
@@ -186,6 +192,7 @@ def get_custom_fields():
 				"label": _("Employment Type"),
 				"options": "Employment Type",
 				"insert_after": "department",
+				"in_list_view": 1,
 			},
 			{
 				"fieldname": "job_applicant",
@@ -193,6 +200,17 @@ def get_custom_fields():
 				"label": _("Job Applicant"),
 				"options": "Job Applicant",
 				"insert_after": "employment_details",
+				"depends_on": "eval:doc.job_applicant",
+				"read_only": 1,
+			},
+			{
+				"fieldname": "job_offer",
+				"fieldtype": "Link",
+				"label": _("Job Offer"),
+				"options": "Job Offer",
+				"insert_after": "job_applicant",
+				"depends_on": "eval:doc.job_offer",
+				"read_only": 1,
 			},
 			{
 				"fieldname": "grade",
@@ -241,6 +259,7 @@ def get_custom_fields():
 				"label": _("Expense Approver"),
 				"options": "User",
 				"insert_after": "approvers_section",
+				"ignore_user_permissions": 1,
 			},
 			{
 				"fieldname": "leave_approver",
@@ -248,6 +267,7 @@ def get_custom_fields():
 				"label": _("Leave Approver"),
 				"options": "User",
 				"insert_after": "expense_approver",
+				"ignore_user_permissions": 1,
 			},
 			{
 				"fieldname": "column_break_45",
@@ -260,6 +280,7 @@ def get_custom_fields():
 				"label": _("Shift Request Approver"),
 				"options": "User",
 				"insert_after": "column_break_45",
+				"ignore_user_permissions": 1,
 			},
 			{
 				"fieldname": "employee_advance_account",
@@ -609,22 +630,10 @@ def remove_lending_docperms_from_ess():
 # ESS USER TYPE SETUP & CLEANUP
 def add_non_standard_user_types():
 	user_types = get_user_types_data()
-	update_user_type_doctype_limit(user_types)
 
 	for user_type, data in user_types.items():
 		create_custom_role(data)
 		create_user_type(user_type, data)
-
-
-def update_user_type_doctype_limit(user_types=None):
-	if not user_types:
-		user_types = get_user_types_data()
-
-	user_type_limit = {}
-	for user_type, __ in user_types.items():
-		user_type_limit.setdefault(frappe.scrub(user_type), 40)
-
-	update_site_config("user_type_doctype_limit", user_type_limit)
 
 
 def get_user_types_data():
@@ -859,3 +868,41 @@ def get_salary_slip_loan_fields():
 			},
 		],
 	}
+
+
+# Add default permission for hr roles
+def add_default_hr_permissions():
+	# Project and Task perms are needed for the Employee Onboarding / Separation flow,
+	# which creates a Project and Tasks and assigns them to users. assign_to.add() does a
+	# read check on Task, and on_cancel deletes the Project and its Tasks.
+	project_task_perms = {
+		"Project": {"read": 1, "write": 1, "create": 1, "delete": 1},
+		"Task": {"read": 1, "write": 1, "create": 1, "delete": 1},
+	}
+	role_permissions = {
+		"HR User": {
+			"Role": {"read": 1},
+			"Currency": {"read": 1},
+			**project_task_perms,
+		},
+		"HR Manager": {
+			"Role": {"read": 1},
+			"Currency": {"read": 1},
+			"Email Account": {"read": 1},
+			**project_task_perms,
+		},
+	}
+
+	for role, permissions in role_permissions.items():
+		for doctype, ptypes in permissions.items():
+			add_permission(doctype, role)
+
+			for ptype, value in ptypes.items():
+				update_permission_property(doctype, role, permlevel=0, ptype=ptype, value=value)
+
+
+def setup_repost_defaults():
+	accounts_settings = frappe.get_doc("Accounts Settings")
+	for x in frappe.get_hooks("repost_allowed_doctypes"):
+		accounts_settings.append("repost_allowed_types", {"document_type": x})
+	accounts_settings.save()

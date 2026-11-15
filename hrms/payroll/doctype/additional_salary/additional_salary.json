@@ -4,6 +4,7 @@
  "autoname": "naming_series:",
  "creation": "2018-05-10 12:04:08.396461",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/additional-salary",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
@@ -201,9 +202,10 @@
    "no_copy": 1
   }
  ],
+ "icon": "circle-plus",
  "is_submittable": 1,
  "links": [],
- "modified": "2024-11-14 16:51:17.594568",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Additional Salary",
@@ -227,9 +229,7 @@
   },
   {
    "create": 1,
-   "delete": 1,
    "email": 1,
-   "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
@@ -237,8 +237,20 @@
    "share": 1,
    "submit": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "employee_name",
  "sort_field": "creation",
  "sort_order": "DESC",

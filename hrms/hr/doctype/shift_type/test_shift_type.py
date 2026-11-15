@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 
 import frappe
-from frappe.tests import IntegrationTestCase
 from frappe.utils import (
 	add_days,
 	get_datetime,
@@ -21,15 +20,11 @@ from hrms.hr.doctype.leave_application.test_leave_application import get_first_s
 from hrms.hr.doctype.shift_type.shift_type import update_last_sync_of_checkin
 from hrms.payroll.doctype.salary_slip.test_salary_slip import make_holiday_list
 from hrms.tests.test_utils import add_date_to_holiday_list
+from hrms.tests.utils import HRMSTestSuite
 
 
-class TestShiftType(IntegrationTestCase):
+class TestShiftType(HRMSTestSuite):
 	def setUp(self):
-		frappe.db.delete("Shift Type")
-		frappe.db.delete("Shift Assignment")
-		frappe.db.delete("Employee Checkin")
-		frappe.db.delete("Attendance")
-
 		from_date = get_year_start(getdate())
 		to_date = get_year_ending(getdate())
 		self.holiday_list = make_holiday_list(from_date=from_date, to_date=to_date)
@@ -668,6 +663,47 @@ class TestShiftType(IntegrationTestCase):
 		attendance = frappe.db.get_value("Attendance", {"employee": employee}, "status")
 		self.assertIsNone(attendance)
 
+	@HRMSTestSuite.change_settings("HR Settings", {"allow_multiple_shift_assignments": 1})
+	def test_mark_absent_with_multiple_overlapping_shift_assignments(self):
+		"""Tests absent is marked for each shift when actual timings of multiple assignments overlap"""
+		employee = make_employee("test_employee_multishift@example.com", company="_Test Company")
+		today = getdate()
+		start_date = add_days(today, -5)
+		absent_date = add_days(today, -3)
+		last_sync = datetime.combine(today, get_time("06:00:00"))
+
+		# actual windows overlap (day: 05:00-23:00, night: 20:01-08:59) but raw timings don't
+		day_shift = setup_shift_type(
+			shift_type="Test Overlap Day",
+			start_time="06:00:00",
+			end_time="22:00:00",
+			process_attendance_after=start_date,
+			last_sync_of_checkin=last_sync,
+		)
+		night_shift = setup_shift_type(
+			shift_type="Test Overlap Night",
+			start_time="22:01:00",
+			end_time="05:59:00",
+			begin_check_in_before_shift_start_time=120,
+			allow_check_out_after_shift_end_time=180,
+			process_attendance_after=start_date,
+			last_sync_of_checkin=last_sync,
+		)
+
+		make_shift_assignment(day_shift.name, employee, start_date)
+		make_shift_assignment(night_shift.name, employee, start_date)
+
+		day_shift.process_auto_attendance()
+		night_shift.process_auto_attendance()
+
+		for shift in (day_shift, night_shift):
+			status = frappe.db.get_value(
+				"Attendance",
+				{"employee": employee, "shift": shift.name, "attendance_date": absent_date},
+				"status",
+			)
+			self.assertEqual(status, "Absent", msg=f"Absent not marked for {shift.name}")
+
 	def test_get_start_and_end_dates(self):
 		date = getdate()
 
@@ -935,34 +971,45 @@ class TestShiftType(IntegrationTestCase):
 			"test_working_hours3@example.com", company="_Test Company", default_shift=shift.name
 		)
 
-		add_date_to_holiday_list(getdate(), "_Test Half Day", is_half_day=1)
+		from erpnext.setup.doctype.holiday_list.holiday_list import is_holiday
+
+		# anchor to a working day in the shift's holiday list so that adding "today" as a
+		# half day holiday is not skipped because today is already a weekly off (weekend),
+		# and widen the processing window to cover that day
+		date = getdate()
+		while is_holiday("_Test Half Day", date):
+			date = add_days(date, -1)
+		shift.process_attendance_after = add_days(date, -1)
+		shift.save()
+
+		add_date_to_holiday_list(date, "_Test Half Day", is_half_day=1)
 		# employee1 worked for 4 hours which is full threshold on half day
-		make_checkin(employee1, datetime.combine(getdate(), get_time("10:00:00")))
-		make_checkin(employee1, datetime.combine(getdate(), get_time("14:00:00")))
+		make_checkin(employee1, datetime.combine(date, get_time("10:00:00")))
+		make_checkin(employee1, datetime.combine(date, get_time("14:00:00")))
 
 		# employee2 worked for 2 hours less than half day's threshold on half day
-		make_checkin(employee2, datetime.combine(getdate(), get_time("10:00:00")))
-		make_checkin(employee2, datetime.combine(getdate(), get_time("12:00:00")))
+		make_checkin(employee2, datetime.combine(date, get_time("10:00:00")))
+		make_checkin(employee2, datetime.combine(date, get_time("12:00:00")))
 
 		# employee3 worked for 1 hour, less than the threshold for absent on half day
-		make_checkin(employee3, datetime.combine(getdate(), get_time("10:00:00")))
-		make_checkin(employee3, datetime.combine(getdate(), get_time("11:00:00")))
+		make_checkin(employee3, datetime.combine(date, get_time("10:00:00")))
+		make_checkin(employee3, datetime.combine(date, get_time("11:00:00")))
 
 		shift.process_auto_attendance()
 		attendance1 = frappe.get_doc(
-			"Attendance", {"employee": employee1, "shift": shift.name, "attendance_date": getdate()}
+			"Attendance", {"employee": employee1, "shift": shift.name, "attendance_date": date}
 		)
 		self.assertEqual(attendance1.working_hours, 4.00)
 		self.assertEqual(attendance1.status, "Present")
 
 		attendance2 = frappe.get_doc(
-			"Attendance", {"employee": employee2, "shift": shift.name, "attendance_date": getdate()}
+			"Attendance", {"employee": employee2, "shift": shift.name, "attendance_date": date}
 		)
 		self.assertEqual(attendance2.working_hours, 2)
 		self.assertEqual(attendance2.status, "Half Day")
 
 		attendance3 = frappe.get_doc(
-			"Attendance", {"employee": employee3, "shift": shift.name, "attendance_date": getdate()}
+			"Attendance", {"employee": employee3, "shift": shift.name, "attendance_date": date}
 		)
 		self.assertEqual(attendance3.working_hours, 1)
 		self.assertEqual(attendance3.status, "Absent")

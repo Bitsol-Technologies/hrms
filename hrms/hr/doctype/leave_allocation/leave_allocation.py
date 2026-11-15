@@ -1,6 +1,6 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
-
+import datetime
 
 import frappe
 from frappe import _
@@ -53,22 +53,21 @@ class LeaveAllocation(Document):
 		self.validate_leave_allocation_days()
 
 	def validate_leave_allocation_days(self):
-		company = frappe.db.get_value("Employee", self.employee, "company")
-		leave_period = get_leave_period(self.from_date, self.to_date, company)
 		max_leaves_allowed = frappe.db.get_value("Leave Type", self.leave_type, "max_leaves_allowed")
-
 		if max_leaves_allowed > 0:
-			leave_allocated = 0
-			if leave_period:
-				leave_allocated = get_leave_allocation_for_period(
-					self.employee,
-					self.leave_type,
-					leave_period[0].from_date,
-					leave_period[0].to_date,
-					exclude_allocation=self.name,
-				)
-			leave_allocated += flt(self.new_leaves_allocated)
-			if leave_allocated > max_leaves_allowed:
+			from_date, to_date = self.from_date, self.to_date
+			company = frappe.db.get_value("Employee", self.employee, "company")
+			for period in get_leave_period(self.from_date, self.to_date, company) or []:
+				if period.from_date <= getdate(self.from_date) and getdate(self.to_date) <= period.to_date:
+					from_date, to_date = period.from_date, period.to_date
+			leave_allocated = get_leave_allocation_for_period(
+				self.employee,
+				self.leave_type,
+				from_date,
+				to_date,
+				exclude_allocation=self.name,
+			)
+			if leave_allocated + flt(self.new_leaves_allocated) > max_leaves_allowed:
 				frappe.throw(
 					_(
 						"Total allocated leaves are more than maximum allocation allowed for {0} leave type for employee {1} in the period"
@@ -176,7 +175,7 @@ class LeaveAllocation(Document):
 			)
 
 	def validate_period(self):
-		if date_diff(self.to_date, self.from_date) <= 0:
+		if date_diff(self.to_date, self.from_date) < 0:
 			frappe.throw(_("To date cannot be before from date"))
 
 	def validate_lwp(self):
@@ -186,17 +185,19 @@ class LeaveAllocation(Document):
 			)
 
 	def validate_allocation_overlap(self):
-		leave_allocation = frappe.db.sql(
-			"""
-			SELECT
-				name
-			FROM `tabLeave Allocation`
-			WHERE
-				employee=%s AND leave_type=%s
-				AND name <> %s AND docstatus=1
-				AND to_date >= %s AND from_date <= %s""",
-			(self.employee, self.leave_type, self.name, self.from_date, self.to_date),
-		)
+		LeaveAllocation = frappe.qb.DocType("Leave Allocation")
+		leave_allocation = (
+			frappe.qb.from_(LeaveAllocation)
+			.select(LeaveAllocation.name)
+			.where(
+				(LeaveAllocation.employee == self.employee)
+				& (LeaveAllocation.leave_type == self.leave_type)
+				& (LeaveAllocation.name != self.name)
+				& (LeaveAllocation.docstatus == 1)
+				& (LeaveAllocation.to_date >= self.from_date)
+				& (LeaveAllocation.from_date <= self.to_date)
+			)
+		).run()
 
 		if leave_allocation:
 			frappe.msgprint(
@@ -212,13 +213,18 @@ class LeaveAllocation(Document):
 			)
 
 	def validate_back_dated_allocation(self):
-		future_allocation = frappe.db.sql(
-			"""select name, from_date from `tabLeave Allocation`
-			where employee=%s and leave_type=%s and docstatus=1 and from_date > %s
-			and carry_forward=1""",
-			(self.employee, self.leave_type, self.to_date),
-			as_dict=1,
-		)
+		LeaveAllocation = frappe.qb.DocType("Leave Allocation")
+		future_allocation = (
+			frappe.qb.from_(LeaveAllocation)
+			.select(LeaveAllocation.name, LeaveAllocation.from_date)
+			.where(
+				(LeaveAllocation.employee == self.employee)
+				& (LeaveAllocation.leave_type == self.leave_type)
+				& (LeaveAllocation.docstatus == 1)
+				& (LeaveAllocation.from_date > self.to_date)
+				& (LeaveAllocation.carry_forward == 1)
+			)
+		).run(as_dict=True)
 
 		if future_allocation:
 			frappe.throw(
@@ -228,7 +234,7 @@ class LeaveAllocation(Document):
 				BackDatedAllocationError,
 			)
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def set_total_leaves_allocated(self):
 		self.unused_leaves = flt(
 			get_carry_forwarded_leaves(self.employee, self.leave_type, self.from_date, self.carry_forward),
@@ -316,8 +322,8 @@ class LeaveAllocation(Document):
 		)
 		create_leave_ledger_entry(self, args, submit)
 
-	@frappe.whitelist()
-	def allocate_leaves_manually(self, new_leaves, from_date=None):
+	@frappe.whitelist(methods=["POST"])
+	def allocate_leaves_manually(self, new_leaves: str | float, from_date: str | datetime.date | None = None):
 		if from_date and not (getdate(self.from_date) <= getdate(from_date) <= getdate(self.to_date)):
 			frappe.throw(
 				_("Cannot allocate leaves outside the allocation period {0} - {1}").format(
@@ -395,8 +401,14 @@ class LeaveAllocation(Document):
 
 		return _get_monthly_earned_leave(doj, annual_allocation, frequency, rounding)
 
-	@frappe.whitelist()
-	def create_leave_adjustment(self, adjustment_type, leaves_to_adjust, posting_date, reason_for_adjustment):
+	@frappe.whitelist(methods=["POST"])
+	def create_leave_adjustment(
+		self,
+		adjustment_type: str,
+		leaves_to_adjust: str | float,
+		posting_date: str | datetime.date,
+		reason_for_adjustment: str | None = None,
+	) -> None:
 		leave_adjustment = frappe.new_doc(
 			"Leave Adjustment",
 			employee=self.employee,
@@ -411,64 +423,33 @@ class LeaveAllocation(Document):
 		leave_adjustment.submit()
 		frappe.msgprint(_("Adjustment Created Successfully"), indicator="green", alert=True)
 
-	@frappe.whitelist()
-	def retry_failed_allocations(self, failed_allocations):
+	@frappe.whitelist(methods=["POST"])
+	def retry_failed_allocations(self, failed_allocations: list) -> None:
 		if not frappe.has_permission(doctype="Leave Allocation", ptype="write", user=frappe.session.user):
 			frappe.throw(_("You do not have permission to complete this action"), frappe.PermissionError)
 
-		max_leaves_allowed, frequency = frappe.db.get_values(
-			"Leave Type", self.leave_type, ["max_leaves_allowed", "earned_leave_frequency"]
-		)[0]
+		from hrms.hr.utils import update_previous_leave_allocation
 
+		leave_type = frappe.get_cached_doc("Leave Type", self.leave_type)
 		annual_allocation = frappe.get_value(
 			"Leave Policy Detail",
 			{"parent": self.leave_policy, "leave_type": self.leave_type},
 			"annual_allocation",
 		)
-
-		for allocation in failed_allocations:
-			new_allocation = flt(self.total_leaves_allocated) + flt(allocation["number_of_leaves"])
-
-			new_allocation_without_cf = flt(self.get_existing_leave_count()) + flt(
-				allocation["number_of_leaves"]
+		requested_dates = {getdate(row["allocation_date"]) for row in failed_allocations}
+		self.reload()
+		for row in self.earned_leave_schedule:
+			if not (row.failed and row.attempted and getdate(row.allocation_date) in requested_dates):
+				continue
+			update_previous_leave_allocation(
+				self,
+				annual_allocation,
+				leave_type,
+				row.number_of_leaves,
+				row.allocation_date,
+				allocated_via="Manually",
 			)
-
-			if new_allocation > max_leaves_allowed and max_leaves_allowed > 0:
-				frappe.throw(
-					msg=_(
-						"Cannot allocate more leaves due to maximum leaves allowed limit of {0} in {1} leave type."
-					).format(frappe.bold(max_leaves_allowed), frappe.bold(self.leave_type)),
-					title=_("Retry Failed"),
-				)
-
-			elif new_allocation_without_cf > annual_allocation and frequency != "Yearly":
-				frappe.throw(
-					msg=_(
-						"Cannot allocate more leaves due to maximum leave allocation limit of {0} in leave policy assignment"
-					).format(frappe.bold(annual_allocation)),
-					title=_("Retry Failed"),
-				)
-
-			else:
-				self.db_set("total_leaves_allocated", new_allocation, update_modified=False)
-				create_additional_leave_ledger_entry(
-					self, allocation["number_of_leaves"], allocation["allocation_date"]
-				)
-				earned_leave_schedule = frappe.qb.DocType("Earned Leave Schedule")
-				(
-					frappe.qb.update(earned_leave_schedule)
-					.where(
-						(earned_leave_schedule.parent == self.name)
-						& (earned_leave_schedule.allocation_date == allocation["allocation_date"])
-						& (earned_leave_schedule.attempted == 1)
-						& (earned_leave_schedule.failed == 1)
-					)
-					.set(earned_leave_schedule.is_allocated, 1)
-					.set(earned_leave_schedule.attempted, 1)
-					.set(earned_leave_schedule.allocated_via, "Manually")
-					.set(earned_leave_schedule.failed, 0)
-					.set(earned_leave_schedule.failure_reason, "")
-				).run()
+		self.reload()
 
 
 def get_previous_allocation(from_date, leave_type, employee):
@@ -572,7 +553,7 @@ def show_expire_leave_dialog(expired_leaves, leave_type):
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def expire_carried_forward_allocation():
 	if frappe.has_permission(doctype="Leave Allocation", ptype="submit", user=frappe.session.user):
 		process_expired_allocation()

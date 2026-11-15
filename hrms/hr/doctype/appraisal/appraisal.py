@@ -209,8 +209,8 @@ class Appraisal(Document, AppraisalMixin):
 
 		self.final_score = flt(final_score, self.precision("final_score"))
 
-	@frappe.whitelist()
-	def add_feedback(self, feedback, feedback_ratings):
+	@frappe.whitelist(methods=["POST"])
+	def add_feedback(self, feedback: str, feedback_ratings: list) -> Document:
 		feedback = frappe.get_doc(
 			{
 				"doctype": "Employee Performance Feedback",
@@ -269,7 +269,8 @@ class Appraisal(Document, AppraisalMixin):
 
 
 @frappe.whitelist()
-def get_feedback_history(employee, appraisal):
+def get_feedback_history(employee: str, appraisal: str) -> dict:
+	frappe.has_permission("Appraisal", "read", appraisal, throw=True)
 	data = frappe._dict()
 	data.feedback_history = frappe.get_list(
 		"Employee Performance Feedback",
@@ -323,7 +324,9 @@ def get_feedback_history(employee, appraisal):
 
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
-def get_kras_for_employee(doctype, txt, searchfield, start, page_len, filters):
+def get_kras_for_employee(
+	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict
+) -> tuple[tuple[str]]:
 	appraisal = frappe.db.get_value(
 		"Appraisal",
 		{

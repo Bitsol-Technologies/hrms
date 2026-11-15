@@ -2,7 +2,9 @@
 # License: GNU General Public License v3. See license.txt
 
 import frappe
-from frappe.utils import flt, nowdate
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import flt, get_link_to_form, nowdate
 
 import erpnext
 from erpnext.accounts.doctype.payment_entry.payment_entry import (
@@ -72,8 +74,15 @@ class EmployeePaymentEntry(PaymentEntry):
 
 
 @frappe.whitelist()
-def get_payment_entry_for_employee(dt, dn, party_amount=None, bank_account=None, bank_amount=None):
+def get_payment_entry_for_employee(
+	dt: str,
+	dn: str,
+	party_amount: float | None = None,
+	bank_account: str | None = None,
+	bank_amount: float | None = None,
+):
 	"""Function to make Payment Entry for Employee Advance, Gratuity, Expense Claim, Leave Encashment"""
+	frappe.has_permission(dt, "read", dn, throw=True)
 	doc = frappe.get_doc(dt, dn)
 
 	party_account = get_party_account(doc)
@@ -85,6 +94,22 @@ def get_payment_entry_for_employee(dt, dn, party_amount=None, bank_account=None,
 
 	# bank or cash
 	bank = get_bank_cash_account(doc, bank_account)
+	if not bank.get("account"):
+		company_link = get_link_to_form("Company", doc.company + "#accounts_tab", _("here"))
+		if frappe.get_meta(dt).has_field("mode_of_payment"):
+			frappe.throw(
+				_(
+					"Please set a {0} on this document, or a Default Bank/Cash Account in the Company {1}"
+				).format(
+					get_link_to_form(dt, dn + "#mode_of_payment", _("Mode of Payment")),
+					company_link,
+				),
+				title=_("Bank/Cash Account Required"),
+			)
+		frappe.throw(
+			_("Please set a Default Bank/Cash Account in the Company {0}").format(company_link),
+			title=_("Bank/Cash Account Required"),
+		)
 
 	pe = frappe.new_doc("Payment Entry")
 	pe.payment_type = payment_type
@@ -136,10 +161,9 @@ def get_payment_entry_for_employee(dt, dn, party_amount=None, bank_account=None,
 	pe.received_amount = received_amount
 
 	if party_account and bank:
-		if dt == "Employee Advance":
+		pe.set_exchange_rate()  # always set source & target exchange rate
+		if dt == "Employee Advance" and pe.paid_to_account_currency != pe.paid_from_account_currency:
 			pe.target_exchange_rate = current_exchange_rate
-		else:
-			pe.set_exchange_rate()
 		pe.set_amounts()
 
 	return pe
@@ -223,8 +247,13 @@ def get_paid_amount_and_received_amount(
 
 @frappe.whitelist()
 def get_payment_reference_details(
-	reference_doctype, reference_name, party_account_currency, party_type=None, party=None
+	reference_doctype: str,
+	reference_name: str,
+	party_account_currency: str,
+	party_type: str | None = None,
+	party: str | None = None,
 ):
+	frappe.has_permission(reference_doctype, "read", reference_name, throw=True)
 	if reference_doctype in ("Expense Claim", "Employee Advance", "Gratuity", "Leave Encashment"):
 		return get_reference_details_for_employee(reference_doctype, reference_name, party_account_currency)
 	else:
@@ -234,11 +263,14 @@ def get_payment_reference_details(
 
 
 @frappe.whitelist()
-def get_reference_details_for_employee(reference_doctype, reference_name, party_account_currency):
+def get_reference_details_for_employee(
+	reference_doctype: str, reference_name: str, party_account_currency: str
+):
 	"""
 	Returns payment reference details for employee related doctypes:
 	Employee Advance, Expense Claim, Gratuity, Leave Encashment
 	"""
+	frappe.has_permission(reference_doctype, "read", reference_name, throw=True)
 	total_amount = outstanding_amount = exchange_rate = None
 
 	ref_doc = frappe.get_doc(reference_doctype, reference_name)
@@ -306,11 +338,12 @@ def get_total_amount_and_exchange_rate(ref_doc, party_account_currency, company_
 
 
 # update exchange rate in linked advance
-@frappe.whitelist()
-def set_exchange_rate_in_advance(doc, method=None):
+@frappe.whitelist(methods=["POST"])
+def set_exchange_rate_in_advance(doc: Document, method: None = None):
 	if doc.references:
 		for reference_doc in doc.references:
 			if reference_doc.reference_doctype == "Employee Advance" and doc.target_exchange_rate:
+				frappe.has_permission("Employee Advance", "write", reference_doc.reference_name, throw=True)
 				frappe.db.set_value(
 					"Employee Advance",
 					reference_doc.reference_name,

@@ -43,8 +43,11 @@ const searchText = ref("")
 const value = computed({
 	get: () => props.modelValue,
 	set: (val) => {
-		const newVal = (val && typeof val === "object" && val.value !== undefined) ? val.value : val
-		emit("update:modelValue", newVal || "")
+		if (typeof val === "string") {
+			emit("update:modelValue", val)
+		} else {
+			emit("update:modelValue", val?.value || "")
+		}
 	},
 })
 
@@ -57,13 +60,23 @@ const options = createResource({
 	},
 	method: "POST",
 	transform: (data) => {
-		return data.map((doc) => {
-			const title = doc?.description?.split(",")?.[0]
+		const mapped = data.map((doc) => {
+			let title = null
+			if (doc.label && doc.label !== doc.value){
+				title = doc.label
+			} else if (doc.description) {
+				title = doc.description.split(",")[0]
+			}
 			return {
 				label: title ? `${title} : ${doc.value}` : doc.value,
 				value: doc.value,
 			}
 		})
+
+		if (props.modelValue && !mapped.find((o) => o.value === props.modelValue)) {
+			mapped.unshift({ label: props.modelValue, value: props.modelValue })
+		}
+		return mapped
 	},
 })
 
@@ -72,28 +85,45 @@ const reloadOptions = (searchTextVal) => {
 		params: {
 			txt: searchTextVal,
 			doctype: props.doctype,
-			filters: props.filters
+			filters: props.filters,
 		},
 	})
 	options.reload()
 }
 
 const handleQueryUpdate = debounce((newQuery) => {
-    const val = newQuery || ""
-
-    if (val === "" && props.modelValue) return
-
-    if (searchText.value === val) return
-    searchText.value = val
-    reloadOptions(val)
+	const val = newQuery || ""
+	if (searchText.value === val) return
+	searchText.value = val
+	reloadOptions(val)
 }, 300)
 
 watch(
 	() => props.doctype,
 	() => {
 		if (!props.doctype || props.doctype === options.doctype) return
-		reloadOptions(props.modelValue)
+		reloadOptions("")
 	},
 	{ immediate: true }
+)
+
+watch(
+	() => props.filters,
+	() => reloadOptions(''),
+)
+
+watch(
+	() => props.modelValue,
+	(newVal, oldVal) => {
+		if (!newVal && oldVal) {
+			// value cleared — reload so the dropdown shows the full default list
+			searchText.value = ""
+			reloadOptions("")
+		} else if (newVal && newVal !== oldVal) {
+			// reload so transform can inject it if it's outside the default page
+			const inOptions = (options.data || []).find((o) => o.value === newVal)
+			if (options.data && !inOptions) reloadOptions("")
+		}
+	}
 )
 </script>

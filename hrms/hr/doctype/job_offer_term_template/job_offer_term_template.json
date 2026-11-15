@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "field:title",
  "creation": "2023-11-21 13:39:20.882706",
@@ -23,9 +24,10 @@
    "options": "Job Offer Term"
   }
  ],
+ "icon": "file-text",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-03-27 13:09:57.850071",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Offer Term Template",
@@ -55,8 +57,15 @@
    "role": "HR Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": []

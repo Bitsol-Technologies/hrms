@@ -70,6 +70,23 @@ frappe.ui.form.on("Salary Structure Assignment", {
 		frm.page.set_inner_btn_group_as_primary(__("Create"));
 
 		frm.add_custom_button(
+			__("See CTC Break-up"),
+			function () {
+				if (!frm.doc.ctc) {
+					frm.scroll_to_field("ctc");
+					frappe.throw(
+						__("Please set employee's total cost to company to see CTC breakup."),
+					);
+				}
+				frappe.set_route("query-report", "Employee CTC Break-up", {
+					company: frm.doc.company,
+					employee: frm.doc.employee,
+					salary_structure_assignment: frm.doc.name,
+				});
+			},
+			__("Actions"),
+		);
+		frm.add_custom_button(
 			__("Preview Salary Slip"),
 			function () {
 				frm.trigger("preview_salary_slip");
@@ -116,31 +133,21 @@ frappe.ui.form.on("Salary Structure Assignment", {
 	},
 
 	preview_salary_slip: function (frm) {
-		frappe.db.get_value(
-			"Salary Structure",
-			frm.doc.salary_structure,
-			"salary_slip_based_on_timesheet",
-			(r) => {
-				const print_format = r.salary_slip_based_on_timesheet
-					? "Salary Slip based on Timesheet"
-					: "Salary Slip Standard";
-				frappe.call({
-					method: "hrms.payroll.doctype.salary_structure.salary_structure.make_salary_slip",
-					args: {
-						source_name: frm.doc.salary_structure,
-						employee: frm.doc.employee,
-						posting_date: frm.doc.from_date,
-						as_print: 1,
-						print_format: print_format,
-						for_preview: 1,
-					},
-					callback: function (r) {
-						const new_window = window.open();
-						new_window.document.write(r.message);
-					},
-				});
+		frappe.call({
+			method: "hrms.payroll.doctype.salary_structure.salary_structure.make_salary_slip",
+			args: {
+				source_name: frm.doc.salary_structure,
+				employee: frm.doc.employee,
+				posting_date: frm.doc.from_date,
+				as_print: 1,
+				print_format: "Salary Slip Classic",
+				for_preview: 1,
 			},
-		);
+			callback: function (r) {
+				const new_window = window.open();
+				new_window.document.write(r.message);
+			},
+		});
 	},
 
 	set_payroll_cost_centers: function (frm) {

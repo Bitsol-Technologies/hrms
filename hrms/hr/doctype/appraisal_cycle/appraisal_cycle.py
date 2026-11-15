@@ -37,6 +37,7 @@ class AppraisalCycle(Document):
 	@frappe.whitelist()
 	def set_employees(self):
 		"""Pull employees in appraisee list based on selected filters"""
+		self.check_permission("write")
 		employees = self.get_employees_for_appraisal()
 		appraisal_templates = self.get_appraisal_template_map()
 
@@ -103,7 +104,7 @@ class AppraisalCycle(Document):
 
 		return appraisal_templates
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def create_appraisals(self):
 		self.check_permission("write")
 		if not self.appraisees:
@@ -142,7 +143,7 @@ class AppraisalCycle(Document):
 			msg, title=_("Appraisal Template Missing"), indicator="yellow", raise_exception=raise_exception
 		)
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def complete_cycle(self):
 		self.check_permission("write")
 
@@ -209,6 +210,7 @@ def validate_active_appraisal_cycle(appraisal_cycle: str) -> None:
 
 @frappe.whitelist()
 def get_appraisal_cycle_summary(cycle_name: str) -> dict:
+	frappe.has_permission("Appraisal Cycle", "read", cycle_name, throw=True)
 	summary = frappe._dict()
 
 	summary["appraisees"] = frappe.db.count(
@@ -257,6 +259,8 @@ def get_employees_without_feedback(cycle_name: str | None = None) -> int:
 		cycle_name = frappe.get_value(
 			"Appraisal Cycle", {"status": "In Progress"}, order_by="start_date desc"
 		)
+
+	frappe.has_permission("Appraisal Cycle", "read", cycle_name, throw=True)
 
 	filtered_records = SubQuery(
 		frappe.qb.from_(Feedback)

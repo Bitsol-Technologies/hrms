@@ -1,5 +1,4 @@
 import frappe
-from frappe.tests import change_settings
 from frappe.utils import add_days, add_months, getdate, nowdate
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -9,23 +8,13 @@ from hrms.hr.doctype.leave_allocation.leave_allocation import (
 	OverAllocationError,
 )
 from hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry import process_expired_allocation
+from hrms.hr.doctype.leave_period.test_leave_period import create_leave_period
 from hrms.hr.doctype.leave_type.test_leave_type import create_leave_type
 from hrms.tests.utils import HRMSTestSuite
 
 
 class TestLeaveAllocation(HRMSTestSuite):
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
-		cls.make_employees()
-		cls.make_leave_types()
-
 	def setUp(self):
-		frappe.db.delete("Leave Period")
-		frappe.db.delete("Leave Allocation")
-		frappe.db.delete("Leave Application")
-		frappe.db.delete("Leave Ledger Entry")
-
 		emp_id = make_employee("test_leave_allocation@salary.com", company="_Test Company")
 		self.employee = frappe.get_doc("Employee", emp_id)
 
@@ -73,6 +62,24 @@ class TestLeaveAllocation(HRMSTestSuite):
 
 		# invalid period
 		self.assertRaises(frappe.ValidationError, doc.save)
+
+	def test_single_day_allocation(self):
+		doc = frappe.get_doc(
+			{
+				"doctype": "Leave Allocation",
+				"__islocal": 1,
+				"employee": self.employee.name,
+				"employee_name": self.employee.employee_name,
+				"leave_type": "_Test Leave Type",
+				"from_date": getdate("2015-09-1"),
+				"to_date": getdate("2015-09-1"),
+				"new_leaves_allocated": 1,
+			}
+		)
+
+		# from_date and to_date on the same day should be allowed
+		doc.save()
+		self.assertEqual(doc.from_date, doc.to_date)
 
 	def test_validation_for_over_allocation(self):
 		leave_type = create_leave_type(leave_type_name="Test Over Allocation", is_carry_forward=1)
@@ -211,6 +218,29 @@ class TestLeaveAllocation(HRMSTestSuite):
 		allocation.new_leaves_allocated = 25
 		self.assertRaises(OverAllocationError, allocation.save)
 
+	def test_max_leaves_allowed_for_allocation_spanning_two_leave_periods(self):
+		create_leave_period(getdate("2030-01-01"), getdate("2030-12-31"), "_Test Company")
+		create_leave_period(getdate("2031-01-01"), getdate("2031-12-31"), "_Test Company")
+		leave_type = create_leave_type(leave_type_name="_Test Spanning Max Leaves", max_leaves_allowed=12)
+
+		create_leave_allocation(
+			leave_type=leave_type.name,
+			employee=self.employee.name,
+			from_date="2029-02-01",
+			to_date="2030-01-31",
+			new_leaves_allocated=12,
+		).submit()
+
+		allocation = create_leave_allocation(
+			leave_type=leave_type.name,
+			employee=self.employee.name,
+			from_date="2030-02-01",
+			to_date="2031-01-31",
+			new_leaves_allocated=12,
+		)
+		allocation.submit()
+		self.assertEqual(allocation.docstatus, 1)
+
 	def test_validate_back_dated_allocation_update(self):
 		create_leave_type(leave_type_name="_Test_CF_leave", is_carry_forward=1)
 
@@ -287,7 +317,7 @@ class TestLeaveAllocation(HRMSTestSuite):
 
 		self.assertEqual(leave_allocation_2.unused_leaves, 5)
 
-	@change_settings("System Settings", {"float_precision": 2})
+	@HRMSTestSuite.change_settings("System Settings", {"float_precision": 2})
 	def test_precision(self):
 		create_leave_type(
 			leave_type_name="_Test_CF_leave",
@@ -624,7 +654,7 @@ class TestLeaveAllocation(HRMSTestSuite):
 def create_leave_allocation(**args):
 	args = frappe._dict(args)
 
-	emp_id = make_employee("test_emp_leave_allocation@salary.com")
+	emp_id = args.employee or make_employee("test_emp_leave_allocation@salary.com", company="_Test Company")
 	employee = frappe.get_doc("Employee", emp_id)
 
 	return frappe.get_doc(

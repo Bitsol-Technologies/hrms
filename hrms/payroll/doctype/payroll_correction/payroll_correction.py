@@ -54,7 +54,7 @@ class PayrollCorrection(Document):
 		delete_employee_benefit_ledger_entry("reference_document", self.name)
 
 	@frappe.whitelist()
-	def fetch_salary_slip_details(self):
+	def fetch_salary_slip_details(self) -> dict[str, list] | None:
 		# Fetch salary slip details with LWP for the employee in the payroll period
 		if not (self.employee and self.payroll_period and self.company):
 			return {"months": [], "slip_details": []}
@@ -172,6 +172,17 @@ class PayrollCorrection(Document):
 				)  # since accruals do not have default_amount field
 			else:
 				total_working_days = salary_slip.get("total_working_days", 1)
+
+			if not total_working_days:
+				frappe.throw(
+					_(
+						"Cannot calculate payroll correction for salary component {0} because salary slip {1} has zero {2}."
+					).format(
+						frappe.bold(component),
+						frappe.bold(salary_slip.name),
+						_("payment days") if component_data.get("accrual_component") else _("working days"),
+					)
+				)
 
 			per_day_amount = flt(component_data["default_amount"] / total_working_days)
 			arrear_amount = flt(per_day_amount * self.days_to_reverse)

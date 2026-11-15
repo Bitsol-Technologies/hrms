@@ -191,7 +191,10 @@ class LeavePolicyAssignment(Document):
 
 	def get_leaves_for_passed_period(self, annual_allocation, leave_details, date_of_joining):
 		consider_current_period = is_earned_leave_applicable_for_current_period(
-			date_of_joining, leave_details.allocate_on_day, leave_details.earned_leave_frequency
+			date_of_joining,
+			leave_details.allocate_on_day,
+			leave_details.earned_leave_frequency,
+			effective_from=self.effective_from,
 		)
 		current_date, from_date = self.get_current_and_from_date(date_of_joining)
 		periods_passed = self.get_periods_passed(
@@ -225,11 +228,18 @@ class LeavePolicyAssignment(Document):
 			"Yearly": (1, 12),
 		}.get(earned_leave_frequency)
 
-		periods_passed = calculate_periods_passed(
-			current_date, from_date, periods_per_year, months_per_period, consider_current_period
+		effective_from = self.effective_from if earned_leave_frequency == "Half-Yearly" else None
+		return max(
+			calculate_periods_passed(
+				current_date,
+				from_date,
+				periods_per_year,
+				months_per_period,
+				consider_current_period,
+				effective_from=effective_from,
+			),
+			0,
 		)
-
-		return periods_passed
 
 	def calculate_leaves_for_passed_period(
 		self, annual_allocation, leave_details, date_of_joining, periods_passed, consider_current_period
@@ -251,7 +261,9 @@ class LeavePolicyAssignment(Document):
 			# calculate pro-rated leave for that month
 			# and normal monthly earned leave for remaining passed months
 			start_date, end_date = get_sub_period_start_and_end(
-				date_of_joining, leave_details.earned_leave_frequency
+				date_of_joining,
+				leave_details.earned_leave_frequency,
+				effective_from=self.effective_from,
 			)
 			leaves = get_periodically_earned_leave(
 				date_of_joining,
@@ -271,6 +283,7 @@ class LeavePolicyAssignment(Document):
 		self, annual_allocation, leave_details, date_of_joining, new_leaves_allocated
 	):
 		from hrms.hr.utils import (
+			get_complete_month_count,
 			get_expected_allocation_date_for_period,
 			get_monthly_earned_leave,
 			get_sub_period_start_and_end,
@@ -294,8 +307,18 @@ class LeavePolicyAssignment(Document):
 			leave_details.allocate_on_day,
 			from_date,
 			date_of_joining,
+			effective_from=self.effective_from,
 		)
+		if (
+			leave_details.earned_leave_frequency == "Half-Yearly"
+			and self.assignment_based_on == "Joining Date"
+			and to_date >= add_months(from_date, 12)
+		):
+			max_allocations = get_complete_month_count(to_date, from_date) // months_to_add + 1
+		else:
+			max_allocations = 0
 		schedule = []
+		allocations_added = 0
 		if new_leaves_allocated:
 			schedule.append(
 				{
@@ -306,7 +329,12 @@ class LeavePolicyAssignment(Document):
 					"attempted": 1,
 				}
 			)
-			last_allocated_date = get_sub_period_start_and_end(today, leave_details.earned_leave_frequency)[1]
+			allocations_added += 1
+			last_allocated_date = get_sub_period_start_and_end(
+				today,
+				leave_details.earned_leave_frequency,
+				effective_from=self.effective_from,
+			)[1]
 
 		while date <= to_date:
 			date_already_passed = today > date
@@ -319,15 +347,19 @@ class LeavePolicyAssignment(Document):
 					"attempted": 1 if date_already_passed else 0,
 				}
 				schedule.append(row)
+				allocations_added += 1
+				if max_allocations and allocations_added >= max_allocations:
+					break
 			date = get_expected_allocation_date_for_period(
 				leave_details.earned_leave_frequency,
 				leave_details.allocate_on_day,
 				add_to_date(date, months=months_to_add),
 				date_of_joining,
+				effective_from=self.effective_from,
 			)
 		if from_date < getdate(date_of_joining):
 			pro_rated_period_start, pro_rated_period_end = get_sub_period_start_and_end(
-				date_of_joining, leave_details.earned_leave_frequency
+				date_of_joining, leave_details.earned_leave_frequency, effective_from=self.effective_from
 			)
 			pro_rated_earned_leave = get_monthly_earned_leave(
 				date_of_joining,
@@ -338,7 +370,37 @@ class LeavePolicyAssignment(Document):
 				pro_rated_period_end,
 			)
 			schedule[0]["number_of_leaves"] = pro_rated_earned_leave
+
+		# yearly earned leaves are exempted from the annual allocation limit
+		# since a single period already grants the entire annual allocation
+		if annual_allocation and leave_details.earned_leave_frequency != "Yearly":
+			schedule = cap_schedule_to_annual_allocation(schedule, annual_allocation)
+
 		return schedule
+
+
+def cap_schedule_to_annual_allocation(schedule, annual_allocation):
+	from frappe.model.meta import get_field_precision
+
+	precision = get_field_precision(frappe.get_meta("Leave Allocation").get_field("new_leaves_allocated"))
+	annual_allocation = flt(annual_allocation, precision)
+
+	capped_schedule = []
+	scheduled_leaves = 0.0
+
+	for row in schedule:
+		# leaves allocated already have ledger entries against them, they cannot be trimmed
+		if not row.get("is_allocated"):
+			leaves_left_in_quota = flt(annual_allocation - scheduled_leaves, precision)
+			if leaves_left_in_quota <= 0:
+				break
+			if flt(row["number_of_leaves"], precision) > leaves_left_in_quota:
+				row["number_of_leaves"] = leaves_left_in_quota
+
+		scheduled_leaves = flt(scheduled_leaves + flt(row["number_of_leaves"], precision), precision)
+		capped_schedule.append(row)
+
+	return capped_schedule
 
 
 def get_pro_rata_period_end_date(consider_current_month):
@@ -355,12 +417,19 @@ def get_pro_rata_period_end_date(consider_current_month):
 
 
 def calculate_periods_passed(
-	current_date, from_date, periods_per_year, months_per_period, consider_current_period
+	current_date, from_date, periods_per_year, months_per_period, consider_current_period, effective_from=None
 ):
-	periods_passed = 0
+	if effective_from:
+		from hrms.hr.utils import get_complete_month_count
 
-	from_period = (from_date.year * periods_per_year) + ((from_date.month - 1) // months_per_period)
-	current_period = (current_date.year * periods_per_year) + ((current_date.month - 1) // months_per_period)
+		effective_from = getdate(effective_from)
+		from_period = get_complete_month_count(from_date, effective_from) // months_per_period
+		current_period = get_complete_month_count(current_date, effective_from) // months_per_period
+	else:
+		from_period = (from_date.year * periods_per_year) + ((from_date.month - 1) // months_per_period)
+		current_period = (current_date.year * periods_per_year) + (
+			(current_date.month - 1) // months_per_period
+		)
 
 	periods_passed = current_period - from_period
 	if consider_current_period:
@@ -369,13 +438,25 @@ def calculate_periods_passed(
 	return periods_passed
 
 
-def is_earned_leave_applicable_for_current_period(date_of_joining, allocate_on_day, earned_leave_frequency):
-	from hrms.hr.utils import get_semester_end, get_semester_start
-
+def is_earned_leave_applicable_for_current_period(
+	date_of_joining, allocate_on_day, earned_leave_frequency, effective_from=None
+):
 	date = getdate(frappe.flags.current_date) or getdate()
-	# If the date of assignment creation is >= the leave type's "Allocate On" date,
-	# then the current month should be considered
-	# because the employee is already entitled for the leave of that month
+
+	# For Half-Yearly, compute period relative to effective_from instead of calendar year
+	if earned_leave_frequency == "Half-Yearly" and effective_from:
+		from hrms.hr.utils import get_half_year_periods
+
+		period_start, period_end = get_half_year_periods(date, effective_from)
+		half_yearly_condition = (allocate_on_day == "First Day" and date >= period_start) or (
+			allocate_on_day == "Last Day" and date == period_end
+		)
+	else:
+		from hrms.hr.utils import get_semester_end, get_semester_start
+
+		half_yearly_condition = (allocate_on_day == "First Day" and date >= get_semester_start(date)) or (
+			allocate_on_day == "Last Day" and date == get_semester_end(date)
+		)
 
 	condition_map = {
 		"Monthly": (
@@ -383,16 +464,16 @@ def is_earned_leave_applicable_for_current_period(date_of_joining, allocate_on_d
 			or (allocate_on_day == "First Day" and date >= get_first_day(date))
 			or (allocate_on_day == "Last Day" and date == get_last_day(date))
 		),
-		"Quarterly": (allocate_on_day == "First Day" and date >= get_quarter_start(date))
-		or (allocate_on_day == "Last Day" and date == get_quarter_ending(date)),
-		"Half-Yearly": (allocate_on_day == "First Day" and date >= get_semester_start(date))
-		or (allocate_on_day == "Last Day" and date == get_semester_end(date)),
+		"Quarterly": (
+			(allocate_on_day == "First Day" and date >= get_quarter_start(date))
+			or (allocate_on_day == "Last Day" and date == get_quarter_ending(date))
+		),
+		"Half-Yearly": half_yearly_condition,
 		"Yearly": (
 			(allocate_on_day == "First Day" and date >= get_year_start(date))
 			or (allocate_on_day == "Last Day" and date == get_year_ending(date))
 		),
 	}
-
 	return condition_map.get(earned_leave_frequency)
 
 
@@ -413,8 +494,8 @@ def calculate_pro_rated_leaves(
 	return rounded(leaves)
 
 
-@frappe.whitelist()
-def create_assignment_for_multiple_employees(employees, data):
+@frappe.whitelist(methods=["POST"])
+def create_assignment_for_multiple_employees(employees: str | list[str], data: str | dict) -> list[str]:
 	if isinstance(employees, str):
 		employees = json.loads(employees)
 
@@ -425,15 +506,23 @@ def create_assignment_for_multiple_employees(employees, data):
 	failed = []
 
 	for employee in employees:
-		assignment = create_assignment(employee, data)
 		savepoint = "before_assignment_submission"
 		try:
+			# create + submit inside the savepoint so a failure for one employee
+			# (e.g. an overlapping assignment) rolls back only that employee and
+			# doesn't abort assignment for the rest of the batch
 			frappe.db.savepoint(savepoint)
+			assignment = create_assignment(employee, frappe._dict(data))
 			assignment.submit()
 		except Exception:
 			frappe.db.rollback(save_point=savepoint)
-			assignment.log_error("Leave Policy Assignment submission failed")
-			failed.append(assignment.name)
+			frappe.log_error(
+				title="Leave Policy Assignment failed",
+				reference_doctype="Leave Policy Assignment",
+				reference_name=employee,
+			)
+			failed.append(employee)
+			continue
 
 		docs_name.append(assignment.name)
 
@@ -443,8 +532,8 @@ def create_assignment_for_multiple_employees(employees, data):
 	return docs_name
 
 
-@frappe.whitelist()
-def create_assignment(employee, data):
+@frappe.whitelist(methods=["POST"])
+def create_assignment(employee: str, data: frappe._dict) -> Document:
 	assignment = frappe.new_doc("Leave Policy Assignment")
 	assignment.employee = employee
 	assignment.assignment_based_on = data.assignment_based_on or None
@@ -457,12 +546,12 @@ def create_assignment(employee, data):
 	return assignment
 
 
-def show_assignment_submission_status(failed):
+def show_assignment_submission_status(failed_employees):
 	frappe.clear_messages()
-	assignment_list = [get_link_to_form("Leave Policy Assignment", entry) for entry in failed]
+	employee_links = [get_link_to_form("Employee", employee) for employee in failed_employees]
 
-	msg = _("Failed to submit some leave policy assignments:")
-	msg += " " + comma_and(assignment_list, False) + "<hr>"
+	msg = _("Leave policy could not be assigned to the following employees:")
+	msg += " " + comma_and(employee_links, False) + "<hr>"
 	msg += (
 		_("Check {0} for more details")
 		.format("<a href='/app/List/Error Log?reference_doctype=Leave Policy Assignment'>{0}</a>")
@@ -472,7 +561,7 @@ def show_assignment_submission_status(failed):
 	frappe.msgprint(
 		msg,
 		indicator="red",
-		title=_("Submission Failed"),
+		title=_("Assignment Failed"),
 		is_minimizable=True,
 	)
 

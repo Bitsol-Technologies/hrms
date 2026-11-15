@@ -21,6 +21,7 @@ class AttendanceRequest(Document):
 	def validate(self):
 		validate_active_employee(self.employee)
 		validate_dates(self, self.from_date, self.to_date, False)
+		self.validate_shifts()
 		self.validate_half_day()
 		self.validate_request_overlap()
 		self.validate_no_attendance_to_create()
@@ -36,19 +37,58 @@ class AttendanceRequest(Document):
 		if len(attendance_warnings) == attendance_request_days and not any(
 			warning["action"] == "Overwrite" for warning in attendance_warnings
 		):
-			frappe.throw(
-				title=_("No attendance records to create"),
-				msg=_(
-					"Please check if employee is on leave or attendance with the same status exists for selected day(s)."
-				),
+			message_table = [[_("Date"), _("Reason"), _("Action")]]
+			for warning in attendance_warnings:
+				message_table.append(
+					[
+						format_date(warning["date"]),
+						_(warning["reason"]),
+						_(warning["action"]),
+					]
+				)
+			frappe.msgprint(
+				title=_("No attendance records to create due to following reasons"),
+				msg=message_table,
+				as_table=True,
+				raise_exception=True,
 			)
+
+	def validate_shifts(self):
+		# Shift should be mentioned if employee has a shift assignment
+		shifts = self.get_active_shifts()
+		if shifts and not self.shift:
+			if len(shifts) == 1:
+				self.shift = shifts[0]
+			else:
+				frappe.throw(
+					_(
+						"There are multiple shifts assigned to the employee for the same period. Please mention the shift"
+					)
+				)
+
+	def get_active_shifts(self):
+		# Attendance requests are typically posted after the shift period for corrections.
+		# Expired shift assignments are auto-marked Inactive, but should still be considered
+		# here so that the shift is auto-fetched for backdated requests.
+		shifts = frappe.get_all(
+			"Shift Assignment",
+			filters={
+				"docstatus": 1,
+				"employee": self.employee,
+				"start_date": ("<=", self.from_date),
+				"end_date": (">=", self.to_date),
+			},
+			pluck="shift_type",
+		)
+
+		return list(set(shifts))
 
 	def validate_request_overlap(self):
 		if not self.name:
 			self.name = "New Attendance Request"
 
 		Request = frappe.qb.DocType("Attendance Request")
-		overlapping_request = (
+		query = (
 			frappe.qb.from_(Request)
 			.select(Request.name)
 			.where(
@@ -58,7 +98,12 @@ class AttendanceRequest(Document):
 				& (self.to_date >= Request.from_date)
 				& (self.from_date <= Request.to_date)
 			)
-		).run(as_dict=True)
+		)
+
+		if self.shift:
+			query = query.where(Request.shift == self.shift)
+
+		overlapping_request = query.run(as_dict=True)
 
 		if overlapping_request:
 			self.throw_overlap_error(overlapping_request[0].name)
@@ -120,6 +165,25 @@ class AttendanceRequest(Document):
 					),
 					title=_("Attendance Updated"),
 				)
+			elif status == "Half Day" and doc.half_day_status == "Absent" and self.half_day:
+				old_half_day_status = doc.half_day_status
+				doc.db_set({"half_day_status": "Present", "attendance_request": self.name})
+				text = _(
+					"Changed the Status for Other Half from {0} to {1} via Attendance Request as the status is Half Day"
+				).format(frappe.bold(old_half_day_status), frappe.bold("Present"))
+				doc.add_comment(comment_type="Info", text=text)
+
+				frappe.msgprint(
+					_(
+						"Updated Status for Other Half from {0} to {1} for date {2} in the attendance record {3}"
+					).format(
+						frappe.bold(old_half_day_status),
+						frappe.bold("Present"),
+						frappe.bold(format_date(date)),
+						get_link_to_form("Attendance", doc.name),
+					),
+					title=_("Attendance Updated"),
+				)
 		else:
 			# submit a new attendance record
 			doc = frappe.new_doc("Attendance")
@@ -155,16 +219,31 @@ class AttendanceRequest(Document):
 		return True
 
 	def has_leave_record(self, attendance_date: str) -> str | None:
-		return frappe.db.exists(
+		leaves = frappe.get_all(
 			"Leave Application",
-			{
+			filters={
 				"employee": self.employee,
 				"docstatus": 1,
 				"from_date": ("<=", attendance_date),
 				"to_date": (">=", attendance_date),
 				"status": "Approved",
 			},
+			fields=["name", "half_day", "half_day_date"],
 		)
+
+		if self.half_day and self.half_day_date and getdate(self.half_day_date) == getdate(attendance_date):
+			half_day_leaves = [
+				leave
+				for leave in leaves
+				if leave.half_day
+				and leave.half_day_date
+				and getdate(leave.half_day_date) == getdate(attendance_date)
+			]
+			# a single half day leave on this date leaves the other half for the request to mark
+			if len(half_day_leaves) == 1:
+				leaves.remove(half_day_leaves[0])
+
+		return leaves[0].name if leaves else None
 
 	def get_attendance_doc(self, attendance_date: str) -> str | None:
 		attendance = frappe.db.exists(
@@ -173,6 +252,7 @@ class AttendanceRequest(Document):
 				"employee": self.employee,
 				"attendance_date": attendance_date,
 				"docstatus": ("!=", 2),
+				"shift": self.shift,
 			},
 		)
 		return frappe.get_doc("Attendance", attendance) if attendance else None
@@ -189,6 +269,8 @@ class AttendanceRequest(Document):
 		new_status = self.get_attendance_status(attendance_date)
 		attendance_doc = self.get_attendance_doc(attendance_date)
 		if attendance_doc and attendance_doc.status == new_status:
+			if new_status == "Half Day" and self.half_day and attendance_doc.half_day_status == "Absent":
+				return False
 			return True
 		return False
 
@@ -210,7 +292,6 @@ class AttendanceRequest(Document):
 
 		for day in range(request_days):
 			attendance_date = add_days(self.from_date, day)
-
 			if not self.include_holidays and is_holiday(self.employee, attendance_date):
 				attendance_warnings.append({"date": attendance_date, "reason": "Holiday", "action": "Skip"})
 			elif self.has_leave_record(attendance_date):

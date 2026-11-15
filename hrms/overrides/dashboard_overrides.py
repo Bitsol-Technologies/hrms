@@ -10,7 +10,12 @@ def get_dashboard_for_employee(data):
 			{"label": _("Attendance"), "items": ["Attendance", "Attendance Request", "Employee Checkin"]},
 			{
 				"label": _("Leave"),
-				"items": ["Leave Application", "Leave Allocation", "Leave Policy Assignment"],
+				"items": [
+					"Leave Application",
+					"Leave Allocation",
+					"Leave Policy Assignment",
+					"Holiday List Assignment",
+				],
 			},
 			{
 				"label": _("Lifecycle"),
@@ -43,6 +48,9 @@ def get_dashboard_for_employee(data):
 					"Employee Incentive",
 					"Retention Bonus",
 					"Bank Account",
+					"Overtime Slip",
+					"Arrear",
+					"Payroll Correction",
 				],
 			},
 			{
@@ -50,10 +58,23 @@ def get_dashboard_for_employee(data):
 				"items": ["Training Event", "Training Result", "Training Feedback", "Employee Skill Map"],
 			},
 			{"label": _("Evaluation"), "items": ["Appraisal"]},
+			{"label": _("Contract"), "items": ["Contract"]},
 		]
 	)
 
-	data["non_standard_fieldnames"].update({"Bank Account": "party", "Employee Grievance": "raised_by"})
+	data["non_standard_fieldnames"].update(
+		{
+			"Bank Account": "party",
+			"Contract": "party_name",
+			"Employee Grievance": "raised_by",
+			"Holiday List Assignment": "assigned_to",
+		}
+	)
+
+	if not data.get("dynamic_links"):
+		data["dynamic_links"] = {}
+	data["dynamic_links"]["assigned_to"] = ["Employee", "applicable_for"]
+	data["dynamic_links"]["party_name"] = ["Employee", "party_type"]
 	data.update(
 		{
 			"heatmap": True,
@@ -68,7 +89,7 @@ def get_dashboard_for_employee(data):
 def get_dashboard_for_holiday_list(data):
 	data["non_standard_fieldnames"].update({"Leave Period": "optional_holiday_list"})
 
-	data["transactions"].append({"items": ["Leave Period", "Shift Type"]})
+	data["transactions"].append({"items": ["Leave Period", "Shift Type", "Holiday List Assignment"]})
 
 	return data
 

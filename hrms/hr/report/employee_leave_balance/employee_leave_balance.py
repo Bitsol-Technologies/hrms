@@ -58,7 +58,7 @@ def get_columns() -> list[dict]:
 			"width": 150,
 		},
 		{
-			"label": _("New Leave(s) Allocated"),
+			"label": _("Leave(s) Allocated"),
 			"fieldtype": "float",
 			"fieldname": "leaves_allocated",
 			"width": 200,
@@ -87,48 +87,82 @@ def get_columns() -> list[dict]:
 def get_data(filters: Filters) -> list:
 	leave_types = get_leave_types()
 	active_employees = get_employees(filters)
+	pairs_with_entries = get_pairs_with_ledger_entries(active_employees, filters.to_date)
 
 	precision = cint(frappe.db.get_single_value("System Settings", "float_precision"))
 	consolidate_leave_types = len(active_employees) > 1 and filters.consolidate_leave_types
-	row = None
 
 	data = []
 
 	for leave_type in leave_types:
-		if consolidate_leave_types:
-			data.append({"leave_type": leave_type})
-		else:
-			row = frappe._dict({"leave_type": leave_type})
+		rows = []
 
 		for employee in active_employees:
-			if consolidate_leave_types:
-				row = frappe._dict()
-			else:
-				row = frappe._dict({"leave_type": leave_type})
+			if (employee.name, leave_type) not in pairs_with_entries:
+				continue
 
-			row.employee = employee.name
-			row.employee_name = employee.employee_name
+			balance = get_balance_details(employee.name, leave_type, filters, precision)
+			if not any(balance.values()):
+				continue
 
-			leaves_taken = (
-				get_leaves_for_period(employee.name, leave_type, filters.from_date, filters.to_date) * -1
-			)
+			row = frappe._dict() if consolidate_leave_types else frappe._dict({"leave_type": leave_type})
+			row.update(employee=employee.name, employee_name=employee.employee_name, **balance, indent=1)
+			rows.append(row)
 
-			new_allocation, expired_leaves, carry_forwarded_leaves = get_allocated_and_expired_leaves(
-				filters.from_date, filters.to_date, employee.name, leave_type
-			)
-			opening = get_opening_balance(employee.name, leave_type, filters, carry_forwarded_leaves)
-
-			row.leaves_allocated = flt(new_allocation, precision)
-			row.leaves_expired = flt(expired_leaves, precision)
-			row.opening_balance = flt(opening, precision)
-			row.leaves_taken = flt(leaves_taken, precision)
-
-			closing = new_allocation + opening - (row.leaves_expired + leaves_taken)
-			row.closing_balance = flt(closing, precision)
-			row.indent = 1
-			data.append(row)
+		if consolidate_leave_types and rows:
+			data.append({"leave_type": leave_type})
+		data.extend(rows)
 
 	return data
+
+
+def get_balance_details(employee: str, leave_type: str, filters: Filters, precision: int) -> dict:
+	leaves_taken = get_leaves_for_period(employee, leave_type, filters.from_date, filters.to_date) * -1
+
+	new_allocation, expired_leaves, carry_forwarded_leaves = get_allocated_and_expired_leaves(
+		filters.from_date, filters.to_date, employee, leave_type
+	)
+	on_allocation_boundary = is_opening_balance_on_allocation_boundary(employee, leave_type, filters)
+	opening = get_opening_balance(
+		employee, leave_type, filters, carry_forwarded_leaves, on_allocation_boundary
+	)
+	allocated_leaves = new_allocation + carry_forwarded_leaves
+	if on_allocation_boundary:
+		allocated_leaves -= carry_forwarded_leaves
+
+	leaves_expired = flt(expired_leaves, precision)
+	closing = allocated_leaves + opening - (leaves_expired + leaves_taken)
+
+	return {
+		"leaves_allocated": flt(allocated_leaves, precision),
+		"leaves_expired": leaves_expired,
+		"opening_balance": flt(opening, precision),
+		"leaves_taken": flt(leaves_taken, precision),
+		"closing_balance": flt(closing, precision),
+	}
+
+
+def get_pairs_with_ledger_entries(employees: list[dict], to_date: str) -> set[tuple[str, str]]:
+	"""(employee, leave type) pairs with ledger entries up to `to_date`.
+
+	Every balance lookup reads the ledger, so pairs outside this set always balance to zero
+	and are left out of the report without running the per-pair queries.
+	"""
+	if not employees:
+		return set()
+
+	Ledger = frappe.qb.DocType("Leave Ledger Entry")
+	pairs = (
+		frappe.qb.from_(Ledger)
+		.select(Ledger.employee, Ledger.leave_type)
+		.distinct()
+		.where(
+			(Ledger.docstatus == 1)
+			& (Ledger.from_date <= to_date)
+			& (Ledger.employee.isin([employee.name for employee in employees]))
+		)
+	).run()
+	return {tuple(pair) for pair in pairs}
 
 
 def get_leave_types() -> list[str]:
@@ -137,40 +171,37 @@ def get_leave_types() -> list[str]:
 
 
 def get_employees(filters: Filters) -> list[dict]:
-	Employee = frappe.qb.DocType("Employee")
-	query = frappe.qb.from_(Employee).select(
-		Employee.name,
-		Employee.employee_name,
-		Employee.department,
-	)
+	conditions = {}
 
 	for field in ["company", "department"]:
 		if filters.get(field):
-			query = query.where(getattr(Employee, field) == filters.get(field))
+			conditions[field] = filters.get(field)
 
 	if filters.get("employee"):
-		query = query.where(Employee.name == filters.get("employee"))
+		conditions["name"] = filters.get("employee")
 
 	if filters.get("employee_status"):
-		query = query.where(Employee.status == filters.get("employee_status"))
+		conditions["status"] = filters.get("employee_status")
 
-	return query.run(as_dict=True)
+	return frappe.get_list(
+		"Employee",
+		filters=conditions,
+		fields=["name", "employee_name", "department"],
+	)
 
 
 def get_opening_balance(
-	employee: str, leave_type: str, filters: Filters, carry_forwarded_leaves: float
+	employee: str,
+	leave_type: str,
+	filters: Filters,
+	carry_forwarded_leaves: float,
+	on_allocation_boundary: bool,
 ) -> float:
 	# allocation boundary condition
 	# opening balance is the closing leave balance 1 day before the filter start date
 	opening_balance_date = add_days(filters.from_date, -1)
-	allocation = get_previous_allocation(filters.from_date, leave_type, employee)
 
-	if (
-		allocation
-		and allocation.get("to_date")
-		and opening_balance_date
-		and getdate(allocation.get("to_date")) == getdate(opening_balance_date)
-	):
+	if on_allocation_boundary:
 		# if opening balance date is same as the previous allocation's expiry
 		# then opening balance should only consider carry forwarded leaves
 		opening_balance = carry_forwarded_leaves
@@ -179,6 +210,18 @@ def get_opening_balance(
 		opening_balance = get_leave_balance_on(employee, leave_type, opening_balance_date)
 
 	return opening_balance
+
+
+def is_opening_balance_on_allocation_boundary(employee: str, leave_type: str, filters: Filters) -> bool:
+	opening_balance_date = add_days(filters.from_date, -1)
+	allocation = get_previous_allocation(filters.from_date, leave_type, employee)
+
+	return bool(
+		allocation
+		and allocation.get("to_date")
+		and opening_balance_date
+		and getdate(allocation.get("to_date")) == getdate(opening_balance_date)
+	)
 
 
 def get_allocated_and_expired_leaves(
@@ -202,10 +245,10 @@ def get_allocated_leaves(from_date, to_date, employee, leave_type):
 		.select(Sum(ledger.leaves))
 		.where(
 			(ledger.docstatus == 1)
-			& (ledger.transaction_type == "Leave Allocation")
+			& (ledger.transaction_type.isin(["Leave Allocation", "Leave Adjustment"]))
 			& (ledger.employee == employee)
 			& (ledger.leave_type == leave_type)
-			& ((ledger.from_date[from_date:to_date]) | (ledger.to_date[from_date:to_date]))
+			& (ledger.from_date[from_date:to_date])
 			& ((ledger.is_expired == 0) & (ledger.is_carry_forward == 0))
 		)
 	).run()[0][0]
@@ -239,7 +282,7 @@ def get_cf_leaves(from_date, to_date, employee, leave_type):
 			& (ledger.transaction_type == "Leave Allocation")
 			& (ledger.employee == employee)
 			& (ledger.leave_type == leave_type)
-			& ((ledger.from_date[from_date:to_date]) | (ledger.to_date[from_date:to_date]))
+			& (ledger.from_date[from_date:to_date])
 			& ((ledger.is_expired == 0) & (ledger.is_carry_forward == 1))
 		)
 	).run()[0][0]

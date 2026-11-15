@@ -28,9 +28,14 @@ from hrms.hr.doctype.employee_checkin.employee_checkin import (
 	calculate_working_hours,
 	mark_attendance_and_link_log,
 )
-from hrms.hr.doctype.shift_assignment.shift_assignment import get_employee_shift, get_shift_details
+from hrms.hr.doctype.shift_assignment.shift_assignment import (
+	get_employee_shift,
+	get_shift_details,
+	get_shifts_for_date,
+	get_valid_shifts_for_time,
+)
 from hrms.utils import get_date_range
-from hrms.utils.holiday_list import get_holiday_dates_between
+from hrms.utils.holiday_list import get_holiday_dates_between, get_holiday_dates_between_range
 
 EMPLOYEE_CHUNK_SIZE = 50
 
@@ -107,8 +112,9 @@ class ShiftType(Document):
 			{"shift": self.name, "attendance": ["is", "not set"], "skip_auto_attendance": 0, "offshift": 0},
 		)
 
-	@frappe.whitelist()
-	def process_auto_attendance(self, is_manually_triggered=False):
+	@frappe.whitelist(methods=["POST"])
+	def process_auto_attendance(self, is_manually_triggered: int | bool = False) -> None | str:
+		self.check_permission("write")
 		if self.has_incorrect_shift_config():
 			return
 
@@ -117,14 +123,18 @@ class ShiftType(Document):
 			if len(logs) > 1000 or frappe.flags.test_bg_job:
 				job_id = "process_auto_attendance_" + self.name
 				job = frappe.enqueue(self._process, logs=logs, timeout=1200, job_id=job_id, deduplicate=True)
-				return f"Attendance marking has been queued. It may take a few minutes. You can monitor the job status {get_link_to_form('RQ Job',job.id,label='here')}"
+				return _(
+					"Attendance marking has been queued. It may take a few minutes. You can monitor the job status {0}"
+				).format(get_link_to_form("RQ Job", job.id, label=_("here")))
 			else:
 				try:
 					self._process(logs)
-					return "Attendance has been marked as per employee check-ins."
+					return _("Attendance has been marked as per employee check-ins.")
 				except Exception as e:
 					error_log = frappe.log_error(e)
-					return f"An error occured during marking attendance. Refer the full error log {get_link_to_form('Error Log',error_log.name,label='here')}"
+					return _(
+						"An error occurred during marking attendance. Refer the full error log {0}"
+					).format(get_link_to_form("Error Log", error_log.name, label=_("here")))
 		else:
 			self._process(logs)
 
@@ -178,7 +188,8 @@ class ShiftType(Document):
 			)
 
 		# commit after processing checkin logs to avoid losing progress
-		frappe.db.commit()  # nosemgrep
+		if not frappe.in_test:
+			frappe.db.commit()  # nosemgrep
 
 		assigned_employees = self.get_assigned_employees(self.process_attendance_after, True)
 		# mark absent in batches & commit to avoid losing progress since this tries to process remaining attendance
@@ -188,7 +199,8 @@ class ShiftType(Document):
 				self.mark_absent_for_dates_with_no_attendance(employee)
 				self.mark_absent_for_half_day_dates(employee)
 
-			frappe.db.commit()  # nosemgrep
+			if not frappe.in_test:
+				frappe.db.commit()  # nosemgrep
 
 	def is_half_holiday(self, employee, attendance_date):
 		holiday_list = self.get_holiday_list(employee, attendance_date)
@@ -296,8 +308,12 @@ class ShiftType(Document):
 		date_range = get_date_range(start_date, end_date)
 
 		# skip marking absent on holidays
-		holiday_list = self.get_holiday_list(employee)
-		holiday_dates = get_holiday_dates_between(holiday_list, start_date, end_date)
+		if self.holiday_list:
+			holiday_dates = get_holiday_dates_between(self.holiday_list, start_date, end_date)
+		else:
+			holiday_dates = get_holiday_dates_between_range(
+				employee, start_date, end_date, raise_exception_for_holiday_list=False
+			)
 		# skip dates with attendance
 		marked_attendance_dates = self.get_marked_attendance_dates_between(employee, start_date, end_date)
 
@@ -325,7 +341,12 @@ class ShiftType(Document):
 
 		# check if shift is found for 1 day before the last sync of checkin
 		# absentees are auto-marked 1 day after the shift to wait for any manual attendance records
-		prev_shift = get_employee_shift(employee, last_shift_time - timedelta(days=1), True, "reverse")
+		ref_time = last_shift_time - timedelta(days=1)
+		prev_shift = get_employee_shift(employee, ref_time, True, "reverse")
+		if prev_shift and prev_shift.shift_type.name != self.name:
+			# an overlapping assignment may have won resolution; prefer this shift if also scheduled then
+			prev_shift = self.get_scheduled_shift_at(employee, ref_time) or prev_shift
+
 		if prev_shift and prev_shift.shift_type.name == self.name:
 			end_date = (
 				min(prev_shift.start_datetime.date(), relieving_date)
@@ -336,6 +357,11 @@ class ShiftType(Document):
 			# no shift found
 			return None, None
 		return start_date, end_date
+
+	def get_scheduled_shift_at(self, employee: str, for_timestamp: datetime) -> dict | None:
+		"""Return this shift's details if it is validly scheduled for the employee at the given timestamp"""
+		shifts = get_valid_shifts_for_time(get_shifts_for_date(employee, for_timestamp), for_timestamp)
+		return next((shift for shift in shifts if shift.shift_type.name == self.name), None)
 
 	def get_marked_attendance_dates_between(self, employee: str, start_date: str, end_date: str) -> list[str]:
 		Attendance = frappe.qb.DocType("Attendance")
@@ -392,14 +418,24 @@ class ShiftType(Document):
 	def mark_absent_for_half_day_dates(self, employee):
 		half_day_attendances = frappe.get_all(
 			"Attendance",
-			filters={"employee": employee, "status": "Half Day", "modify_half_day_status": 1},
+			filters={
+				"employee": employee,
+				"status": "Half Day",
+				"modify_half_day_status": 1,
+				"attendance_date": ["<=", getdate(self.last_sync_of_checkin)],
+			},
 			fields=["name", "attendance_date"],
 		)
 		start_time = get_time(self.start_time)
+		last_sync_of_checkin = get_datetime(self.last_sync_of_checkin)
 		for attendance in half_day_attendances:
 			timestamp = datetime.combine(attendance.attendance_date, start_time)
 			shift_details = get_employee_shift(employee, timestamp, True)
-			if shift_details and shift_details.shift_type.name == self.name:
+			if (
+				shift_details
+				and shift_details.shift_type.name == self.name
+				and shift_details.actual_end < last_sync_of_checkin
+			):
 				frappe.db.set_value(
 					"Attendance",
 					attendance.name,

@@ -1,6 +1,7 @@
 import requests
 
 import frappe
+from frappe.core.doctype.installed_applications.installed_applications import get_setup_wizard_completed_apps
 
 STANDARD_ROLES = [
 	# standard roles
@@ -27,7 +28,7 @@ STANDARD_ROLES = [
 ]
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_add_on_details(plan: str) -> dict[str, int]:
 	"""
 	Returns the number of employees to be billed under add-ons for SAAS subscription
@@ -63,10 +64,19 @@ def get_active_employees() -> int:
 	return frappe.db.count("Employee", {"status": "Active"})
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(methods=["POST"])
 def subscription_updated(app: str, plan: str):
 	if app in ["hrms", "erpnext"] and plan:
 		update_erpnext_access()
+
+
+def set_hrms_as_default_app(*args):
+	if not frappe.get_system_settings("default_app"):
+		frappe.db.set_single_value("System Settings", "default_app", "hrms")
+
+
+def is_new_hr_site() -> bool:
+	return bool(frappe.conf.sk_hrms) and "frappe" not in get_setup_wizard_completed_apps()
 
 
 def update_erpnext_access(user_input: dict | None):
@@ -173,8 +183,8 @@ def hide_erpnext() -> bool:
 
 
 def has_subscription(secret_key) -> bool:
-	url = f"https://frappecloud.com/api/method/press.api.developer.marketplace.get_subscription_status?secret_key={secret_key}"
-	response = requests.request(method="POST", url=url, timeout=5)
+	url = "https://frappecloud.com/api/method/press.api.developer.marketplace.get_subscription_status"
+	response = requests.post(url, data={"secret_key": secret_key}, timeout=5)
 
 	status = response.json().get("message")
 	return True if status == "Active" else False

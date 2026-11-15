@@ -10,6 +10,7 @@
 				:id="props.id"
 				:showAttachmentView="true"
 				@validateForm="validateForm"
+				@formReloaded="onFormReloaded"
 			/>
 		</ion-content>
 	</ion-page>
@@ -18,7 +19,7 @@
 <script setup>
 import { IonPage, IonContent } from "@ionic/vue"
 import { createResource } from "frappe-ui"
-import { ref, watch, inject } from "vue"
+import { ref, watch, inject, nextTick } from "vue"
 
 import FormView from "@/components/FormView.vue"
 
@@ -38,6 +39,23 @@ const currEmployee = ref(sessionEmployee.data.name)
 
 // reactive object to store form data
 const leaveApplication = ref({})
+
+// For existing docs, watchers fire during initial data population from the DB.
+// This flag prevents setLeaveBalance() from overwriting the stored
+// "leave balance before application" value during that initial load.
+const isFormInitialized = ref(!props.id)
+if (props.id) {
+	watch(
+		() => leaveApplication.value.name,
+		(name) => {
+			if (name && !isFormInitialized.value) {
+				nextTick(() => {
+					isFormInitialized.value = true
+				})
+			}
+		}
+	)
+}
 
 // get form fields
 const formFields = createResource({
@@ -108,11 +126,17 @@ watch(
 	() => setTotalLeaveDays()
 )
 
+// the to date this form filled in, as opposed to one the user picked or the saved doc has
+let autoFilledToDate = null
+
 watch(
 	() => leaveApplication.value.from_date,
 	(from_date) => {
-		if (!leaveApplication.value.to_date) {
-			leaveApplication.value.to_date = from_date
+		// a date input emits partial years while typing (0002, 0020, ...), so keep an
+		// auto filled to date in step with from date until the user sets it themselves
+		const to_date = leaveApplication.value.to_date
+		if (!to_date || to_date === autoFilledToDate) {
+			leaveApplication.value.to_date = autoFilledToDate = from_date
 		}
 
 		// fetch leave types for the selected date
@@ -207,6 +231,7 @@ function setTotalLeaveDays() {
 
 function setLeaveBalance() {
 	if (!areValuesSet()) return
+	if (!isFormInitialized.value) return
 
 	const leaveBalance = createResource({
 		url: "hrms.hr.doctype.leave_application.leave_application.get_leave_balance_on",
@@ -282,6 +307,11 @@ function areValuesSet() {
 		leaveApplication.value.to_date &&
 		leaveApplication.value.leave_type
 	)
+}
+
+function onFormReloaded() {
+	// the reloaded to date is the saved one, so a later from date change leaves it alone
+	autoFilledToDate = null
 }
 
 function validateForm() {

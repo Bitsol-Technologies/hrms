@@ -7,7 +7,7 @@ import os
 import frappe
 from frappe import _
 from frappe.core.doctype.user_permission.test_user_permission import create_user
-from frappe.tests import IntegrationTestCase
+from frappe.permissions import add_user_permission
 from frappe.utils import add_days, get_datetime, get_time, getdate, nowtime
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
@@ -21,9 +21,10 @@ from hrms.hr.doctype.interview.interview import (
 )
 from hrms.hr.doctype.job_applicant.job_applicant import get_interview_details
 from hrms.tests.test_utils import create_job_applicant, get_email_by_subject
+from hrms.tests.utils import HRMSTestSuite
 
 
-class TestInterview(IntegrationTestCase):
+class TestInterview(HRMSTestSuite):
 	def test_validations_for_designation(self):
 		job_applicant = create_job_applicant()
 		interview = create_interview_and_dependencies(
@@ -41,7 +42,8 @@ class TestInterview(IntegrationTestCase):
 		)
 
 		previous_scheduled_date = interview.scheduled_on
-		frappe.db.sql("DELETE FROM `tabEmail Queue`")
+		email_queue = frappe.qb.DocType("Email Queue")
+		frappe.qb.from_(email_queue).delete().run()
 
 		interview.reschedule_interview(
 			add_days(getdate(previous_scheduled_date), 2), from_time="11:00:00", to_time="12:00:00"
@@ -56,6 +58,21 @@ class TestInterview(IntegrationTestCase):
 			"Email Queue", filters={"message": ("like", "%Your Interview session is rescheduled from%")}
 		)
 		self.assertIsNotNone(notification)
+
+	def test_rescheduling_to_same_timings_sends_no_notification(self):
+		interview = create_interview_and_dependencies(
+			create_job_applicant().name,
+			scheduled_on=add_days(getdate(), 2),
+			from_time="10:00:00",
+			to_time="11:00:00",
+		)
+		interview.reload()
+		self.addCleanup(frappe.set_user, "Administrator")
+		frappe.set_user("test_interviewer1@example.com")
+
+		interview.reschedule_interview(interview.scheduled_on, from_time="10:00:00", to_time="11:00:00")
+
+		self.assertFalse(frappe.db.exists("Email Queue", {"reference_name": interview.name}))
 
 	def test_notification_for_scheduling(self):
 		from hrms.hr.doctype.interview.interview import send_interview_reminder
@@ -111,7 +128,7 @@ class TestInterview(IntegrationTestCase):
 			details.get("interviews").get(interview.name),
 			{
 				"name": interview.name,
-				"interview_round": interview.interview_round,
+				"interview_type": interview.interview_type,
 				"scheduled_on": interview.scheduled_on,
 				"average_rating": interview.average_rating * 5,
 				"status": "Pending",
@@ -187,6 +204,19 @@ class TestInterview(IntegrationTestCase):
 
 		self.assertEqual(feedback, expected_data)
 
+	def test_get_feedback_requires_interview_access(self):
+		interview = create_interview_and_dependencies(create_job_applicant().name)
+		other_applicant = create_job_applicant(
+			applicant_name="_Test Other Applicant", email_id="test_other_applicant@example.com"
+		)
+		interviewer = "test_restricted_interviewer@example.com"
+		create_user(interviewer, "Interviewer")
+		add_user_permission("Job Applicant", other_applicant.name, interviewer)
+
+		frappe.set_user(interviewer)
+		self.assertRaises(frappe.PermissionError, get_feedback, interview.name)
+		frappe.set_user("Administrator")
+
 	def test_job_applicant_status_update_on_interview_submit(self):
 		job_applicant = create_job_applicant()
 		create_interview_and_dependencies(job_applicant.name, status="Cleared")
@@ -205,8 +235,17 @@ class TestInterview(IntegrationTestCase):
 
 		self.assertEqual(interview.status, "Cancelled")
 
-	def tearDown(self):
-		frappe.db.rollback()
+	def test_update_job_applicant_status_invalid_input(self):
+		# Ensure passing empty or non-existent job applicant string does not raise AttributeError
+		try:
+			update_job_applicant_status("Accepted", "")
+		except AttributeError:
+			self.fail("update_job_applicant_status raised AttributeError on empty job applicant string")
+
+		try:
+			update_job_applicant_status("Accepted", "NON_EXISTENT_JOB_APPLICANT")
+		except AttributeError:
+			self.fail("update_job_applicant_status raised AttributeError on invalid job applicant ID")
 
 
 def create_interview_and_dependencies(
@@ -224,7 +263,7 @@ def create_interview_and_dependencies(
 	create_user("test_interviewer1@example.com", "Interviewer")
 	create_user("test_interviewer2@example.com", "Interviewer")
 
-	interview_round = create_interview_round(
+	interview_type = create_interview_type(
 		"Technical Round",
 		["Python", "JS"],
 		["test_interviewer1@example.com", "test_interviewer2@example.com"],
@@ -233,7 +272,7 @@ def create_interview_and_dependencies(
 	)
 
 	interview = frappe.new_doc("Interview")
-	interview.interview_round = interview_round.name
+	interview.interview_type = interview_type.name
 	interview.job_applicant = job_applicant
 	interview.scheduled_on = scheduled_on or getdate()
 	interview.from_time = from_time or nowtime()
@@ -250,26 +289,25 @@ def create_interview_and_dependencies(
 	return interview
 
 
-def create_interview_round(name, skill_set, interviewers=None, designation=None, save=True):
+def create_interview_type(name, skill_set, interviewers=None, designation=None, save=True):
 	create_skill_set(skill_set)
-	interview_round = frappe.new_doc("Interview Round")
-	interview_round.round_name = name
-	interview_round.interview_type = create_interview_type()
+	interview_type = frappe.new_doc("Interview Type")
+	interview_type.interview_type_name = name
+	interview_type.description = "_Test_Description"
 	# average rating = 4
-	interview_round.expected_average_rating = 0.8
+	interview_type.expected_average_rating = 0.8
 	if designation:
-		interview_round.designation = designation
+		interview_type.designation = designation
 
 	for skill in skill_set:
-		interview_round.append("expected_skill_set", {"skill": skill})
+		interview_type.append("expected_skill_set", {"skill": skill})
 
 	for interviewer in interviewers:
-		interview_round.append("interviewers", {"user": interviewer})
+		interview_type.append("interviewers", {"user": interviewer})
 
 	if save:
-		interview_round.save()
-
-	return interview_round
+		interview_type.save()
+	return interview_type
 
 
 def create_skill_set(skill_set):
@@ -278,18 +316,6 @@ def create_skill_set(skill_set):
 			doc = frappe.new_doc("Skill")
 			doc.skill_name = skill
 			doc.save()
-
-
-def create_interview_type(name="test_interview_type"):
-	if frappe.db.exists("Interview Type", name):
-		return frappe.get_doc("Interview Type", name).name
-	else:
-		doc = frappe.new_doc("Interview Type")
-		doc.name = name
-		doc.description = "_Test_Description"
-		doc.save()
-
-		return doc.name
 
 
 def setup_reminder_settings():

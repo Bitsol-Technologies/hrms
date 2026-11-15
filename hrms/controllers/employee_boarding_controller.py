@@ -27,7 +27,7 @@ class EmployeeBoardingController(Document):
 		# create the project for the given employee onboarding
 		project_name = _(self.doctype) + " : "
 		if self.doctype == "Employee Onboarding":
-			project_name += self.job_applicant
+			project_name += self.job_applicant or self.employee_name
 		else:
 			project_name += self.employee
 
@@ -75,20 +75,20 @@ class EmployeeBoardingController(Document):
 
 			users = [activity.user] if activity.user else []
 			if activity.role:
-				user_list = frappe.db.sql_list(
-					"""
-					SELECT
-						DISTINCT(has_role.parent)
-					FROM
-						`tabHas Role` has_role
-							LEFT JOIN `tabUser` user
-								ON has_role.parent = user.name
-					WHERE
-						has_role.parenttype = 'User'
-							AND user.enabled = 1
-							AND has_role.role = %s
-				""",
-					activity.role,
+				has_role = frappe.qb.DocType("Has Role")
+				user = frappe.qb.DocType("User")
+				user_list = (
+					frappe.qb.from_(has_role)
+					.left_join(user)
+					.on(has_role.parent == user.name)
+					.select(has_role.parent)
+					.distinct()
+					.where(
+						(has_role.parenttype == "User")
+						& (user.enabled == 1)
+						& (has_role.role == activity.role)
+					)
+					.run(pluck="parent")
 				)
 				users = unique(users + user_list)
 
@@ -101,10 +101,10 @@ class EmployeeBoardingController(Document):
 
 	def get_holiday_list(self):
 		if self.doctype == "Employee Separation":
-			return get_holiday_list_for_employee(self.employee)
+			return get_holiday_list_for_employee(self.employee, as_on=self.boarding_begins_on)
 		else:
 			if self.employee:
-				return get_holiday_list_for_employee(self.employee)
+				return get_holiday_list_for_employee(self.employee, as_on=self.boarding_begins_on)
 			else:
 				if not self.holiday_list:
 					frappe.throw(_("Please set the Holiday List."), frappe.MandatoryError)
@@ -156,7 +156,8 @@ class EmployeeBoardingController(Document):
 
 
 @frappe.whitelist()
-def get_onboarding_details(parent, parenttype):
+def get_onboarding_details(parent: str, parenttype: str):
+	frappe.has_permission(parenttype, "read", parent, throw=True)
 	return frappe.get_all(
 		"Employee Boarding Activity",
 		fields=[

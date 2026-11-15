@@ -5,6 +5,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.query_builder import Order
 from frappe.utils import get_link_to_form
 
 
@@ -14,7 +15,7 @@ class DepartmentApprover(Document):
 
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
-def get_approvers(doctype, txt, searchfield, start, page_len, filters):
+def get_approvers(doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict):
 	if not filters.get("employee"):
 		frappe.throw(_("Please select Employee first."))
 
@@ -24,9 +25,18 @@ def get_approvers(doctype, txt, searchfield, start, page_len, filters):
 	employee = frappe.get_value(
 		"Employee",
 		filters.get("employee"),
-		["employee_name", "department", "leave_approver", "expense_approver", "shift_request_approver"],
+		[
+			"employee_name",
+			"department",
+			"user_id",
+			"leave_approver",
+			"expense_approver",
+			"shift_request_approver",
+		],
 		as_dict=True,
 	)
+	if not employee:
+		frappe.throw(_("Employee {0} not found").format(filters.get("employee")), frappe.DoesNotExistError)
 
 	employee_department = filters.get("department") or employee.department
 	if employee_department:
@@ -34,29 +44,40 @@ def get_approvers(doctype, txt, searchfield, start, page_len, filters):
 			"Department", {"name": employee_department}, ["lft", "rgt"], as_dict=True
 		)
 	if department_details:
-		department_list = frappe.db.sql(
-			"""select name from `tabDepartment` where lft <= %s
-			and rgt >= %s
-			and disabled=0
-			order by lft desc""",
-			(department_details.lft, department_details.rgt),
-			as_list=True,
-		)
+		Department = frappe.qb.DocType("Department")
+		department_list = (
+			frappe.qb.from_(Department)
+			.select(Department.name)
+			.where(
+				(Department.lft <= department_details.lft)
+				& (Department.rgt >= department_details.rgt)
+				& (Department.disabled == 0)
+			)
+			.orderby(Department.lft, order=Order.desc)
+		).run(as_list=True)
 
 	if filters.get("doctype") == "Leave Application" and employee.leave_approver:
-		approvers.append(
-			frappe.db.get_value("User", employee.leave_approver, ["name", "first_name", "last_name"])
+		approver = frappe.db.get_value(
+			"User", {"name": employee.leave_approver, "enabled": 1}, ["name", "first_name", "last_name"]
 		)
+		if approver:
+			approvers.append(approver)
 
 	if filters.get("doctype") == "Expense Claim" and employee.expense_approver:
-		approvers.append(
-			frappe.db.get_value("User", employee.expense_approver, ["name", "first_name", "last_name"])
+		approver = frappe.db.get_value(
+			"User", {"name": employee.expense_approver, "enabled": 1}, ["name", "first_name", "last_name"]
 		)
+		if approver:
+			approvers.append(approver)
 
 	if filters.get("doctype") == "Shift Request" and employee.shift_request_approver:
-		approvers.append(
-			frappe.db.get_value("User", employee.shift_request_approver, ["name", "first_name", "last_name"])
+		approver = frappe.db.get_value(
+			"User",
+			{"name": employee.shift_request_approver, "enabled": 1},
+			["name", "first_name", "last_name"],
 		)
+		if approver:
+			approvers.append(approver)
 
 	if filters.get("doctype") == "Leave Application":
 		parentfield = "leave_approvers"
@@ -68,17 +89,24 @@ def get_approvers(doctype, txt, searchfield, start, page_len, filters):
 		parentfield = "shift_request_approver"
 		field_name = "Shift Request Approver"
 	if department_list:
+		User = frappe.qb.DocType("User")
+		DeptApprover = frappe.qb.DocType("Department Approver")
+
 		for d in department_list:
-			approvers += frappe.db.sql(
-				"""select user.name, user.first_name, user.last_name from
-				tabUser user, `tabDepartment Approver` approver where
-				approver.parent = %s
-				and user.name like %s
-				and approver.parentfield = %s
-				and approver.approver=user.name""",
-				(d, "%" + txt + "%", parentfield),
-				as_list=True,
-			)
+			approvers += (
+				frappe.qb.from_(DeptApprover)
+				.join(User)
+				.on(DeptApprover.approver == User.name)
+				.select(User.name, User.first_name, User.last_name)
+				.where(
+					(DeptApprover.parent == d[0])
+					& (DeptApprover.parentfield == parentfield)
+					& (User.name.like(f"%{txt}%"))
+					& (User.enabled == 1)
+				)
+			).run(as_list=True)
+
+	validate_approver_access(filters.get("employee"), employee, approvers)
 
 	if len(approvers) == 0:
 		error_msg = _("Please set {0} for the Employee: {1}").format(
@@ -92,3 +120,15 @@ def get_approvers(doctype, txt, searchfield, start, page_len, filters):
 		frappe.throw(error_msg, title=_("{0} Missing").format(_(field_name)))
 
 	return set(tuple(approver) for approver in approvers)
+
+
+def validate_approver_access(employee_id: str, employee: dict, approvers: list) -> None:
+	user = frappe.session.user
+	if user == employee.user_id or frappe.has_permission("Employee", "read", employee_id):
+		return
+
+	employee_approvers = {employee.leave_approver, employee.expense_approver, employee.shift_request_approver}
+	if user in employee_approvers or user in {approver[0] for approver in approvers}:
+		return
+
+	frappe.throw(_("Not permitted"), frappe.PermissionError)

@@ -9,7 +9,7 @@ from frappe import _, qb
 from frappe.model.document import Document
 from frappe.query_builder import Criterion
 from frappe.query_builder.custom import ConstantColumn
-from frappe.query_builder.functions import Count
+from frappe.query_builder.functions import Count, Sum
 from frappe.utils import (
 	add_days,
 	add_months,
@@ -33,10 +33,7 @@ from frappe.utils import (
 
 import erpnext
 from erpnext import get_company_currency
-from erpnext.setup.doctype.employee.employee import (
-	InactiveEmployeeStatusError,
-	get_holiday_list_for_employee,
-)
+from erpnext.setup.doctype.employee.employee import InactiveEmployeeStatusError
 
 from hrms.hr.doctype.leave_policy_assignment.leave_policy_assignment import (
 	calculate_pro_rated_leaves,
@@ -163,7 +160,7 @@ def update_to_date_in_work_history(employee, cancel):
 
 
 @frappe.whitelist()
-def get_employee_field_property(employee, fieldname):
+def get_employee_field_property(employee: str, fieldname: str):
 	if not (employee and fieldname):
 		return
 
@@ -202,28 +199,18 @@ def validate_dates(doc, from_date, to_date, restrict_future_dates=True):
 
 
 def validate_overlap(doc, from_date, to_date, company=None):
-	query = """
-		select name
-		from `tab{0}`
-		where name != %(name)s
-		"""
-	query += get_doc_condition(doc.doctype)
-
 	if not doc.name:
 		# hack! if name is null, it could cause problems with !=
 		doc.name = "New " + doc.doctype
 
-	overlap_doc = frappe.db.sql(
-		query.format(doc.doctype),
-		{
-			"employee": doc.get("employee"),
-			"from_date": from_date,
-			"to_date": to_date,
-			"name": doc.name,
-			"company": company,
-		},
-		as_dict=1,
-	)
+	table = frappe.qb.DocType(doc.doctype)
+	query = frappe.qb.from_(table).select(table.name).where(table.name != doc.name)
+
+	condition = get_doc_condition(doc.doctype, table, doc.get("employee"), from_date, to_date, company)
+	if condition is not None:
+		query = query.where(condition)
+
+	overlap_doc = query.run(as_dict=True)
 
 	if overlap_doc:
 		if doc.get("employee"):
@@ -233,16 +220,23 @@ def validate_overlap(doc, from_date, to_date, company=None):
 		throw_overlap_error(doc, exists_for, overlap_doc[0].name, from_date, to_date)
 
 
-def get_doc_condition(doctype):
+def get_doc_condition(doctype, table, employee, from_date, to_date, company):
 	if doctype == "Compensatory Leave Request":
-		return "and employee = %(employee)s and docstatus < 2 \
-		and (work_from_date between %(from_date)s and %(to_date)s \
-		or work_end_date between %(from_date)s and %(to_date)s \
-		or (work_from_date < %(from_date)s and work_end_date > %(to_date)s))"
+		return (
+			(table.employee == employee)
+			& (table.docstatus < 2)
+			& (
+				table.work_from_date.between(from_date, to_date)
+				| table.work_end_date.between(from_date, to_date)
+				| ((table.work_from_date < from_date) & (table.work_end_date > to_date))
+			)
+		)
 	elif doctype == "Leave Period":
-		return "and company = %(company)s and (from_date between %(from_date)s and %(to_date)s \
-			or to_date between %(from_date)s and %(to_date)s \
-			or (from_date < %(from_date)s and to_date > %(to_date)s))"
+		return (table.company == company) & (
+			table.from_date.between(from_date, to_date)
+			| table.to_date.between(from_date, to_date)
+			| ((table.from_date < from_date) & (table.to_date > to_date))
+		)
 
 
 def throw_overlap_error(doc, exists_for, overlap_doc, from_date, to_date):
@@ -309,19 +303,21 @@ def get_total_exemption_amount(declarations):
 
 
 @frappe.whitelist()
-def get_leave_period(from_date, to_date, company):
-	leave_period = frappe.db.sql(
-		"""
-		select name, from_date, to_date
-		from `tabLeave Period`
-		where company=%(company)s and is_active=1
-			and (from_date between %(from_date)s and %(to_date)s
-				or to_date between %(from_date)s and %(to_date)s
-				or (from_date < %(from_date)s and to_date > %(to_date)s))
-	""",
-		{"from_date": from_date, "to_date": to_date, "company": company},
-		as_dict=1,
-	)
+def get_leave_period(from_date: str | datetime.date, to_date: str | datetime.date, company: str):
+	LeavePeriod = frappe.qb.DocType("Leave Period")
+	leave_period = (
+		frappe.qb.from_(LeavePeriod)
+		.select(LeavePeriod.name, LeavePeriod.from_date, LeavePeriod.to_date)
+		.where(
+			(LeavePeriod.company == company)
+			& (LeavePeriod.is_active == 1)
+			& (
+				LeavePeriod.from_date[from_date:to_date]
+				| LeavePeriod.to_date[from_date:to_date]
+				| ((LeavePeriod.from_date < from_date) & (LeavePeriod.to_date > to_date))
+			)
+		)
+	).run(as_dict=1)
 
 	if leave_period:
 		return leave_period
@@ -370,7 +366,11 @@ def allocate_earned_leaves():
 			else:
 				date_of_joining = frappe.db.get_value("Employee", allocation.employee, "date_of_joining")
 				allocation_date = get_expected_allocation_date_for_period(
-					e_leave_type.earned_leave_frequency, e_leave_type.allocate_on_day, today, date_of_joining
+					e_leave_type.earned_leave_frequency,
+					e_leave_type.allocate_on_day,
+					today,
+					date_of_joining,
+					effective_from=None,
 				)
 				annual_allocation = get_annual_allocation_from_policy(allocation, e_leave_type)
 				earned_leaves = calculate_upcoming_earned_leave(allocation, e_leave_type, date_of_joining)
@@ -415,39 +415,54 @@ def calculate_upcoming_earned_leave(allocation, e_leave_type, date_of_joining):
 	return earned_leave
 
 
-def update_previous_leave_allocation(allocation, annual_allocation, e_leave_type, earned_leaves, today):
+def update_previous_leave_allocation(
+	allocation, annual_allocation, e_leave_type, earned_leaves, today, allocated_via="Scheduler"
+):
 	allocation = frappe.get_doc("Leave Allocation", allocation.name)
-	annual_allocation = flt(annual_allocation, allocation.precision("total_leaves_allocated"))
+	precision = allocation.precision("total_leaves_allocated")
+	annual_allocation = flt(annual_allocation, precision)
+	earned_leaves = flt(earned_leaves, precision)
 
-	new_allocation = flt(allocation.total_leaves_allocated) + flt(earned_leaves)
-	new_allocation_without_cf = flt(
-		flt(allocation.get_existing_leave_count()) + flt(earned_leaves),
-		allocation.precision("total_leaves_allocated"),
-	)
-
-	if new_allocation > e_leave_type.max_leaves_allowed and e_leave_type.max_leaves_allowed > 0:
-		frappe.throw(
-			_(
-				"Allocation was skipped due to maximum leave allocation limit set in leave type. Please increase the limit and retry failed allocation."
-			),
-			OverAllocationError,
+	if earned_leaves > 0 and e_leave_type.earned_leave_frequency != "Yearly":
+		leaves_left_in_annual_quota = max(
+			flt(annual_allocation - allocation.get_existing_leave_count(), precision), 0
 		)
-	if (
-		# annual allocation as per policy should not be exceeded except for yearly leaves
-		new_allocation_without_cf > annual_allocation and e_leave_type.earned_leave_frequency != "Yearly"
-	):
-		frappe.throw(
-			_("Allocation was skipped due to exceeding annual allocation set in leave policy"),
-			OverAllocationError,
-		)
+		earned_leaves = min(earned_leaves, leaves_left_in_annual_quota)
 
-	allocation.db_set("total_leaves_allocated", new_allocation, update_modified=False)
-	create_additional_leave_ledger_entry(allocation, earned_leaves, today)
+	if earned_leaves > 0 and e_leave_type.max_leaves_allowed:
+		leaves_quota = flt(e_leave_type.max_leaves_allowed - allocation.total_leaves_allocated, precision)
+		if leaves_quota <= 0:
+			frappe.throw(
+				_(
+					"Allocation was skipped due to maximum leave allocation limit set in leave type. Please increase the limit and retry failed allocation."
+				),
+				OverAllocationError,
+			)
+		else:
+			if leaves_quota < earned_leaves:
+				earned_leaves = leaves_quota
+
+	if earned_leaves:
+		allocation.db_set(
+			"total_leaves_allocated",
+			earned_leaves + allocation.total_leaves_allocated,
+			update_modified=False,
+		)
+		create_additional_leave_ledger_entry(allocation, earned_leaves, today)
+
 	earned_leave_schedule = qb.DocType("Earned Leave Schedule")
-	qb.update(earned_leave_schedule).where(
-		(earned_leave_schedule.parent == allocation.name) & (earned_leave_schedule.allocation_date == today)
-	).set(earned_leave_schedule.is_allocated, 1).set(earned_leave_schedule.attempted, 1).set(
-		earned_leave_schedule.allocated_via, "Scheduler"
+	(
+		qb.update(earned_leave_schedule)
+		.where(
+			(earned_leave_schedule.parent == allocation.name)
+			& (earned_leave_schedule.allocation_date == today)
+		)
+		.set(earned_leave_schedule.is_allocated, 1)
+		.set(earned_leave_schedule.attempted, 1)
+		.set(earned_leave_schedule.allocated_via, allocated_via)
+		.set(earned_leave_schedule.number_of_leaves, earned_leaves)
+		.set(earned_leave_schedule.failed, 0)
+		.set(earned_leave_schedule.failure_reason, "")
 	).run()
 
 
@@ -489,13 +504,13 @@ def send_email_for_failed_allocations(failed_allocations):
 
 @frappe.whitelist()
 def get_monthly_earned_leave(
-	date_of_joining,
-	annual_leaves,
-	frequency,
-	rounding,
-	period_start_date=None,
-	period_end_date=None,
-	pro_rated=True,
+	date_of_joining: str | datetime.date,
+	annual_leaves: float,
+	frequency: str,
+	rounding: str | float,
+	period_start_date: str | datetime.date | None = None,
+	period_end_date: str | datetime.date | None = None,
+	pro_rated: bool = True,
 ):
 	earned_leaves = 0.0
 	divide_by_frequency = {"Yearly": 1, "Half-Yearly": 2, "Quarterly": 4, "Monthly": 12}
@@ -516,11 +531,14 @@ def get_monthly_earned_leave(
 	return earned_leaves
 
 
-def get_sub_period_start_and_end(date, frequency):
+def get_sub_period_start_and_end(date, frequency, effective_from=None):
+	if frequency == "Half-Yearly" and effective_from:
+		return get_half_year_periods(date, effective_from)
+
 	return {
 		"Monthly": (get_first_day(date), get_last_day(date)),
 		"Quarterly": (get_quarter_start(date), get_quarter_ending(date)),
-		"Half-Yearly": (get_semester_start(date), get_semester_end(date)),
+		"Half-Yearly": (get_semester_start(date), get_semester_end(date)),  # fallback only
 		"Yearly": (get_year_start(date), get_year_ending(date)),
 	}.get(frequency)
 
@@ -595,11 +613,26 @@ def create_additional_leave_ledger_entry(allocation, leaves, date):
 	allocation.create_leave_ledger_entry()
 
 
-def get_expected_allocation_date_for_period(frequency, allocate_on_day, date, date_of_joining=None):
+def get_expected_allocation_date_for_period(
+	frequency, allocate_on_day, date, date_of_joining=None, effective_from=None
+):
 	try:
 		doj = date_of_joining.replace(month=date.month, year=date.year)
-	except ValueError:
+	except (ValueError, AttributeError):
 		doj = datetime.date(date.year, date.month, calendar.monthrange(date.year, date.month)[1])
+
+	if frequency == "Half-Yearly" and effective_from:
+		period_start, period_end = get_half_year_periods(date, effective_from)
+		half_yearly_dates = {
+			"First Day": period_start,
+			"Last Day": period_end,
+		}
+	else:
+		half_yearly_dates = {
+			"First Day": get_semester_start(date),
+			"Last Day": get_semester_end(date),
+		}
+
 	return {
 		"Monthly": {
 			"First Day": get_first_day(date),
@@ -610,7 +643,7 @@ def get_expected_allocation_date_for_period(frequency, allocate_on_day, date, da
 			"First Day": get_quarter_start(date),
 			"Last Day": get_quarter_ending(date),
 		},
-		"Half-Yearly": {"First Day": get_semester_start(date), "Last Day": get_semester_end(date)},
+		"Half-Yearly": half_yearly_dates,
 		"Yearly": {"First Day": get_year_start(date), "Last Day": get_year_ending(date)},
 	}[frequency][allocate_on_day]
 
@@ -644,31 +677,34 @@ def get_salary_assignments(employee, payroll_period):
 
 def get_sal_slip_total_benefit_given(employee, payroll_period, component=False):
 	total_given_benefit_amount = 0
-	query = """
-	select sum(sd.amount) as total_amount
-	from `tabSalary Slip` ss, `tabSalary Detail` sd
-	where ss.employee=%(employee)s
-	and ss.docstatus = 1 and ss.name = sd.parent
-	and sd.is_flexible_benefit = 1 and sd.parentfield = "earnings"
-	and sd.parenttype = "Salary Slip"
-	and (ss.start_date between %(start_date)s and %(end_date)s
-		or ss.end_date between %(start_date)s and %(end_date)s
-		or (ss.start_date < %(start_date)s and ss.end_date > %(end_date)s))
-	"""
+	start_date = payroll_period.start_date
+	end_date = payroll_period.end_date
+
+	ss = frappe.qb.DocType("Salary Slip")
+	sd = frappe.qb.DocType("Salary Detail")
+	query = (
+		frappe.qb.from_(ss)
+		.from_(sd)
+		.select(Sum(sd.amount).as_("total_amount"))
+		.where(
+			(ss.employee == employee)
+			& (ss.docstatus == 1)
+			& (ss.name == sd.parent)
+			& (sd.is_flexible_benefit == 1)
+			& (sd.parentfield == "earnings")
+			& (sd.parenttype == "Salary Slip")
+			& (
+				ss.start_date.between(start_date, end_date)
+				| ss.end_date.between(start_date, end_date)
+				| ((ss.start_date < start_date) & (ss.end_date > end_date))
+			)
+		)
+	)
 
 	if component:
-		query += "and sd.salary_component = %(component)s"
+		query = query.where(sd.salary_component == component)
 
-	sum_of_given_benefit = frappe.db.sql(
-		query,
-		{
-			"employee": employee,
-			"start_date": payroll_period.start_date,
-			"end_date": payroll_period.end_date,
-			"component": component,
-		},
-		as_dict=True,
-	)
+	sum_of_given_benefit = query.run(as_dict=True)
 
 	if sum_of_given_benefit and flt(sum_of_given_benefit[0].total_amount) > 0:
 		total_given_benefit_amount = sum_of_given_benefit[0].total_amount
@@ -694,21 +730,12 @@ def get_holidays_for_employee(employee, start_date, end_date, raise_exception=Tr
 
 	return: list of dicts with `holiday_date` and `description`
 	"""
-	holiday_list = get_holiday_list_for_employee(employee, raise_exception=raise_exception)
+	from hrms.utils.holiday_list import get_holiday_list_ranges_for_employee, get_holidays_in_ranges
 
-	if not holiday_list:
-		return []
-
-	filters = {"parent": holiday_list, "holiday_date": ("between", [start_date, end_date])}
-
-	if only_non_weekly:
-		filters["weekly_off"] = False
-
-	holidays = frappe.get_all(
-		"Holiday", fields=["description", "holiday_date"], filters=filters, order_by="holiday_date"
+	holiday_list_ranges = get_holiday_list_ranges_for_employee(
+		employee, start_date, end_date, raise_exception=raise_exception
 	)
-
-	return holidays
+	return get_holidays_in_ranges(holiday_list_ranges, skip_weekly_offs=only_non_weekly)
 
 
 @erpnext.allow_regional
@@ -734,28 +761,22 @@ def calculate_tax_with_marginal_relief(tax_slab, tax_amount, annual_taxable_earn
 
 def get_previous_claimed_amount(employee, payroll_period, non_pro_rata=False, component=False):
 	total_claimed_amount = 0
-	query = """
-	select sum(claimed_amount) as 'total_amount'
-	from `tabEmployee Benefit Claim`
-	where employee=%(employee)s
-	and docstatus = 1
-	and (claim_date between %(start_date)s and %(end_date)s)
-	"""
-	if non_pro_rata:
-		query += "and pay_against_benefit_claim = 1"
-	if component:
-		query += "and earning_component = %(component)s"
-
-	sum_of_claimed_amount = frappe.db.sql(
-		query,
-		{
-			"employee": employee,
-			"start_date": payroll_period.start_date,
-			"end_date": payroll_period.end_date,
-			"component": component,
-		},
-		as_dict=True,
+	ebc = frappe.qb.DocType("Employee Benefit Claim")
+	query = (
+		frappe.qb.from_(ebc)
+		.select(Sum(ebc.claimed_amount).as_("total_amount"))
+		.where(
+			(ebc.employee == employee)
+			& (ebc.docstatus == 1)
+			& (ebc.claim_date.between(payroll_period.start_date, payroll_period.end_date))
+		)
 	)
+	if non_pro_rata:
+		query = query.where(ebc.pay_against_benefit_claim == 1)
+	if component:
+		query = query.where(ebc.earning_component == component)
+
+	sum_of_claimed_amount = query.run(as_dict=True)
 	if sum_of_claimed_amount and flt(sum_of_claimed_amount[0].total_amount) > 0:
 		total_claimed_amount = sum_of_claimed_amount[0].total_amount
 	return total_claimed_amount
@@ -965,7 +986,7 @@ def notify_bulk_action_status(doctype: str, failure: list, success: list) -> Non
 
 
 @frappe.whitelist()
-def set_geolocation_from_coordinates(doc):
+def set_geolocation_from_coordinates(doc: Document):
 	if not frappe.db.get_single_value("HR Settings", "allow_geolocation_tracking"):
 		return
 
@@ -1040,3 +1061,25 @@ def get_semester_end(date):
 		return get_year_ending(date)
 	else:
 		return add_months(get_year_ending(date), -6)
+
+
+def get_complete_month_count(date, effective_from):
+	"""Returns count of complete months from effective_from to date, accounting for day-of-month."""
+	month_count = (date.year - effective_from.year) * 12 + (date.month - effective_from.month)
+	# ignore a smaller day caused by a shorter month (e.g. 31st -> 28th)
+	if date.day < effective_from.day and date != get_last_day(date):
+		month_count -= 1
+	return month_count
+
+
+def get_half_year_periods(date, effective_from):
+	"""Return (start, end) of the half-year period containing date, relative to effective_from."""
+	effective_from = getdate(effective_from)
+	date = getdate(date)
+
+	half_years_passed = get_complete_month_count(date, effective_from) // 6
+
+	half_year_start = add_months(effective_from, half_years_passed * 6)
+	half_year_end = add_days(add_months(half_year_start, 6), -1)
+
+	return half_year_start, half_year_end

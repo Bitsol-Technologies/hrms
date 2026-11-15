@@ -60,7 +60,7 @@ class SalaryWithholding(Document):
 			self.status = status
 
 	@frappe.whitelist()
-	def set_withholding_cycles_and_to_date(self):
+	def set_withholding_cycles_and_to_date(self) -> None:
 		self.to_date = self.get_to_date()
 
 		cycle_from_date = cycle_to_date = getdate(self.from_date)
@@ -103,6 +103,7 @@ class SalaryWithholding(Document):
 
 @frappe.whitelist()
 def get_payroll_frequency(employee: str, posting_date: str | date) -> str | None:
+	frappe.has_permission("Employee", "read", employee, throw=True)
 	salary_structure = frappe.db.get_value(
 		"Salary Structure Assignment",
 		{

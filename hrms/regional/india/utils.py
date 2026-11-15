@@ -5,7 +5,7 @@ from frappe import _
 from frappe.utils import add_days, date_diff, flt, get_link_to_form, month_diff
 
 from hrms.hr.utils import get_salary_assignments
-from hrms.payroll.doctype.salary_structure.salary_structure import make_salary_slip
+from hrms.payroll.doctype.salary_structure.salary_structure import _make_salary_slip
 
 
 def calculate_annual_eligible_hra_exemption(doc):
@@ -104,7 +104,7 @@ def get_end_date_for_assignment(assignment_dates, idx, payroll_period):
 
 
 def get_component_amt_from_salary_slip(employee, salary_structure, basic_component, hra_component, from_date):
-	salary_slip = make_salary_slip(
+	salary_slip = _make_salary_slip(
 		salary_structure,
 		employee=employee,
 		for_preview=1,
@@ -164,21 +164,20 @@ def validate_house_rent_dates(doc):
 	if date_diff(doc.rented_to_date, doc.rented_from_date) < 14:
 		frappe.throw(_("House rented dates should be atleast 15 days apart"))
 
-	proofs = frappe.db.sql(
-		"""
-		select name
-		from `tabEmployee Tax Exemption Proof Submission`
-		where
-			docstatus=1 and employee=%(employee)s and payroll_period=%(payroll_period)s
-			and (rented_from_date between %(from_date)s and %(to_date)s or rented_to_date between %(from_date)s and %(to_date)s)
-	""",
-		{
-			"employee": doc.employee,
-			"payroll_period": doc.payroll_period,
-			"from_date": doc.rented_from_date,
-			"to_date": doc.rented_to_date,
-		},
-	)
+	proof = frappe.qb.DocType("Employee Tax Exemption Proof Submission")
+	proofs = (
+		frappe.qb.from_(proof)
+		.select(proof.name)
+		.where(
+			(proof.docstatus == 1)
+			& (proof.employee == doc.employee)
+			& (proof.payroll_period == doc.payroll_period)
+			& (
+				proof.rented_from_date.between(doc.rented_from_date, doc.rented_to_date)
+				| proof.rented_to_date.between(doc.rented_from_date, doc.rented_to_date)
+			)
+		)
+	).run()
 
 	if proofs:
 		frappe.throw(_("House rent paid days overlapping with {0}").format(proofs[0][0]))

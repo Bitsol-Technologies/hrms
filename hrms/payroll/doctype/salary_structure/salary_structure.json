@@ -5,6 +5,7 @@
  "autoname": "Prompt",
  "creation": "2013-03-07 18:50:29",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/salary-structure",
  "document_type": "Document",
  "engine": "InnoDB",
  "field_order": [
@@ -27,6 +28,7 @@
   "column_break_besp",
   "earnings",
   "deductions",
+  "employer_contributions",
   "employee_benefits",
   "conditions_and_formula_variable_and_example",
   "net_pay_detail",
@@ -122,6 +124,7 @@
    "fieldname": "hour_rate",
    "fieldtype": "Currency",
    "label": "Hour Rate",
+   "non_negative": 1,
    "options": "currency"
   },
   {
@@ -129,12 +132,14 @@
    "fieldname": "leave_encashment_amount_per_day",
    "fieldtype": "Currency",
    "label": "Leave Encashment Amount Per Day",
+   "non_negative": 1,
    "options": "currency"
   },
   {
    "fieldname": "max_benefits",
    "fieldtype": "Currency",
    "label": "Max Benefits (Amount)",
+   "non_negative": 1,
    "options": "currency"
   },
   {
@@ -160,6 +165,12 @@
    "label": "Deductions",
    "oldfieldname": "deduction_details",
    "oldfieldtype": "Table",
+   "options": "Salary Detail"
+  },
+  {
+   "fieldname": "employer_contributions",
+   "fieldtype": "Table",
+   "label": "Employer Contributions",
    "options": "Salary Detail"
   },
   {
@@ -251,11 +262,11 @@
    "fieldtype": "Column Break"
   }
  ],
- "icon": "fa fa-file-text",
+ "icon": "layout-list",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-09-15 15:56:52.814944",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Structure",

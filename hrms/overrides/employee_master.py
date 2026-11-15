@@ -4,6 +4,8 @@
 import frappe
 from frappe import _
 from frappe.model.naming import set_name_by_naming_series
+from frappe.query_builder import Interval
+from frappe.query_builder.functions import Count, CurDate, UnixTimestamp
 from frappe.utils import add_years, cint, get_link_to_form, getdate
 
 from erpnext.setup.doctype.employee.employee import Employee
@@ -28,17 +30,18 @@ class EmployeeMaster(Employee):
 
 def validate_onboarding_process(doc, method=None):
 	"""Validates Employee Creation for linked Employee Onboarding"""
-	if not doc.job_applicant:
+	job_applicant = doc.get("job_applicant")
+	job_offer = doc.get("job_offer")
+
+	filters = {"docstatus": 1, "boarding_status": ("!=", "Completed")}
+	if job_offer:
+		filters["job_offer"] = job_offer
+	elif job_applicant:
+		filters["job_applicant"] = job_applicant
+	else:
 		return
 
-	employee_onboarding = frappe.get_all(
-		"Employee Onboarding",
-		filters={
-			"job_applicant": doc.job_applicant,
-			"docstatus": 1,
-			"boarding_status": ("!=", "Completed"),
-		},
-	)
+	employee_onboarding = frappe.get_all("Employee Onboarding", filters=filters)
 	if employee_onboarding:
 		onboarding = frappe.get_doc("Employee Onboarding", employee_onboarding[0].name)
 		onboarding.validate_employee_creation()
@@ -53,36 +56,59 @@ def publish_update(doc, method=None):
 
 def update_job_applicant_and_offer(doc, method=None):
 	"""Updates Job Applicant and Job Offer status as 'Accepted' and submits them"""
-	if not doc.job_applicant:
+	job_applicant = doc.get("job_applicant")
+	job_offer = get_linked_job_offer(doc, job_applicant)
+
+	if job_offer and job_offer.status in ("Rejected", "Cancelled"):
+		frappe.msgprint(
+			_(
+				"Linked Job Offer {0} was {1}. Please update the Job Offer status if this hire was intended."
+			).format(get_link_to_form("Job Offer", job_offer.name), frappe.bold(_(job_offer.status))),
+			title=_("Job Offer Status Not Updated"),
+			indicator="orange",
+		)
 		return
 
-	applicant_status_before_change = frappe.db.get_value("Job Applicant", doc.job_applicant, "status")
-	if applicant_status_before_change != "Accepted":
-		frappe.db.set_value("Job Applicant", doc.job_applicant, "status", "Accepted")
-		frappe.msgprint(
-			_("Updated the status of linked Job Applicant {0} to {1}").format(
-				get_link_to_form("Job Applicant", doc.job_applicant), frappe.bold(_("Accepted"))
+	if job_applicant:
+		applicant_status_before_change = frappe.db.get_value("Job Applicant", job_applicant, "status")
+		if applicant_status_before_change != "Accepted":
+			frappe.db.set_value("Job Applicant", job_applicant, "status", "Accepted")
+			frappe.msgprint(
+				_("Updated the status of linked Job Applicant {0} to {1}").format(
+					get_link_to_form("Job Applicant", job_applicant), frappe.bold(_("Accepted"))
+				)
 			)
-		)
-	offer_status_before_change = frappe.db.get_value(
-		"Job Offer", {"job_applicant": doc.job_applicant, "docstatus": ["!=", 2]}, "status"
+
+	if not job_offer or job_offer.status == "Accepted":
+		return
+
+	job_offer.status = "Accepted"
+	job_offer.flags.ignore_mandatory = True
+	job_offer.flags.ignore_permissions = True
+	job_offer.save()
+
+	msg = _("Updated the status of Job Offer {0} for {1} to {2}").format(
+		get_link_to_form("Job Offer", job_offer.name),
+		frappe.bold(job_offer.applicant_name),
+		frappe.bold(_("Accepted")),
 	)
-	if offer_status_before_change and offer_status_before_change != "Accepted":
-		job_offer = frappe.get_last_doc("Job Offer", filters={"job_applicant": doc.job_applicant})
-		job_offer.status = "Accepted"
-		job_offer.flags.ignore_mandatory = True
-		job_offer.flags.ignore_permissions = True
-		job_offer.save()
+	if job_offer.docstatus == 0:
+		msg += "<br>" + _("You may add additional details, if any, and submit the offer.")
 
-		msg = _("Updated the status of Job Offer {0} for the linked Job Applicant {1} to {2}").format(
-			get_link_to_form("Job Offer", job_offer.name),
-			frappe.bold(doc.job_applicant),
-			frappe.bold(_("Accepted")),
+	frappe.msgprint(msg)
+
+
+def get_linked_job_offer(doc, job_applicant: str | None):
+	offer_name = doc.get("job_offer")
+	if not offer_name and job_applicant:
+		offer_name = frappe.db.get_value(
+			"Job Offer", {"job_applicant": job_applicant, "docstatus": ["!=", 2]}, "name"
 		)
-		if job_offer.docstatus == 0:
-			msg += "<br>" + _("You may add additional details, if any, and submit the offer.")
+	if not offer_name:
+		return None
 
-		frappe.msgprint(msg)
+	job_offer = frappe.get_doc("Job Offer", offer_name)
+	return None if job_offer.docstatus == 2 else job_offer
 
 
 def update_approver_role(doc, method=None):
@@ -118,25 +144,38 @@ def update_employee_transfer(doc, method=None):
 
 
 @frappe.whitelist()
-def get_timeline_data(doctype, name):
+def get_timeline_data(doctype: str, name: str) -> dict:
 	"""Return timeline for attendance"""
 	from frappe.desk.notifications import get_open_count
 
+	if doctype != "Employee":
+		frappe.throw(_("Timeline data is only available for Employee"))
+
 	out = {}
+
+	frappe.has_permission("Employee", "read", name, throw=True)
+	frappe.has_permission("Attendance", "read", throw=True)
 
 	open_count = get_open_count(doctype, name)
 	out["count"] = open_count["count"]
 
+	Attendance = frappe.qb.DocType("Attendance")
+
 	timeline_data = dict(
-		frappe.db.sql(
-			"""
-			select unix_timestamp(attendance_date), count(*)
-			from `tabAttendance` where employee=%s
-			and attendance_date > date_sub(curdate(), interval 1 year)
-			and status in ('Present', 'Half Day')
-			group by attendance_date""",
-			name,
-		)
+		(
+			frappe.qb.from_(Attendance)
+			.select(
+				UnixTimestamp(Attendance.attendance_date),
+				Count("*"),
+			)
+			.where(
+				(Attendance.employee == name)
+				& (Attendance.docstatus == 1)
+				& (Attendance.attendance_date > (CurDate() - Interval(years=1)))
+				& (Attendance.status.isin(["Present", "Half Day"]))
+			)
+			.groupby(Attendance.attendance_date)
+		).run()
 	)
 
 	out["timeline_data"] = timeline_data
@@ -144,7 +183,23 @@ def get_timeline_data(doctype, name):
 
 
 @frappe.whitelist()
-def get_retirement_date(date_of_birth=None):
+def get_assignable_masters(company: str) -> dict[str, bool]:
+	"""Return whether a submitted master exists for each gated Employee assignment action"""
+	masters = {
+		"Leave Policy": {"docstatus": 1},
+		"Salary Structure": {"docstatus": 1, "is_active": "Yes", "company": company},
+		"Shift Schedule": {"docstatus": 1},
+	}
+
+	return {
+		doctype: frappe.has_permission(doctype, "select")
+		and bool(frappe.get_list(doctype, filters=filters, limit=1, pluck="name"))
+		for doctype, filters in masters.items()
+	}
+
+
+@frappe.whitelist()
+def get_retirement_date(date_of_birth: str | None = None):
 	if date_of_birth:
 		try:
 			retirement_age = cint(frappe.db.get_single_value("HR Settings", "retirement_age") or 60)

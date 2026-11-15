@@ -4,6 +4,7 @@
  "autoname": "HR-SSA-.YY.-.MM.-.#####",
  "creation": "2018-04-13 16:38:41.769237",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/salary-structure-assignment",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
@@ -22,8 +23,10 @@
   "currency",
   "section_break_7",
   "base",
+  "annual_gross_earning",
   "column_break_9",
   "variable",
+  "ctc",
   "amended_from",
   "column_break_kjvm",
   "leave_encashment_amount_per_day",
@@ -114,7 +117,22 @@
    "fieldname": "base",
    "fieldtype": "Currency",
    "label": "Base",
+   "non_negative": 1,
    "options": "currency"
+  },
+  {
+   "fieldname": "annual_gross_earning",
+   "fieldtype": "Currency",
+   "label": "Annual Gross Earning",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "ctc",
+   "fieldtype": "Currency",
+   "label": "Total Cost To Company (CTC)",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_9",
@@ -124,6 +142,7 @@
    "fieldname": "variable",
    "fieldtype": "Currency",
    "label": "Variable",
+   "non_negative": 1,
    "options": "currency"
   },
   {
@@ -191,6 +210,7 @@
    "fieldname": "tax_deducted_till_date",
    "fieldtype": "Currency",
    "label": "Tax Deducted Till Date",
+   "non_negative": 1,
    "options": "currency"
   },
   {
@@ -202,6 +222,7 @@
    "fieldname": "taxable_earnings_till_date",
    "fieldtype": "Currency",
    "label": "Taxable Earnings Till Date",
+   "non_negative": 1,
    "options": "currency"
   },
   {
@@ -228,7 +249,9 @@
    "fetch_if_empty": 1,
    "fieldname": "max_benefits",
    "fieldtype": "Currency",
-   "label": "Maximum Benefit Amount"
+   "label": "Maximum Benefit Amount",
+   "non_negative": 1,
+   "options": "currency"
   },
   {
    "fieldname": "column_break_kjvm",
@@ -240,12 +263,14 @@
    "fieldname": "leave_encashment_amount_per_day",
    "fieldtype": "Currency",
    "label": "Leave Encashment Amount Per Day",
+   "non_negative": 1,
    "options": "currency"
   }
  ],
+ "icon": "user-check",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-01-09 11:52:07.106968",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Payroll",
  "name": "Salary Structure Assignment",
@@ -290,6 +315,11 @@
    "share": 1,
    "submit": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Employee",
+   "select": 1
   }
  ],
  "row_format": "Dynamic",

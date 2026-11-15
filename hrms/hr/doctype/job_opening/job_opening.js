@@ -11,7 +11,24 @@ frappe.ui.form.on("Job Opening", {
 			};
 		});
 	},
+	refresh: function (frm) {
+		frm.trigger("add_status_toggle_button");
+	},
+	add_status_toggle_button: function (frm) {
+		if (frm.is_new()) return;
+
+		const is_open = frm.doc.status === "Open";
+		const label = is_open ? __("Close Job Opening") : __("Reopen Job Opening");
+
+		frm.add_custom_button(label, () => {
+			frm.set_value("status", is_open ? "Closed" : "Open");
+			frm.save();
+		});
+	},
 	designation: function (frm) {
+		if (frm.doc.designation) {
+			frm.set_value("job_title", frm.doc.designation);
+		}
 		if (frm.doc.designation && frm.doc.company) {
 			frappe.call({
 				method: "hrms.hr.doctype.staffing_plan.staffing_plan.get_active_staffing_plan_details",
@@ -42,19 +59,64 @@ frappe.ui.form.on("Job Opening", {
 	company: function (frm) {
 		frm.set_value("designation", "");
 	},
+	status: function (frm) {
+		frm.close_warning_confirmed = false;
+	},
+	before_save: function (frm) {
+		frm.trigger("confirm_close_if_needed");
+	},
+	after_save: function (frm) {
+		frm.close_warning_confirmed = false;
+	},
+	confirm_close_if_needed: function (frm) {
+		if (frm.is_new() || frm.close_warning_confirmed || frm.doc.status !== "Closed") {
+			return;
+		}
+
+		frappe.validated = false;
+
+		frm.call("get_close_warning").then((r) => {
+			if (!r.message) {
+				frm.close_warning_confirmed = true;
+				frm.save();
+				return;
+			}
+
+			frappe.confirm(r.message, () => {
+				frm.close_warning_confirmed = true;
+				frm.save();
+			});
+		});
+	},
 
 	job_opening_template: function (frm) {
 		if (!frm.doc.job_opening_template) return;
-
 		frappe.db.get_doc("Job Opening Template", frm.doc.job_opening_template).then((doc) => {
 			frm.set_value({
+				designation: doc.designation,
 				department: doc.department,
 				employment_type: doc.employment_type,
 				location: doc.location,
 				description: doc.description,
+				currency: doc.currency,
+				upper_range: doc.upper_range,
+				lower_range: doc.lower_range,
+				salary_per: doc.salary_per,
+				publish_salary_range: doc.publish_salary_range,
 			});
 
 			frm.refresh_fields();
 		});
+	},
+	publish: function (frm) {
+		if (frm.doc.publish && !frm.doc.route) {
+			frm.trigger("set_route");
+		}
+	},
+	set_route: function (frm) {
+		if (frm.doc.publish && !frm.doc.route) {
+			route = `jobs/${frappe.scrub(frm.doc.company)}/${frappe.scrub(frm.doc.job_title)}`;
+			frm.set_value("route", route);
+		}
 	},
 });

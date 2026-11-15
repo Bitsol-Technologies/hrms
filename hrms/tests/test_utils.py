@@ -58,15 +58,12 @@ def get_first_sunday(holiday_list="Salary Slip Test Holiday List", for_date=None
 		month_start_date = date
 
 	month_end_date = get_last_day(date)
-	first_sunday = frappe.db.sql(
-		"""
-		select holiday_date from `tabHoliday`
-		where parent = %s
-			and holiday_date between %s and %s
-		order by holiday_date
-	""",
-		(holiday_list, month_start_date, month_end_date),
-	)[0][0]
+	first_sunday = frappe.get_value(
+		"Holiday",
+		{"parent": holiday_list, "holiday_date": ("between", (month_start_date, month_end_date))},
+		"holiday_date",
+		order_by="holiday_date asc",
+	)
 
 	return first_sunday
 
@@ -75,6 +72,20 @@ def get_first_day_for_prev_month():
 	prev_month = add_months(getdate(), -1)
 	prev_month_first = prev_month.replace(day=1)
 	return prev_month_first
+
+
+def get_non_holiday_date(employee: str, for_date=None):
+	"""Return the most recent date on or before `for_date` that is a working day for
+	the employee. Tests that mark attendance/leave for "today" use this so they do not
+	fail when the suite happens to run on a weekend or holiday."""
+	from frappe.utils import add_days
+
+	from erpnext.setup.doctype.employee.employee import is_holiday
+
+	date = getdate(for_date)
+	while is_holiday(employee=employee, date=date):
+		date = add_days(date, -1)
+	return date
 
 
 def add_date_to_holiday_list(date: str, holiday_list: str, is_half_day: bool = 0) -> None:
@@ -89,7 +100,12 @@ def add_date_to_holiday_list(date: str, holiday_list: str, is_half_day: bool = 0
 	holiday_list.save()
 
 
-def create_company(name: str = "_Test Company", is_group: 0 | 1 = 0, parent_company: str | None = None):
+def create_company(
+	name: str = "_Test Company",
+	is_group: 0 | 1 = 0,
+	parent_company: str | None = None,
+	abbr: str | None = None,
+):
 	if frappe.db.exists("Company", name):
 		return frappe.get_doc("Company", name)
 
@@ -97,6 +113,7 @@ def create_company(name: str = "_Test Company", is_group: 0 | 1 = 0, parent_comp
 		{
 			"doctype": "Company",
 			"company_name": name,
+			"abbr": abbr,
 			"default_currency": "INR",
 			"country": "India",
 			"is_group": is_group,

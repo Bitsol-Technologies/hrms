@@ -59,7 +59,7 @@ class EmployeeBenefitApplication(Document):
 			)
 
 	@frappe.whitelist()
-	def set_benefit_components_and_currency(self):
+	def set_benefit_components_and_currency(self) -> None:
 		# get employee benefits from salary structure assignment and populate the employee benefits table
 		self.employee_benefits = []
 		salary_structure_assignment = get_salary_structure_assignment(self.employee, self.date)

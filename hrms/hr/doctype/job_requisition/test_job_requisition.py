@@ -2,16 +2,17 @@
 # See license.txt
 
 import frappe
-from frappe.tests import IntegrationTestCase
+from frappe.utils import add_days, getdate
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
 from hrms.hr.doctype.job_opening.test_job_opening import get_job_opening
 from hrms.hr.doctype.job_requisition.job_requisition import make_job_opening
+from hrms.tests.utils import HRMSTestSuite
 
 
-class TestJobRequisition(IntegrationTestCase):
+class TestJobRequisition(HRMSTestSuite):
 	def setUp(self):
 		self.employee = make_employee("test_employee_1@company.com", company="_Test Company")
 
@@ -35,6 +36,30 @@ class TestJobRequisition(IntegrationTestCase):
 		job_opening.reload()
 
 		self.assertEqual(job_opening.job_requisition, job_req.name)
+
+	def test_completion_date_after_editing_closed_job_opening(self):
+		today = getdate()
+		closed_on = add_days(today, -10)
+		job_req = make_job_requisition(requested_by=self.employee, posting_date=add_days(today, -30))
+		job_opening = make_job_opening(job_req.name)
+		job_opening.status = "Closed"
+		job_opening.posted_on = job_req.posting_date
+		job_opening.save()
+
+		for closing_date, completed_on, expected_date, expected_days in (
+			(closed_on, add_days(today, -5), closed_on, 20),
+			(None, closed_on, closed_on, 20),
+			(None, None, today, 30),
+		):
+			with self.subTest(closed_on=closing_date, completed_on=completed_on):
+				job_req.db_set("completed_on", completed_on)
+				job_opening.closed_on = closing_date
+				job_opening.description = "Updated description"
+				job_opening.save()
+				job_req.reload()
+
+				self.assertEqual(job_req.completed_on, expected_date)
+				self.assertEqual(job_req.time_to_fill, expected_days * 86400)
 
 	def test_time_to_fill(self):
 		job_req = make_job_requisition(requested_by=self.employee)

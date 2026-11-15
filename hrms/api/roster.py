@@ -7,6 +7,40 @@ from erpnext.setup.doctype.employee.employee import get_holiday_list_for_employe
 from hrms.hr.doctype.shift_assignment.shift_assignment import ShiftAssignment
 from hrms.hr.doctype.shift_assignment_tool.shift_assignment_tool import create_shift_assignment
 from hrms.hr.doctype.shift_schedule.shift_schedule import get_or_insert_shift_schedule
+from hrms.telemetry import capture
+
+ALLOWED_EMPLOYEE_FILTERS = {
+	"status",
+	"company",
+	"department",
+	"branch",
+	"designation",
+	"employee_name",
+}
+
+ALLOWED_SHIFT_FILTERS = {
+	"shift_type",
+	"status",
+	"shift_location",
+}
+
+
+def _validate_employee_filters(employee_filters: dict[str, str]) -> None:
+	for key in employee_filters:
+		if key not in ALLOWED_EMPLOYEE_FILTERS:
+			frappe.throw(
+				_("Invalid employee filter: {0}").format(frappe.bold(key)),
+				frappe.PermissionError,
+			)
+
+
+def _validate_shift_filters(shift_filters: dict[str, str]) -> None:
+	for key in shift_filters:
+		if key not in ALLOWED_SHIFT_FILTERS:
+			frappe.throw(
+				_("Invalid shift filter: {0}").format(frappe.bold(key)),
+				frappe.PermissionError,
+			)
 
 
 @frappe.whitelist()
@@ -15,14 +49,11 @@ def get_default_company() -> str:
 
 
 @frappe.whitelist()
-def get_values(doctype: str, name: str, fields: list) -> dict[str, str]:
-	return frappe.db.get_value(doctype, name, fields, as_dict=True)
-
-
-@frappe.whitelist()
 def get_events(
 	month_start: str, month_end: str, employee_filters: dict[str, str], shift_filters: dict[str, str]
 ) -> dict[str, list[dict]]:
+	_validate_employee_filters(employee_filters)
+	_validate_shift_filters(shift_filters)
 	holidays = get_holidays(month_start, month_end, employee_filters)
 	leaves = get_leaves(month_start, month_end, employee_filters)
 	shifts = get_shifts(month_start, month_end, employee_filters, shift_filters)
@@ -39,6 +70,7 @@ def get_events(
 
 @frappe.whitelist()
 def get_schedule_from_assignment(shift_schedule_assignment: str):
+	frappe.has_permission("Shift Schedule Assignment", "read", shift_schedule_assignment, throw=True)
 	shift_schedule = frappe.db.get_value(
 		"Shift Schedule Assignment", shift_schedule_assignment, "shift_schedule"
 	)
@@ -47,7 +79,7 @@ def get_schedule_from_assignment(shift_schedule_assignment: str):
 	return {"frequency": frequency, "repeat_on_days": repeat_on_days}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_shift_schedule_assignment(
 	employee: str,
 	company: str,
@@ -59,6 +91,8 @@ def create_shift_schedule_assignment(
 	frequency: str,
 	shift_location: str | None = None,
 ) -> None:
+	frappe.has_permission("Employee", "read", employee, throw=True)
+	frappe.has_permission("Shift Schedule Assignment", "create", throw=True)
 	shift_schedule = get_or_insert_shift_schedule(shift_type, frequency, repeat_on_days)
 	shift_schedule_assignment = frappe.get_doc(
 		{
@@ -72,6 +106,16 @@ def create_shift_schedule_assignment(
 		}
 	).insert()
 
+	capture(
+		"shift_schedule_assignment_created",
+		{
+			"frequency": frequency,
+			"status": status,
+			"has_end_date": bool(end_date),
+			"repeat_on_days": len(repeat_on_days or []),
+		},
+	)
+
 	if not end_date or date_diff(end_date, start_date) <= 90:
 		return shift_schedule_assignment.create_shifts(start_date, end_date)
 
@@ -80,33 +124,49 @@ def create_shift_schedule_assignment(
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_shift_schedule_assignment(shift_schedule_assignment: str) -> None:
-	for shift_assignment in frappe.get_all(
+	shift_schedule_assignment_doc = frappe.get_doc("Shift Schedule Assignment", shift_schedule_assignment)
+	shift_schedule_assignment_doc.check_permission("delete")
+
+	for shift_assignment_name in frappe.get_all(
 		"Shift Assignment", {"shift_schedule_assignment": shift_schedule_assignment}, pluck="name"
 	):
-		doc = frappe.get_doc("Shift Assignment", shift_assignment)
-		if doc.docstatus == 1:
-			doc.cancel()
-		frappe.delete_doc("Shift Assignment", shift_assignment)
-	frappe.delete_doc("Shift Schedule Assignment", shift_schedule_assignment)
+		shift_assignment_doc = frappe.get_doc("Shift Assignment", shift_assignment_name)
+		frappe.has_permission("Employee", "read", shift_assignment_doc.employee, throw=True)
+		shift_assignment_doc.check_permission("cancel" if shift_assignment_doc.docstatus == 1 else "delete")
+		if shift_assignment_doc.docstatus == 1:
+			shift_assignment_doc.cancel()
+		frappe.delete_doc("Shift Assignment", shift_assignment_name, ignore_permissions=True)
+	frappe.delete_doc("Shift Schedule Assignment", shift_schedule_assignment, ignore_permissions=True)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def swap_shift(
 	src_shift: str, src_date: str, tgt_employee: str, tgt_date: str, tgt_shift: str | None
 ) -> None:
 	if src_shift == tgt_shift:
 		frappe.throw(_("Source and target shifts cannot be the same"))
 
+	src_shift_doc = frappe.get_doc("Shift Assignment", src_shift)
+	frappe.has_permission("Employee", "read", src_shift_doc.employee, throw=True)
+	src_shift_doc.check_permission("write")
+
+	frappe.has_permission("Employee", "read", tgt_employee, throw=True)
+	frappe.has_permission("Shift Assignment", "create", throw=True)
+
 	if tgt_shift:
 		tgt_shift_doc = frappe.get_doc("Shift Assignment", tgt_shift)
+		frappe.has_permission("Employee", "read", tgt_shift_doc.employee, throw=True)
+		tgt_shift_doc.check_permission("write")
 		tgt_company = tgt_shift_doc.company
 		break_shift(tgt_shift_doc, tgt_date)
 	else:
 		tgt_company = frappe.db.get_value("Employee", tgt_employee, "company")
 
-	src_shift_doc = frappe.get_doc("Shift Assignment", src_shift)
+	# All guards passed and the swap is proceeding — capture only successful attempts.
+	capture("shift_swapped", {"mutual_swap": bool(tgt_shift)})
+
 	break_shift(src_shift_doc, src_date)
 	insert_shift(
 		tgt_employee,
@@ -130,10 +190,13 @@ def swap_shift(
 		)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def break_shift(assignment: str | ShiftAssignment, date: str) -> None:
 	if isinstance(assignment, str):
 		assignment = frappe.get_doc("Shift Assignment", assignment)
+
+	frappe.has_permission("Employee", "read", assignment.employee, throw=True)
+	assignment.check_permission("write")
 
 	if assignment.end_date and date_diff(assignment.end_date, date) < 0:
 		frappe.throw(_("Cannot break shift after end date"))
@@ -160,7 +223,7 @@ def break_shift(assignment: str | ShiftAssignment, date: str) -> None:
 		)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def insert_shift(
 	employee: str,
 	company: str,
@@ -170,6 +233,8 @@ def insert_shift(
 	status: str,
 	shift_location: str | None = None,
 ) -> None:
+	frappe.has_permission("Employee", "read", employee, throw=True)
+	frappe.has_permission("Shift Assignment", "create", throw=True)
 	filters = {
 		"doctype": "Shift Assignment",
 		"employee": employee,
@@ -177,6 +242,7 @@ def insert_shift(
 		"shift_type": shift_type,
 		"status": status,
 		"shift_location": shift_location,
+		"docstatus": ["!=", 2],
 	}
 	prev_shift = frappe.db.exists(dict({"end_date": add_days(start_date, -1)}, **filters))
 	next_shift = (
@@ -184,13 +250,17 @@ def insert_shift(
 	)
 
 	if prev_shift:
+		frappe.has_permission("Shift Assignment", "write", prev_shift, throw=True)
 		if next_shift:
+			frappe.has_permission("Shift Assignment", "write", next_shift, throw=True)
 			end_date = frappe.db.get_value("Shift Assignment", next_shift, "end_date")
+			frappe.has_permission("Shift Assignment", "delete", next_shift, throw=True)
 			frappe.db.set_value("Shift Assignment", next_shift, "docstatus", 2)
 			frappe.delete_doc("Shift Assignment", next_shift)
 		frappe.db.set_value("Shift Assignment", prev_shift, "end_date", end_date or None)
 
 	elif next_shift:
+		frappe.has_permission("Shift Assignment", "write", next_shift, throw=True)
 		frappe.db.set_value("Shift Assignment", next_shift, "start_date", start_date)
 
 	else:
@@ -198,11 +268,14 @@ def insert_shift(
 
 
 def get_holidays(month_start: str, month_end: str, employee_filters: dict[str, str]) -> dict[str, list[dict]]:
+	_validate_employee_filters(employee_filters)
 	holidays = {}
 	holiday_lists = {}
 
 	for employee in frappe.get_list("Employee", filters=employee_filters, pluck="name"):
-		if not (holiday_list := get_holiday_list_for_employee(employee, raise_exception=False)):
+		if not (
+			holiday_list := get_holiday_list_for_employee(employee, raise_exception=False, as_on=month_end)
+		):
 			continue
 		if holiday_list not in holiday_lists:
 			holiday_lists[holiday_list] = frappe.get_all(
@@ -216,27 +289,29 @@ def get_holidays(month_start: str, month_end: str, employee_filters: dict[str, s
 
 
 def get_leaves(month_start: str, month_end: str, employee_filters: dict[str, str]) -> dict[str, list[dict]]:
+	_validate_employee_filters(employee_filters)
 	LeaveApplication = frappe.qb.DocType("Leave Application")
 	Employee = frappe.qb.DocType("Employee")
 
-	query = (
-		frappe.qb.select(
+	query = frappe.qb.get_query(
+		"Leave Application",
+		fields=[
 			LeaveApplication.name.as_("leave"),
 			LeaveApplication.employee,
 			LeaveApplication.leave_type,
 			LeaveApplication.from_date,
 			LeaveApplication.to_date,
-		)
-		.from_(LeaveApplication)
-		.left_join(Employee)
-		.on(LeaveApplication.employee == Employee.name)
-		.where(
-			(LeaveApplication.docstatus == 1)
-			& (LeaveApplication.status == "Approved")
-			& (LeaveApplication.from_date <= month_end)
-			& (LeaveApplication.to_date >= month_start)
-		)
+		],
+		filters={
+			"docstatus": 1,
+			"status": "Approved",
+			"from_date": ("<=", month_end),
+			"to_date": (">=", month_start),
+		},
+		ignore_permissions=False,
 	)
+
+	query = query.left_join(Employee).on(LeaveApplication.employee == Employee.name)
 
 	for filter in employee_filters:
 		query = query.where(Employee[filter] == employee_filters[filter])
@@ -247,12 +322,15 @@ def get_leaves(month_start: str, month_end: str, employee_filters: dict[str, str
 def get_shifts(
 	month_start: str, month_end: str, employee_filters: dict[str, str], shift_filters: dict[str, str]
 ) -> dict[str, list[dict]]:
+	_validate_employee_filters(employee_filters)
+	_validate_shift_filters(shift_filters)
 	ShiftAssignment = frappe.qb.DocType("Shift Assignment")
 	ShiftType = frappe.qb.DocType("Shift Type")
 	Employee = frappe.qb.DocType("Employee")
 
-	query = (
-		frappe.qb.select(
+	query = frappe.qb.get_query(
+		"Shift Assignment",
+		fields=[
 			ShiftAssignment.name,
 			ShiftAssignment.employee,
 			ShiftAssignment.shift_type,
@@ -261,20 +339,24 @@ def get_shifts(
 			ShiftAssignment.end_date,
 			ShiftAssignment.status,
 			ShiftAssignment.shift_schedule_assignment,
-			ShiftType.start_time,
-			ShiftType.end_time,
-			ShiftType.color,
-		)
-		.from_(ShiftAssignment)
-		.left_join(ShiftType)
+		],
+		filters={
+			"docstatus": 1,
+			"start_date": ("<=", month_end),
+		},
+		ignore_permissions=False,
+	)
+
+	# end_date is open-ended (None for shifts with no defined end) — must be
+	# expressed as an OR, which the filters dict can't represent cleanly.
+	query = query.where((ShiftAssignment.end_date >= month_start) | (ShiftAssignment.end_date.isnull()))
+
+	query = (
+		query.left_join(ShiftType)
 		.on(ShiftAssignment.shift_type == ShiftType.name)
+		.select(ShiftType.start_time, ShiftType.end_time, ShiftType.color)
 		.left_join(Employee)
 		.on(ShiftAssignment.employee == Employee.name)
-		.where(
-			(ShiftAssignment.docstatus == 1)
-			& (ShiftAssignment.start_date <= month_end)
-			& ((ShiftAssignment.end_date >= month_start) | (ShiftAssignment.end_date.isnull()))
-		)
 	)
 
 	for filter in employee_filters:

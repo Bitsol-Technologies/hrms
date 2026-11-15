@@ -1,5 +1,5 @@
 <template>
-	<BaseLayout pageTitle="Attendance">
+	<BaseLayout :pageTitle="__('Attendance')">
 		<template #body>
 			<div class="flex flex-col mt-7 mb-7 p-4 gap-7">
 				<AttendanceCalendar />
@@ -69,18 +69,12 @@ import {
 	myShiftRequests,
 } from "@/data/attendance"
 
-const employee = inject("$employee")
 const dayjs = inject("$dayjs")
 
 const shifts = createResource({
 	url: "hrms.api.get_shifts",
 	auto: true,
 	cache: "hrms:shifts",
-	makeParams() {
-		return {
-			employee: employee.data?.name,
-		}
-	},
 	transform: (data) => {
 		return data.map((assignment) => {
 			assignment.doctype = "Shift Assignment"

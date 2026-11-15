@@ -4,29 +4,24 @@
 import frappe
 from frappe.utils import flt, nowdate, random_string, today
 
+import erpnext
 from erpnext import get_company_currency
 from erpnext.accounts.doctype.account.test_account import create_account
-from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_payment_entry
 from erpnext.setup.doctype.employee.test_employee import make_employee
 from erpnext.setup.utils import get_exchange_rate
 
 from hrms.hr.doctype.expense_claim.expense_claim import (
 	MismatchError,
+	get_advances,
 	get_outstanding_amount_for_claim,
-	make_bank_entry,
 	make_expense_claim_for_delivery_trip,
 )
-from hrms.tests.utils import HRMSTestSuite
+from hrms.tests.utils import HRMSTestSuite, make_user
 
 company_name = "_Test Company 3"
 
 
 class TestExpenseClaim(HRMSTestSuite):
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
-		cls.make_employees()
-
 	def setUp(self):
 		if not frappe.db.get_value("Cost Center", {"company": company_name}):
 			cost_center = frappe.new_doc("Cost Center")
@@ -42,16 +37,11 @@ class TestExpenseClaim(HRMSTestSuite):
 
 			frappe.db.set_value("Company", company_name, "default_cost_center", cost_center)
 		frappe.db.set_value("Account", "Employee Advances - _TC", "account_type", "Receivable")
-
-	def tearDown(self):
+		frappe.db.set_value("Account", "Payroll Payable - _TC", "account_type", "Payable")
 		frappe.set_user("Administrator")
 
 	def test_total_expense_claim_for_project(self):
-		frappe.db.delete("Task")
-		frappe.db.delete("Project")
-		frappe.db.sql("update `tabExpense Claim` set project = '', task = ''")
-
-		project = create_project("_Test Project 1")
+		project = create_project("_Test Project 1", company="_Test Company")
 
 		task = frappe.new_doc("Task")
 		task.update(
@@ -79,6 +69,56 @@ class TestExpenseClaim(HRMSTestSuite):
 
 		self.assertEqual(frappe.db.get_value("Task", task, "total_expense_claim"), 200)
 		self.assertEqual(frappe.db.get_value("Project", project, "total_expense_claim"), 200)
+
+	def test_total_expense_claim_for_project_set_on_expense_line(self):
+		project = create_project("_Test Project Line 1", company="_Test Company")
+
+		payable_account = get_payable_account(company_name)
+
+		expense_claim = make_expense_claim(
+			payable_account, 300, 200, company_name, "Travel Expenses - _TC3", do_not_submit=True
+		)
+		expense_claim.expenses[0].project = project
+		expense_claim.submit()
+
+		self.assertEqual(frappe.db.get_value("Project", project, "total_expense_claim"), 200)
+
+		expense_claim.cancel()
+
+		self.assertEqual(frappe.db.get_value("Project", project, "total_expense_claim"), 0)
+
+	def test_total_expense_claim_for_project_at_document_and_line_level(self):
+		document_project = create_project("_Test Project Doc Level", company="_Test Company")
+		line_project = create_project("_Test Project Line 2", company="_Test Company")
+
+		payable_account = get_payable_account(company_name)
+		cost_center = frappe.db.get_value("Company", company_name, "cost_center")
+
+		expense_claim = make_expense_claim(
+			payable_account,
+			300,
+			200,
+			company_name,
+			"Travel Expenses - _TC3",
+			project=document_project,
+			do_not_submit=True,
+		)
+		expense_claim.append(
+			"expenses",
+			{
+				"expense_type": "Travel",
+				"default_account": "Travel Expenses - _TC3",
+				"currency": expense_claim.currency,
+				"amount": 500,
+				"sanctioned_amount": 500,
+				"cost_center": cost_center,
+				"project": line_project,
+			},
+		)
+		expense_claim.submit()
+
+		self.assertEqual(frappe.db.get_value("Project", document_project, "total_expense_claim"), 200)
+		self.assertEqual(frappe.db.get_value("Project", line_project, "total_expense_claim"), 500)
 
 	def test_expense_claim_status_as_payment_from_journal_entry(self):
 		# Via Journal Entry
@@ -146,7 +186,7 @@ class TestExpenseClaim(HRMSTestSuite):
 				employee1 = entry.party
 
 			if not entry.party_type:
-				entry.credit += 200
+				entry.credit = flt(entry.credit) + 200
 				entry.credit_in_account_currency += 200
 
 		je.append(
@@ -172,11 +212,39 @@ class TestExpenseClaim(HRMSTestSuite):
 		expense_claim2.load_from_db()
 		self.assertEqual(expense_claim2.status, "Paid")
 
+	def test_other_employee_advances_link_with_claim(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import make_employee_advance
+
+		payable_account = get_payable_account("_Test Company")
+
+		employee = make_employee("test_employee@employee.advance", "_Test Company")
+		advance = make_employee_advance(employee)
+
+		employee_with_no_advance = make_employee("test_employee@not-employee.advance", "_Test Company")
+		claim_with_no_advance = make_expense_claim(
+			payable_account,
+			1000,
+			1000,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=employee_with_no_advance,
+		)
+		claim_with_no_advance.save()
+
+		claim_with_no_advance.append(
+			"advances",
+			{
+				"employee_advance": advance.name,
+			},
+		)
+		self.assertRaises(frappe.ValidationError, claim_with_no_advance.save)
+
 	def test_expense_claim_against_fully_paid_advances(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import (
 			get_advances_for_claim,
 			make_employee_advance,
-			make_journal_entry_for_advance,
+			make_payment_entry,
 		)
 
 		frappe.db.delete("Employee Advance")
@@ -187,8 +255,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		)
 
 		advance = make_employee_advance(claim.employee)
-		pe = make_journal_entry_for_advance(advance)
-		pe.submit()
+		pe = make_payment_entry(advance)
 
 		# claim for already paid out advances
 		claim = get_advances_for_claim(claim, advance.name)
@@ -197,12 +264,152 @@ class TestExpenseClaim(HRMSTestSuite):
 
 		self.assertEqual(claim.grand_total, 0)
 		self.assertEqual(claim.status, "Paid")
+		advance_row = claim.advances[0]
+		self.assertEqual(advance_row.employee_advance, advance.name)
+		self.assertEqual(advance_row.reference_type, "Payment Entry")
+		self.assertEqual(advance_row.reference_name, pe.name)
+		self.assertEqual(advance_row.advance_paid, 1000)
+		self.assertEqual(advance_row.unclaimed_amount, 1000)
+		self.assertEqual(advance_row.allocated_amount, 1000)
+
+	def test_validate_advances_blocks_incompletely_linked_advance(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			make_employee_advance,
+			make_payment_entry,
+		)
+
+		payable_account = get_payable_account("_Test Company")
+		claim = make_expense_claim(
+			payable_account, 1000, 1000, "_Test Company", "Travel Expenses - _TC", do_not_submit=True
+		)
+
+		advance = make_employee_advance(claim.employee)
+		make_payment_entry(advance)
+
+		# advance_account / reference_type / reference_name are set by get_advances;
+		# a row added without them cannot book its accounting entry
+		claim.append(
+			"advances",
+			{"employee_advance": advance.name, "allocated_amount": 1000, "unclaimed_amount": 1000},
+		)
+
+		self.assertRaisesRegex(frappe.ValidationError, "required against advance", claim.save)
+
+	def test_advance_with_non_receivable_account(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			make_employee_advance,
+			make_payment_entry,
+		)
+
+		frappe.db.delete("Employee Advance")
+
+		payable_advance_account = create_account(
+			account_name="Payable Employee Advance",
+			parent_account="Accounts Payable - _TC",
+			company="_Test Company",
+			account_currency=get_company_currency("_Test Company"),
+			account_type="Payable",
+		)
+
+		payable_account = get_payable_account("_Test Company")
+		claim = make_expense_claim(
+			payable_account, 1000, 1000, "_Test Company", "Travel Expenses - _TC", do_not_submit=True
+		)
+
+		# bypasses validate_advance_account_type, simulating an account that was
+		# set to Payable after the advance was submitted
+		advance = make_employee_advance(
+			claim.employee, args={"advance_account": payable_advance_account}, do_not_submit=True
+		)
+		advance.flags.ignore_validate = True
+		advance.insert()
+		advance.submit()
+		make_payment_entry(advance)
+
+		self.assertRaises(frappe.ValidationError, get_advances, claim, advance.name)
+
+	def test_advance_blocked_after_account_reverted_to_receivable(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			make_employee_advance,
+			make_payment_entry,
+		)
+
+		frappe.db.delete("Employee Advance")
+
+		payable_advance_account = create_account(
+			account_name="Payable Employee Advance 3",
+			parent_account="Accounts Payable - _TC",
+			company="_Test Company",
+			account_currency=get_company_currency("_Test Company"),
+			account_type="Payable",
+		)
+
+		payable_account = get_payable_account("_Test Company")
+		claim = make_expense_claim(
+			payable_account, 1000, 1000, "_Test Company", "Travel Expenses - _TC", do_not_submit=True
+		)
+
+		advance = make_employee_advance(
+			claim.employee, args={"advance_account": payable_advance_account}, do_not_submit=True
+		)
+		advance.flags.ignore_validate = True
+		advance.insert()
+		advance.submit()
+		make_payment_entry(advance)
+
+		# account corrected back to Receivable without cancelling and redoing the payment
+		# the existing ledger entry is still recorded as a negative amount
+		frappe.db.set_value("Account", payable_advance_account, "account_type", "Receivable")
+
+		self.assertRaises(frappe.ValidationError, get_advances, claim, advance.name)
+
+	def test_validate_advances_blocks_non_receivable_advance(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			make_employee_advance,
+			make_payment_entry,
+		)
+
+		frappe.db.delete("Employee Advance")
+
+		payable_advance_account = create_account(
+			account_name="Payable Employee Advance 2",
+			parent_account="Accounts Payable - _TC",
+			company="_Test Company",
+			account_currency=get_company_currency("_Test Company"),
+			account_type="Payable",
+		)
+
+		payable_account = get_payable_account("_Test Company")
+		claim = make_expense_claim(
+			payable_account, 1000, 1000, "_Test Company", "Travel Expenses - _TC", do_not_submit=True
+		)
+
+		advance = make_employee_advance(
+			claim.employee, args={"advance_account": payable_advance_account}, do_not_submit=True
+		)
+		advance.flags.ignore_validate = True
+		advance.insert()
+		advance.submit()
+		make_payment_entry(advance)
+
+		claim.append(
+			"advances",
+			{
+				"employee_advance": advance.name,
+				"advance_account": payable_advance_account,
+				"advance_paid": 1000,
+				"unclaimed_amount": 1000,
+				"allocated_amount": 1000,
+			},
+		)
+
+		self.assertRaises(frappe.ValidationError, claim.save)
 
 	def test_advance_amount_allocation_against_claim_with_taxes(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import (
 			get_advances_for_claim,
 			make_employee_advance,
-			make_journal_entry_for_advance,
+			make_payment_entry,
 		)
 
 		frappe.db.delete("Employee Advance")
@@ -221,8 +428,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		claim.save()
 
 		advance = make_employee_advance(claim.employee)
-		pe = make_journal_entry_for_advance(advance)
-		pe.submit()
+		make_payment_entry(advance)
 
 		# claim for already paid out advances
 		claim = get_advances_for_claim(claim, advance.name, 763)
@@ -234,27 +440,47 @@ class TestExpenseClaim(HRMSTestSuite):
 
 	def test_expense_claim_partially_paid_via_advance(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import (
-			get_advances_for_claim,
 			make_employee_advance,
-			make_journal_entry_for_advance,
+			make_payment_entry,
 		)
+		from hrms.hr.doctype.expense_claim.expense_claim import get_expense_claim
 
 		frappe.db.delete("Employee Advance")
 
-		payable_account = get_payable_account("_Test Company")
-		claim = make_expense_claim(
-			payable_account, 1000, 1000, "_Test Company", "Travel Expenses - _TC", do_not_submit=True
+		employee = make_employee("test_partial_advance_claim@expenseclaim.com", "_Test Company")
+		advance = make_employee_advance(employee, {"advance_amount": 500})
+		make_payment_entry(advance)
+
+		currency, cost_center = frappe.db.get_value(
+			"Company", "_Test Company", ["default_currency", "cost_center"]
+		)
+		claim = get_expense_claim(advance.name)  # function call to create claim from employee advance form
+		claim.update(
+			{
+				"payable_account": get_payable_account("_Test Company"),
+				"currency": currency,
+				"exchange_rate": 1,
+				"approval_status": "Approved",
+			}
+		)
+		claim.append(
+			"expenses",
+			{
+				"expense_type": "Travel",
+				"default_account": "Travel Expenses - _TC",
+				"amount": 1000,
+				"sanctioned_amount": 1000,
+				"cost_center": cost_center,
+			},
 		)
 
-		# link advance for partial amount
-		advance = make_employee_advance(claim.employee, {"advance_amount": 500})
-		pe = make_journal_entry_for_advance(advance)
-		pe.submit()
-
-		claim = get_advances_for_claim(claim, advance.name)
+		# assert is_paid to be checked true as claim is done via advance actions button
+		self.assertTrue(claim.is_paid)
 		claim.save()
 		claim.submit()
 
+		# assert is_paid to be checked false as claim amount is greater than advance
+		self.assertFalse(claim.is_paid)
 		self.assertEqual(claim.grand_total, 500)
 		self.assertEqual(claim.status, "Unpaid")
 
@@ -264,49 +490,42 @@ class TestExpenseClaim(HRMSTestSuite):
 
 		self.assertEqual(claim.total_amount_reimbursed, 500)
 		self.assertEqual(claim.status, "Paid")
+		self.assertEqual(claim.total_claimed_amount, 1000)
+		advance_row = claim.advances[0]
+		self.assertEqual(advance_row.advance_paid, 500)
+		self.assertEqual(advance_row.unclaimed_amount, 500)
+		self.assertEqual(advance_row.allocated_amount, 500)
 
 	def test_expense_claim_with_deducted_returned_advance(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import (
-			create_return_through_additional_salary,
+			create_payroll_for_advance_return,
 			get_advances_for_claim,
 			make_employee_advance,
-			make_journal_entry_for_advance,
+			make_payment_entry,
 		)
 		from hrms.hr.doctype.expense_claim.expense_claim import get_allocation_amount
-		from hrms.payroll.doctype.salary_component.test_salary_component import create_salary_component
-		from hrms.payroll.doctype.salary_structure.test_salary_structure import make_salary_structure
 
+		company_doc = frappe.get_doc("Company", "_Test Company")
 		# create employee and employee advance
-		employee_name = make_employee("_T@employee.advance", "_Test Company")
+		employee_name = make_employee("_T@employee.advance", company_doc.name)
 		advance = make_employee_advance(employee_name, {"repay_unclaimed_amount_from_salary": 1})
-		journal_entry = make_journal_entry_for_advance(advance)
-		journal_entry.submit()
+		make_payment_entry(advance)
 		advance.reload()
 
-		# set up salary components and structure
-		create_salary_component("Advance Salary - Deduction", type="Deduction")
-		make_salary_structure(
-			"Test Additional Salary for Advance Return",
-			"Monthly",
-			employee=employee_name,
-			company="_Test Company",
-		)
-
-		# create additional salary for advance return
-		additional_salary = create_return_through_additional_salary(advance)
-		additional_salary.salary_component = "Advance Salary - Deduction"
-		additional_salary.payroll_date = nowdate()
-		additional_salary.amount = 400
-		additional_salary.insert()
-		additional_salary.submit()
+		create_payroll_for_advance_return(employee_name, company_doc, advance, return_amount=400)
 		advance.reload()
-
 		self.assertEqual(advance.return_amount, 400)
 
 		# create an expense claim
-		payable_account = get_payable_account("_Test Company")
+		payable_account = get_payable_account(company_doc.name)
 		claim = make_expense_claim(
-			payable_account, 200, 200, "_Test Company", "Travel Expenses - _TC", do_not_submit=True
+			payable_account,
+			200,
+			200,
+			company_doc.name,
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=employee_name,
 		)
 
 		# link advance to the claim
@@ -322,6 +541,10 @@ class TestExpenseClaim(HRMSTestSuite):
 			),
 			600,
 		)
+		advance_row = claim.advances[0]
+		self.assertEqual(advance_row.advance_paid, 1000)
+		self.assertEqual(advance_row.return_amount, 400)
+		self.assertEqual(advance_row.allocated_amount, 200)
 
 	def test_expense_claim_gl_entry(self):
 		payable_account = get_payable_account(company_name)
@@ -337,13 +560,13 @@ class TestExpenseClaim(HRMSTestSuite):
 		)
 		expense_claim.submit()
 
-		gl_entries = frappe.db.sql(
-			"""select account, debit, credit
-			from `tabGL Entry` where voucher_type='Expense Claim' and voucher_no=%s
-			order by account asc""",
-			expense_claim.name,
-			as_dict=1,
-		)
+		gle = frappe.qb.DocType("GL Entry")
+		gl_entries = (
+			frappe.qb.from_(gle)
+			.select(gle.account, gle.debit, gle.credit)
+			.where((gle.voucher_type == "Expense Claim") & (gle.voucher_no == expense_claim.name))
+			.orderby(gle.account, order=frappe.qb.asc)
+		).run(as_dict=True)
 
 		self.assertTrue(gl_entries)
 
@@ -459,6 +682,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		outstanding_amount = get_outstanding_amount_for_claim(expense_claim)
 		self.assertEqual(outstanding_amount, 5000)
 		self.assertEqual(expense_claim.total_amount_reimbursed, 500)
+		self.assertEqual(expense_claim.status, "Partially Paid")
 
 		# Payment entry 2: paying 2000
 		pe2 = make_claim_payment_entry(expense_claim, 2000)
@@ -469,6 +693,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		outstanding_amount = get_outstanding_amount_for_claim(expense_claim)
 		self.assertEqual(outstanding_amount, 3000)
 		self.assertEqual(expense_claim.total_amount_reimbursed, 2500)
+		self.assertEqual(expense_claim.status, "Partially Paid")
 
 		# Payment entry 3: paying 3000
 		pe3 = make_claim_payment_entry(expense_claim, 3000)
@@ -479,6 +704,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		outstanding_amount = get_outstanding_amount_for_claim(expense_claim)
 		self.assertEqual(outstanding_amount, 0)
 		self.assertEqual(expense_claim.total_amount_reimbursed, 5500)
+		self.assertEqual(expense_claim.status, "Paid")
 
 	def test_expense_claim_against_delivery_trip(self):
 		from erpnext.stock.doctype.delivery_trip.test_delivery_trip import (
@@ -487,14 +713,12 @@ class TestExpenseClaim(HRMSTestSuite):
 			create_driver,
 			create_vehicle,
 		)
-		from erpnext.tests.utils import create_test_contact_and_address
 
 		driver = create_driver()
 		create_vehicle()
-		create_test_contact_and_address()
 		address = create_address(driver)
 
-		delivery_trip = create_delivery_trip(driver, address)
+		delivery_trip = create_delivery_trip(driver, address, company="_Test Company")
 		expense_claim = make_expense_claim_for_delivery_trip(delivery_trip.name)
 		self.assertEqual(delivery_trip.name, expense_claim.delivery_trip)
 
@@ -517,7 +741,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		self.assertEqual(je.accounts[0].debit_in_account_currency, expense_claim.grand_total)
 
 	def test_accounting_dimension_mapping(self):
-		project = create_project("_Test Expense Project")
+		project = create_project("_Test Expense Project", company="_Test Company")
 		payable_account = get_payable_account(company_name)
 
 		expense_claim = make_expense_claim(
@@ -572,13 +796,6 @@ class TestExpenseClaim(HRMSTestSuite):
 		self.assertEqual(expense_claim.status, "Unpaid")
 
 	def test_repost(self):
-		# Update repost settings
-		allowed_types = ["Expense Claim"]
-		repost_settings = frappe.get_doc("Repost Accounting Ledger Settings")
-		for x in allowed_types:
-			repost_settings.append("allowed_types", {"document_type": x, "allowed": True})
-		repost_settings.save()
-
 		payable_account = get_payable_account(company_name)
 		taxes = generate_taxes(rate=10)
 		expense_claim = make_expense_claim(
@@ -632,6 +849,105 @@ class TestExpenseClaim(HRMSTestSuite):
 		expense_claim.company = "_Test Company 3"
 		expense_claim.department = "Accounts - _TC2"
 		self.assertRaises(MismatchError, expense_claim.save)
+
+	def test_company_must_match_employee_company(self):
+		employee = make_employee("test_other_company_claim@example.com", company="_Test Company 3")
+		payable_account = get_payable_account("_Test Company")
+		expense_claim = make_expense_claim(
+			payable_account,
+			300,
+			200,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=employee,
+		)
+		self.assertRaises(MismatchError, expense_claim.save)
+
+	def test_employee_can_only_claim_for_self(self):
+		employee = make_employee("test_self_claim@example.com", company="_Test Company")
+		other_employee = make_employee("test_other_claim@example.com", company="_Test Company")
+		hr_user = make_user("test_hr_claim@example.com", "HR User")
+		payable_account = get_payable_account("_Test Company")
+
+		def claim_for(claim_employee):
+			return make_expense_claim(
+				payable_account,
+				300,
+				200,
+				"_Test Company",
+				"Travel Expenses - _TC",
+				do_not_submit=True,
+				employee=claim_employee,
+			)
+
+		# user permissions are bypassed so that the controller check is what gets exercised
+		frappe.db.delete("User Permission", {"user": "test_self_claim@example.com"})
+		frappe.clear_cache(user="test_self_claim@example.com")
+
+		frappe.set_user("test_self_claim@example.com")
+		self.assertRaises(frappe.PermissionError, claim_for(other_employee).insert)
+
+		own_claim = claim_for(employee).insert()
+		own_claim.employee = other_employee
+		self.assertRaises(frappe.PermissionError, own_claim.save)
+
+		frappe.set_user(hr_user)
+		claim_for(other_employee).insert()
+
+		frappe.set_user("Administrator")
+
+	def test_role_permission_allows_claim_for_others(self):
+		from frappe.permissions import add_permission, update_permission_property
+
+		employee = make_employee("test_accounts_claim@example.com", company="_Test Company")
+		accounts_user = make_user("test_accounts_user_claim@example.com", "Accounts User")
+		payable_account = get_payable_account("_Test Company")
+
+		add_permission("Expense Claim", "Accounts User", 0, "create")
+		update_permission_property("Expense Claim", "Accounts User", 0, "write", 1)
+		self.addCleanup(frappe.clear_cache, doctype="Expense Claim")
+
+		frappe.set_user(accounts_user)
+		make_expense_claim(
+			payable_account,
+			300,
+			200,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=employee,
+		).insert()
+
+		frappe.set_user("Administrator")
+
+	def test_self_service_user_cannot_claim_for_others(self):
+		make_employee("test_ess_claim@example.com", company="_Test Company")
+		other_employee = make_employee("test_ess_other_claim@example.com", company="_Test Company")
+		payable_account = get_payable_account("_Test Company")
+
+		ess_user = frappe.get_doc("User", "test_ess_claim@example.com")
+		ess_user.user_type = "Employee Self Service"
+		ess_user.save()
+
+		# user permissions are bypassed so that the controller check is what gets exercised
+		frappe.db.delete("User Permission", {"user": ess_user.name})
+		frappe.clear_cache(user=ess_user.name)
+
+		frappe.set_user(ess_user.name)
+		self.assertIn("Employee Self Service", frappe.get_roles())
+		expense_claim = make_expense_claim(
+			payable_account,
+			300,
+			200,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+			employee=other_employee,
+		)
+		self.assertRaises(frappe.PermissionError, expense_claim.insert)
+
+		frappe.set_user("Administrator")
 
 	def test_self_expense_approval(self):
 		frappe.db.set_single_value("HR Settings", "prevent_self_expense_approval", 0)
@@ -705,6 +1021,44 @@ class TestExpenseClaim(HRMSTestSuite):
 
 		self.assertEqual(1, expense_claim.docstatus)
 
+	def test_advance_in_different_currency_excluded_from_claim(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			create_advance_account,
+			make_employee_advance,
+			make_payment_entry,
+		)
+
+		company = "_Test Company"
+		company_currency = get_company_currency(company)
+		advance_account = create_advance_account("Employee Advance (USD)", "USD")
+		employee = make_employee(
+			"test_adv_cross_currency@example.com",
+			company,
+			salary_currency="USD",
+			employee_advance_account=advance_account,
+		)
+		advance = make_employee_advance(employee)
+		make_payment_entry(advance, advance.advance_amount)
+		advance.reload()
+		self.assertNotEqual(advance.currency, company_currency)
+
+		claim = make_expense_claim(
+			get_payable_account(company),
+			advance.advance_amount,
+			advance.advance_amount,
+			company,
+			"Travel Expenses - _TC",
+			args={"currency": company_currency, "exchange_rate": 1},
+			employee=employee,
+			do_not_submit=True,
+		)
+
+		# mismatched-currency advance is excluded from the bulk fetch
+		self.assertEqual(get_advances(claim), [])
+		# explicit fetch raises a currency-specific error
+		self.assertRaises(frappe.ValidationError, get_advances, claim, advance.name)
+
+	@HRMSTestSuite.change_settings("HR Settings", {"enable_multi_currency_expense_claim": 1})
 	def test_multicurrency_claim(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import (
 			create_advance_account,
@@ -815,6 +1169,7 @@ class TestExpenseClaim(HRMSTestSuite):
 		self.assertEqual(claim.base_total_claimed_amount, total_claimed_amount)
 		self.assertEqual(claim.total_exchange_gain_loss, 0)
 
+	@HRMSTestSuite.change_settings("HR Settings", {"enable_multi_currency_expense_claim": 1})
 	def test_advance_claim_multicurrency_gain_loss(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import (
 			create_advance_account,
@@ -882,6 +1237,43 @@ class TestExpenseClaim(HRMSTestSuite):
 		self.assertEqual(gain_loss_jv.total_debit, 2100)
 		self.assertEqual(gain_loss_jv.total_credit, 2100)
 
+	def test_no_exchange_gain_loss_when_advance_exchange_rate_missing(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			get_advances_for_claim,
+			make_employee_advance,
+			make_payment_entry,
+		)
+
+		employee = make_employee("test_advance_claim_missing_exchange_rate@example.com", "_Test Company")
+		advance = make_employee_advance(employee)
+		self.assertEqual(advance.status, "Unpaid")
+
+		make_payment_entry(advance, advance.advance_amount)
+		advance.reload()
+		self.assertEqual(advance.status, "Paid")
+
+		claim = make_expense_claim(
+			get_payable_account("_Test Company"),
+			advance.advance_amount,
+			advance.advance_amount,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			employee=employee,
+			do_not_submit=True,
+		)
+
+		claim = get_advances_for_claim(claim, advance.name)
+		for claim_advance in claim.advances:
+			claim_advance.exchange_rate = 0
+
+		claim.save().submit()
+		claim.reload()
+
+		for claim_advance in claim.advances:
+			self.assertEqual(claim_advance.exchange_gain_loss, 0)
+		self.assertEqual(claim.total_exchange_gain_loss, 0)
+		self.assertFalse(claim.gain_loss_account)
+
 	def test_expense_claim_status_as_payment_after_unreconciliation(self):
 		from hrms.hr.doctype.employee_advance.test_employee_advance import make_payment_entry
 
@@ -936,6 +1328,53 @@ class TestExpenseClaim(HRMSTestSuite):
 		expense_claim.discard()
 		expense_claim.reload()
 		self.assertEqual(expense_claim.status, "Cancelled")
+
+	def test_expense_claim_advance_payment_via_journal_entry(self):
+		from hrms.hr.doctype.employee_advance.test_employee_advance import (
+			get_advances_for_claim,
+			make_employee_advance,
+			manual_journal_entry_for_advance,
+		)
+
+		payable_account = get_payable_account("_Test Company")
+		claim = make_expense_claim(
+			payable_account,
+			1000,
+			1000,
+			"_Test Company",
+			"Travel Expenses - _TC",
+			do_not_submit=True,
+		)
+
+		advance = make_employee_advance(claim.employee)
+		je = manual_journal_entry_for_advance(advance)
+		je.submit()
+		advance.reload()
+		self.assertEqual(advance.status, "Paid")
+
+		claim = get_advances_for_claim(claim, advance.name)
+		claim.save().submit()
+		claim.reload()
+		advance.reload()
+
+		self.assertEqual(claim.status, "Paid")
+		self.assertEqual(advance.status, "Claimed")
+		self.assertEqual(len(claim.advances), 1)
+
+		advance_row = claim.advances[0]
+		self.assertEqual(advance_row.employee_advance, advance.name)
+		self.assertEqual(advance_row.reference_type, "Journal Entry")
+		self.assertEqual(advance_row.reference_name, je.name)
+		self.assertEqual(advance_row.advance_paid, 1000)
+		self.assertEqual(advance_row.unclaimed_amount, 1000)
+		self.assertEqual(advance_row.allocated_amount, 1000)
+
+		claim.cancel()
+		claim.reload()
+		advance.reload()
+
+		self.assertEqual(advance.status, "Paid")
+		self.assertEqual(advance.claimed_amount, 0)
 
 
 def get_payable_account(company):
@@ -1040,15 +1479,51 @@ def make_claim_payment_entry(expense_claim, amount):
 
 
 def make_journal_entry(expense_claim, do_not_submit=False):
-	je_dict = make_bank_entry("Expense Claim", expense_claim.name)
-	je = frappe.get_doc(je_dict)
+	from erpnext.accounts.doctype.journal_entry.journal_entry import get_default_bank_cash_account
+
+	expense_claim = frappe.get_doc("Expense Claim", expense_claim.name)
+	default_bank_cash_account = get_default_bank_cash_account(expense_claim.company, "Bank")
+	if not default_bank_cash_account:
+		default_bank_cash_account = get_default_bank_cash_account(expense_claim.company, "Cash")
+
+	payable_amount = get_outstanding_amount_for_claim(expense_claim)
+
+	je = frappe.new_doc("Journal Entry")
+	je.voucher_type = "Bank Entry"
+	je.company = expense_claim.company
+	je.remark = "Payment against Expense Claim: " + expense_claim.name
+
+	je.append(
+		"accounts",
+		{
+			"account": expense_claim.payable_account,
+			"debit_in_account_currency": payable_amount,
+			"reference_type": "Expense Claim",
+			"party_type": "Employee",
+			"party": expense_claim.employee,
+			"cost_center": erpnext.get_default_cost_center(expense_claim.company),
+			"reference_name": expense_claim.name,
+		},
+	)
+
+	je.append(
+		"accounts",
+		{
+			"account": default_bank_cash_account.account,
+			"credit_in_account_currency": payable_amount,
+			"balance": default_bank_cash_account.balance,
+			"account_currency": default_bank_cash_account.account_currency,
+			"cost_center": erpnext.get_default_cost_center(expense_claim.company),
+			"account_type": default_bank_cash_account.account_type,
+		},
+	)
+
 	je.posting_date = nowdate()
 	je.cheque_no = random_string(5)
 	je.cheque_date = nowdate()
 
 	if not do_not_submit:
 		je.submit()
-
 	return je
 
 
@@ -1072,12 +1547,13 @@ def allocate_using_payment_reconciliation(expense_claim, employee, journal_entry
 	pr.reconcile()
 
 
-def create_project(project_name):
+def create_project(project_name, **args):
 	project = frappe.db.exists("Project", {"project_name": project_name})
 	if project:
 		return project
 
 	doc = frappe.new_doc("Project")
 	doc.project_name = project_name
+	doc.update(args)
 	doc.insert()
 	return doc.name

@@ -46,8 +46,8 @@ class EmployeeReferral(Document):
 		self.db_set("status", "Cancelled")
 
 
-@frappe.whitelist()
-def create_job_applicant(source_name, target_doc=None):
+@frappe.whitelist(methods=["POST"])
+def create_job_applicant(source_name: str, target_doc: str | Document | None = None) -> Document:
 	emp_ref = frappe.get_doc("Employee Referral", source_name)
 	# just for Api call if some set status apart from default Status
 	status = emp_ref.status
@@ -80,11 +80,8 @@ def create_job_applicant(source_name, target_doc=None):
 
 
 @frappe.whitelist()
-def create_additional_salary(doc):
-	import json
-
-	if isinstance(doc, str):
-		doc = frappe._dict(json.loads(doc))
+def create_additional_salary(employee_referral: str) -> Document:
+	doc = frappe.get_doc("Employee Referral", employee_referral)
 
 	if not frappe.db.exists("Additional Salary", {"ref_docname": doc.name}):
 		additional_salary = frappe.new_doc("Additional Salary")

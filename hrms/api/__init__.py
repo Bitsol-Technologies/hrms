@@ -61,7 +61,7 @@ def get_current_employee_info() -> dict:
 
 @frappe.whitelist()
 def get_all_employees() -> list[dict]:
-	return frappe.get_all(
+	return frappe.get_list(
 		"Employee",
 		fields=[
 			"name",
@@ -78,6 +78,24 @@ def get_all_employees() -> list[dict]:
 	)
 
 
+@frappe.whitelist()
+def get_reports_to_employee_name(employee: str) -> str:
+	reports_to = frappe.db.get_value(
+		"Employee", {"user_id": frappe.session.user, "status": "Active"}, "reports_to"
+	)
+	if not reports_to or reports_to != employee:
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	return frappe.db.get_value("Employee", employee, "employee_name") or ""
+
+
+def get_current_employee() -> str:
+	employee = get_current_employee_info().get("name")
+	if not employee:
+		frappe.throw(_("Employee not found"), frappe.PermissionError)
+	return employee
+
+
 # HR Settings
 @frappe.whitelist()
 def get_hr_settings() -> dict:
@@ -85,6 +103,8 @@ def get_hr_settings() -> dict:
 	return frappe._dict(
 		allow_employee_checkin_from_mobile_app=settings.allow_employee_checkin_from_mobile_app,
 		allow_geolocation_tracking=settings.allow_geolocation_tracking,
+		prevent_self_leave_approval=settings.prevent_self_leave_approval,
+		enable_multi_currency_expense_claim=settings.enable_multi_currency_expense_claim,
 	)
 
 
@@ -97,7 +117,7 @@ def get_unread_notifications_count() -> int:
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def mark_all_notifications_as_read() -> None:
 	frappe.db.set_value(
 		"PWA Notification",
@@ -119,7 +139,8 @@ def are_push_notifications_enabled() -> bool:
 
 # Attendance
 @frappe.whitelist()
-def get_attendance_calendar_events(employee: str, from_date: str, to_date: str) -> dict[str, str]:
+def get_attendance_calendar_events(from_date: str, to_date: str) -> dict[str, str]:
+	employee = get_current_employee()
 	holidays = get_holidays_for_calendar(employee, from_date, to_date)
 	attendance = get_attendance_for_calendar(employee, from_date, to_date)
 	events = {}
@@ -146,14 +167,11 @@ def get_attendance_for_calendar(employee: str, from_date: str, to_date: str) -> 
 
 
 def get_holidays_for_calendar(employee: str, from_date: str, to_date: str) -> list[str]:
-	if holiday_list := get_holiday_list_for_employee(employee, raise_exception=False):
-		return frappe.get_all(
-			"Holiday",
-			filters={"parent": holiday_list, "holiday_date": ["between", [from_date, to_date]]},
-			pluck="holiday_date",
-		)
+	from hrms.utils.holiday_list import get_holiday_dates_between_range
 
-	return []
+	return get_holiday_dates_between_range(
+		employee, from_date, to_date, raise_exception_for_holiday_list=False
+	)
 
 
 @frappe.whitelist()
@@ -265,6 +283,8 @@ def get_filters(
 
 @frappe.whitelist()
 def get_shift_request_approvers(employee: str) -> str | list[str]:
+	frappe.has_permission("Employee", "read", employee, throw=True)
+
 	shift_request_approver, department = frappe.get_cached_value(
 		"Employee",
 		employee,
@@ -294,7 +314,8 @@ def get_shift_request_approvers(employee: str) -> str | list[str]:
 
 
 @frappe.whitelist()
-def get_shifts(employee: str) -> list[dict[str, str]]:
+def get_shifts() -> list[dict[str, str]]:
+	employee = get_current_employee()
 	ShiftAssignment = frappe.qb.DocType("Shift Assignment")
 	ShiftType = frappe.qb.DocType("Shift Type")
 	return (
@@ -334,6 +355,7 @@ def get_leave_applications(
 		"employee_name",
 		"leave_type",
 		"status",
+		"docstatus",
 		"from_date",
 		"to_date",
 		"half_day",
@@ -365,7 +387,7 @@ def get_leave_applications(
 
 
 @frappe.whitelist()
-def get_leave_balance_map(employee: str) -> dict[str, dict[str, float]]:
+def get_leave_balance_map() -> dict[str, dict[str, float]]:
 	"""
 	Returns a map of leave type and balance details like:
 	{
@@ -374,6 +396,8 @@ def get_leave_balance_map(employee: str) -> dict[str, dict[str, float]]:
 	}
 	"""
 	from hrms.hr.doctype.leave_application.leave_application import get_leave_details
+
+	employee = get_current_employee()
 
 	date = getdate()
 	leave_map = {}
@@ -392,6 +416,8 @@ def get_leave_balance_map(employee: str) -> dict[str, dict[str, float]]:
 
 @frappe.whitelist()
 def get_holidays_for_employee(employee: str) -> list[dict]:
+	frappe.has_permission("Employee", "read", employee, throw=True)
+
 	holiday_list = get_holiday_list_for_employee(employee, raise_exception=False)
 	if not holiday_list:
 		return []
@@ -412,6 +438,7 @@ def get_holidays_for_employee(employee: str) -> list[dict]:
 
 @frappe.whitelist()
 def get_leave_approval_details(employee: str) -> dict:
+	frappe.has_permission("Employee", "read", employee, throw=True)
 	leave_approver, department = frappe.get_cached_value(
 		"Employee",
 		employee,
@@ -475,6 +502,7 @@ def get_leave_types(employee: str, date: str) -> list:
 
 	date = date or getdate()
 
+	# Get leave details validate leave access internally
 	leave_details = get_leave_details(employee, date)
 	leave_types = list(leave_details["leave_allocation"].keys()) + leave_details["lwps"]
 
@@ -495,6 +523,7 @@ def get_expense_claims(
 		"`tabExpense Claim`.posting_date",
 		"`tabExpense Claim`.employee",
 		"`tabExpense Claim`.employee_name",
+		"`tabExpense Claim`.currency",
 		"`tabExpense Claim`.approval_status",
 		"`tabExpense Claim`.status",
 		"`tabExpense Claim`.expense_approver",
@@ -526,7 +555,9 @@ def get_expense_claims(
 
 
 @frappe.whitelist()
-def get_expense_claim_summary(employee: str) -> dict:
+def get_expense_claim_summary() -> dict:
+	employee = get_current_employee()
+
 	from frappe.query_builder.functions import Sum
 
 	Claim = frappe.qb.DocType("Expense Claim")
@@ -585,6 +616,7 @@ def get_expense_claim_types() -> list[dict]:
 
 @frappe.whitelist()
 def get_expense_approval_details(employee: str) -> dict:
+	frappe.has_permission("Employee", "read", employee, throw=True)
 	expense_approver, department = frappe.get_cached_value(
 		"Employee",
 		employee,
@@ -614,7 +646,8 @@ def get_expense_approval_details(employee: str) -> dict:
 
 # Employee Advance
 @frappe.whitelist()
-def get_employee_advance_balance(employee: str) -> list[dict]:
+def get_employee_advance_balance() -> list[dict]:
+	employee = get_current_employee()
 	Advance = frappe.qb.DocType("Employee Advance")
 
 	advances = (
@@ -634,7 +667,7 @@ def get_employee_advance_balance(employee: str) -> list[dict]:
 			& (Advance.paid_amount)
 			& (Advance.employee == employee)
 			# don't need claimed & returned advances, only partly or completely paid ones
-			& (Advance.status.isin(["Paid", "Unpaid"]))
+			& (Advance.status.isin(["Paid", "Partially Paid", "Unpaid"]))
 		)
 		.orderby(Advance.posting_date, order=Order.desc)
 	).run(as_dict=True)
@@ -642,31 +675,16 @@ def get_employee_advance_balance(employee: str) -> list[dict]:
 	return advances
 
 
-@frappe.whitelist()
-def get_advance_account(company: str) -> str | None:
-	return frappe.db.get_value("Company", company, "default_employee_advance_account", cache=True)
-
-
 # Company
 @frappe.whitelist()
 def get_company_currencies() -> dict:
-	Company = frappe.qb.DocType("Company")
-	Currency = frappe.qb.DocType("Currency")
-
-	query = (
-		frappe.qb.from_(Company)
-		.join(Currency)
-		.on(Company.default_currency == Currency.name)
-		.select(
-			Company.name,
-			Company.default_currency,
-			Currency.name.as_("currency"),
-			Currency.symbol.as_("symbol"),
-		)
-	)
-
-	companies = query.run(as_dict=True)
-	return {company.name: (company.default_currency, company.symbol) for company in companies}
+	companies = frappe.get_list("Company", fields=["name", "default_currency"])
+	symbols = get_currency_symbols()
+	return {
+		company.name: (company.default_currency, symbols.get(company.default_currency))
+		for company in companies
+		if company.default_currency in symbols
+	}
 
 
 @frappe.whitelist()
@@ -680,8 +698,12 @@ def get_currency_symbols() -> dict:
 
 @frappe.whitelist()
 def get_company_cost_center_and_expense_account(company: str) -> dict:
+	frappe.has_permission("Company", "read", company, throw=True)
 	return frappe.db.get_value(
-		"Company", company, ["cost_center", "default_expense_claim_payable_account"], as_dict=True
+		"Company",
+		company,
+		["cost_center", "default_expense_claim_payable_account", "default_payroll_payable_account"],
+		as_dict=True,
 	)
 
 
@@ -705,13 +727,18 @@ def get_doctype_states(doctype: str) -> dict:
 # File
 @frappe.whitelist()
 def get_attachments(dt: str, dn: str):
-	from frappe.desk.form.load import get_attachments
+	frappe.has_permission(dt, "read", dn, throw=True)
+	return frappe.get_list(
+		"File",
+		fields=["name", "file_name", "file_url", "is_private"],
+		filters={"attached_to_name": str(dn), "attached_to_doctype": dt},
+	)
 
-	return get_attachments(dt, dn)
 
-
-@frappe.whitelist()
-def upload_base64_file(content, filename, dt=None, dn=None, fieldname=None):
+@frappe.whitelist(methods=["POST"])
+def upload_base64_file(
+	content: str, filename: str, dt: str | None = None, dn: str | None = None, fieldname: str | None = None
+):
 	import base64
 	import io
 	from mimetypes import guess_type
@@ -736,6 +763,8 @@ def upload_base64_file(content, filename, dt=None, dn=None, fieldname=None):
 	else:
 		file_content = decoded_content
 
+	frappe.has_permission(dt, "write", dn, throw=True)
+
 	return frappe.get_doc(
 		{
 			"doctype": "File",
@@ -750,8 +779,13 @@ def upload_base64_file(content, filename, dt=None, dn=None, fieldname=None):
 	).insert()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_attachment(filename: str):
+	attached_to_doctype, attached_to_name = frappe.db.get_value(
+		"File", filename, ["attached_to_doctype", "attached_to_name"]
+	)
+	if attached_to_doctype and attached_to_name:
+		frappe.has_permission(attached_to_doctype, "write", attached_to_name, throw=True)
 	frappe.delete_doc("File", filename)
 
 

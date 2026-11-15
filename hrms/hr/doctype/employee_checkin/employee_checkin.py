@@ -2,7 +2,7 @@
 # For license information, please see license.txt
 
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import frappe
 from frappe import _
@@ -130,17 +130,17 @@ class EmployeeCheckin(Document):
 			)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def add_log_based_on_employee_field(
-	employee_field_value,
-	timestamp,
-	device_id=None,
-	log_type=None,
-	skip_auto_attendance=0,
-	employee_fieldname="attendance_device_id",
-	latitude=None,
-	longitude=None,
-):
+	employee_field_value: str | int,
+	timestamp: str | datetime,
+	device_id: str | int | None = None,
+	log_type: str | None = None,
+	skip_auto_attendance: str | bool | int = 0,
+	employee_fieldname: str = "attendance_device_id",
+	latitude: str | float | None = None,
+	longitude: str | float | None = None,
+) -> Document:
 	"""Finds the relevant Employee using the employee field value and creates a Employee Checkin.
 
 	:param employee_field_value: The value to look for in employee field.
@@ -155,6 +155,12 @@ def add_log_based_on_employee_field(
 
 	if not employee_field_value or not timestamp:
 		frappe.throw(_("'employee_field_value' and 'timestamp' are required."))
+
+	allowed_employee_fieldnames = {"name", "employee", "attendance_device_id"}
+	if employee_fieldname not in allowed_employee_fieldnames:
+		frappe.throw(
+			_("'employee_fieldname' must be one of {0}.").format(", ".join(allowed_employee_fieldnames))
+		)
 
 	employee = frappe.db.get_values(
 		"Employee",
@@ -186,7 +192,7 @@ def add_log_based_on_employee_field(
 	return doc
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def bulk_fetch_shift(checkins: list[str] | str) -> None:
 	if isinstance(checkins, str):
 		checkins = frappe.json.loads(checkins)
@@ -198,17 +204,17 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 
 
 def mark_attendance_and_link_log(
-	logs,
-	attendance_status,
-	attendance_date,
-	working_hours=None,
-	late_entry=False,
-	early_exit=False,
-	in_time=None,
-	out_time=None,
-	shift=None,
-	overtime_type=None,
-):
+	logs: list[Document],
+	attendance_status: str,
+	attendance_date: str | date,
+	working_hours: float | None = None,
+	late_entry: int | bool = False,
+	early_exit: int | bool = False,
+	in_time: datetime | None = None,
+	out_time: datetime | None = None,
+	shift: str | None = None,
+	overtime_type: str | None = None,
+) -> Document | None:
 	"""Creates an attendance and links the attendance to the Employee Checkin.
 	Note: If attendance is already present for the given date, the logs are marked as skipped and no exception is thrown.
 

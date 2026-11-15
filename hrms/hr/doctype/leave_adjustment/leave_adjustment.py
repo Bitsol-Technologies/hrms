@@ -1,5 +1,7 @@
 # Copyright (c) 2025, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
+import datetime
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -98,11 +100,13 @@ class LeaveAdjustment(Document):
 
 
 @frappe.whitelist()
-def get_leave_allocation_for_posting_date(employee, leave_type, posting_date):
+def get_leave_allocation_for_posting_date(
+	employee: str, leave_type: str, posting_date: str | datetime.date
+) -> list[dict]:
 	"""
 	Returns the leave allocation for the given employee, leave type and posting date.
 	"""
-	return frappe.get_all(
+	return frappe.get_list(
 		"Leave Allocation",
 		{
 			"employee": employee,
@@ -117,11 +121,13 @@ def get_leave_allocation_for_posting_date(employee, leave_type, posting_date):
 
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
-def get_allocated_leave_types(doctype, txt, searchfield, start, page_len, filters):
+def get_allocated_leave_types(
+	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict
+) -> tuple[tuple[str, str]]:
 	"""
 	Returns the leave types allocated to the given employee
 	"""
-	return frappe.get_all(
+	return frappe.get_list(
 		"Leave Allocation",
 		{
 			"employee": filters.get("employee"),

@@ -13,10 +13,8 @@ class InterviewRound(Document):
 
 
 @frappe.whitelist()
-def create_interview(doc):
-	if isinstance(doc, str):
-		doc = json.loads(doc)
-		doc = frappe.get_doc(doc)
+def create_interview(interview_round: str) -> Document:
+	doc = frappe.get_doc("Interview Round", interview_round)
 
 	interview = frappe.new_doc("Interview")
 	interview.interview_round = doc.name

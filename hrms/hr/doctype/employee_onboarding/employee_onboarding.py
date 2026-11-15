@@ -4,6 +4,7 @@
 
 import frappe
 from frappe import _
+from frappe.model.document import Document
 from frappe.model.mapper import get_mapped_doc
 
 from hrms.controllers.employee_boarding_controller import EmployeeBoardingController
@@ -21,16 +22,16 @@ class EmployeeOnboarding(EmployeeBoardingController):
 
 	def set_employee(self):
 		if not self.employee:
-			self.employee = frappe.db.get_value("Employee", {"job_applicant": self.job_applicant}, "name")
+			self.employee = frappe.db.get_value("Employee", {"job_offer": self.job_offer}, "name")
 
 	def validate_duplicate_employee_onboarding(self):
 		emp_onboarding = frappe.db.exists(
-			"Employee Onboarding", {"job_applicant": self.job_applicant, "docstatus": ("!=", 2)}
+			"Employee Onboarding", {"job_offer": self.job_offer, "docstatus": ("!=", 2)}
 		)
 		if emp_onboarding and emp_onboarding != self.name:
 			frappe.throw(
-				_("Employee Onboarding: {0} already exists for Job Applicant: {1}").format(
-					frappe.bold(emp_onboarding), frappe.bold(self.job_applicant)
+				_("Employee Onboarding: {0} already exists for Job Offer: {1}").format(
+					frappe.bold(emp_onboarding), frappe.bold(self.job_offer)
 				)
 			)
 
@@ -58,8 +59,9 @@ class EmployeeOnboarding(EmployeeBoardingController):
 	def on_cancel(self):
 		super().on_cancel()
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def mark_onboarding_as_completed(self):
+		self.check_permission("write")
 		for activity in self.activities:
 			frappe.db.set_value("Task", activity.task, "status", "Completed")
 		frappe.db.set_value("Project", self.project, "status", "Completed")
@@ -68,12 +70,13 @@ class EmployeeOnboarding(EmployeeBoardingController):
 
 
 @frappe.whitelist()
-def make_employee(source_name, target_doc=None):
+def make_employee(source_name: str, target_doc: str | Document | None = None) -> Document:
 	doc = frappe.get_doc("Employee Onboarding", source_name)
 	doc.validate_employee_creation()
 
 	def set_missing_values(source, target):
-		target.personal_email = frappe.db.get_value("Job Applicant", source.job_applicant, "email_id")
+		target.personal_email = frappe.db.get_value("Job Offer", source.job_offer, "applicant_email")
+		target.job_offer = source.job_offer
 		target.status = "Active"
 
 	doc = get_mapped_doc(

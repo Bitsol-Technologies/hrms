@@ -5,14 +5,15 @@
  "creation": "2013-02-18 17:43:12",
  "description": "Block Holidays on important days.",
  "doctype": "DocType",
+ "documentation": "https://docs.frappe.io/hr/leave-block-list",
  "document_type": "Setup",
  "engine": "InnoDB",
  "field_order": [
   "leave_block_list_name",
+  "leave_type",
+  "column_break_4",
   "company",
   "applies_to_all_departments",
-  "column_break_4",
-  "leave_type",
   "block_days",
   "add_day_wise_dates",
   "leave_block_list_dates",
@@ -86,10 +87,10 @@
    "label": "Add Day-wise Dates"
   }
  ],
- "icon": "fa fa-calendar",
+ "icon": "calendar-x",
  "idx": 1,
  "links": [],
- "modified": "2024-03-27 13:10:00.587073",
+ "modified": "2026-10-05 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Leave Block List",
@@ -104,8 +105,19 @@
    "role": "HR User",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "ASC",
  "states": []

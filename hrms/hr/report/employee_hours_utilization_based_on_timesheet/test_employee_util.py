@@ -1,35 +1,35 @@
+from unittest.mock import patch
+
 import frappe
-from frappe.tests import IntegrationTestCase
 from frappe.utils.make_random import get_random
 
 from erpnext.projects.doctype.project.test_project import make_project
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
 from hrms.hr.report.employee_hours_utilization_based_on_timesheet.employee_hours_utilization_based_on_timesheet import (
+	EmployeeHoursReport,
 	execute,
 )
+from hrms.tests.utils import HRMSTestSuite
 
 
-class TestEmployeeUtilization(IntegrationTestCase):
-	@classmethod
-	def setUpClass(cls):
-		super().setUpClass()
+class TestEmployeeUtilization(HRMSTestSuite):
+	def setUp(self):
 		# Create test employee
-		cls.test_emp1 = make_employee("test1@employeeutil.com", "_Test Company")
-		cls.test_emp2 = make_employee("test2@employeeutil.com", "_Test Company")
+		self.test_emp1 = make_employee("test1@employeeutil.com", "_Test Company")
+		self.test_emp2 = make_employee("test2@employeeutil.com", "_Test Company")
 
 		# Create test project
-		cls.test_project = make_project({"project_name": "_Test Project"})
+		self.test_project = make_project({"project_name": "_Test Project"})
 
 		# Create test timesheets
-		cls.create_test_timesheets()
+		self.create_test_timesheets()
 
 		frappe.db.set_single_value("HR Settings", "standard_working_hours", 9)
 
-	@classmethod
-	def create_test_timesheets(cls):
+	def create_test_timesheets(self):
 		timesheet1 = frappe.new_doc("Timesheet")
-		timesheet1.employee = cls.test_emp1
+		timesheet1.employee = self.test_emp1
 		timesheet1.company = "_Test Company"
 
 		timesheet1.append(
@@ -47,7 +47,7 @@ class TestEmployeeUtilization(IntegrationTestCase):
 		timesheet1.submit()
 
 		timesheet2 = frappe.new_doc("Timesheet")
-		timesheet2.employee = cls.test_emp2
+		timesheet2.employee = self.test_emp2
 		timesheet2.company = "_Test Company"
 
 		timesheet2.append(
@@ -58,29 +58,12 @@ class TestEmployeeUtilization(IntegrationTestCase):
 				"is_billable": 0,
 				"from_time": "2021-04-01 13:30:00.000000",
 				"to_time": "2021-04-01 23:30:00.000000",
-				"project": cls.test_project.name,
+				"project": self.test_project.name,
 			},
 		)
 
 		timesheet2.save()
 		timesheet2.submit()
-
-	@classmethod
-	def tearDownClass(cls):
-		# Delete time logs
-		frappe.db.sql(
-			"""
-            DELETE FROM `tabTimesheet Detail`
-            WHERE parent IN (
-                SELECT name
-                FROM `tabTimesheet`
-                WHERE company = '_Test Company'
-            )
-        """
-		)
-
-		frappe.db.sql("DELETE FROM `tabTimesheet` WHERE company='_Test Company'")
-		frappe.db.sql(f"DELETE FROM `tabProject` WHERE name='{cls.test_project.name}'")
 
 	def test_utilization_report_with_required_filters_only(self):
 		filters = {"company": "_Test Company", "from_date": "2021-04-01", "to_date": "2021-04-03"}
@@ -89,6 +72,31 @@ class TestEmployeeUtilization(IntegrationTestCase):
 
 		expected_data = self.get_expected_data_for_test_employees()
 		self.assertEqual(report[1], expected_data)
+
+	def test_cancelled_timesheets_are_excluded(self):
+		timesheet = frappe.new_doc("Timesheet")
+		timesheet.employee = self.test_emp1
+		timesheet.company = "_Test Company"
+		timesheet.append(
+			"time_logs",
+			{
+				"activity_type": get_random("Activity Type"),
+				"hours": 8,
+				"is_billable": 0,
+				"from_time": "2021-04-02 09:00:00",
+				"to_time": "2021-04-02 17:00:00",
+			},
+		)
+		timesheet.insert()
+		timesheet.submit()
+		timesheet.cancel()
+
+		filters = {"company": "_Test Company", "from_date": "2021-04-01", "to_date": "2021-04-03"}
+		report = execute(filters)
+		emp1_row = next(row for row in report[1] if row["employee"] == self.test_emp1)
+
+		self.assertEqual(emp1_row["billed_hours"], 5.0)
+		self.assertEqual(emp1_row["non_billed_hours"], 0.0)
 
 	def test_utilization_report_for_single_employee(self):
 		filters = {
@@ -169,6 +177,17 @@ class TestEmployeeUtilization(IntegrationTestCase):
 
 		for i in range(4):
 			self.assertEqual(summary[i]["value"], expected_summary_values[i])
+
+	def test_employee_metadata_is_fetched_in_one_query(self):
+		report = EmployeeHoursReport.__new__(EmployeeHoursReport)
+		report.stats_by_employee = frappe._dict({self.test_emp1: {}, self.test_emp2: {}})
+
+		with patch.object(frappe, "get_all", wraps=frappe.get_all) as get_all:
+			report.set_employee_department_and_name()
+
+		self.assertEqual(get_all.call_count, 1)
+		self.assertEqual(report.stats_by_employee[self.test_emp1]["employee_name"], "test1@employeeutil.com")
+		self.assertEqual(report.stats_by_employee[self.test_emp2]["employee_name"], "test2@employeeutil.com")
 
 	def get_expected_data_for_test_employees(self):
 		emp1_data = frappe.get_doc("Employee", self.test_emp1)

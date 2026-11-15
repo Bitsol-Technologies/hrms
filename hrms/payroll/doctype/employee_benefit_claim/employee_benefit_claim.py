@@ -92,7 +92,7 @@ class EmployeeBenefitClaim(Document):
 		).submit()
 
 	@frappe.whitelist()
-	def get_benefit_details(self):
+	def get_benefit_details(self) -> None:
 		# Fetch max benefit amount and claimable amount for the employee based on the earning component chosen
 		from hrms.payroll.doctype.employee_benefit_ledger.employee_benefit_ledger import (
 			get_max_claim_eligible,
@@ -166,8 +166,11 @@ class EmployeeBenefitClaim(Document):
 
 
 @frappe.whitelist()
-def get_benefit_components(doctype, txt, searchfield, start, page_len, filters):
+def get_benefit_components(
+	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict
+) -> list:
 	"""Fetch benefit components to choose from based on employee and date filters."""
+	frappe.has_permission("Employee", "read", filters.get("employee"), throw=True)
 	employee = filters.get("employee")
 	date = filters.get("date")
 	company = filters.get("company")

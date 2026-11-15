@@ -5,16 +5,17 @@
 		</h2>
 
 		<template v-if="settings.data?.allow_employee_checkin_from_mobile_app">
-			<div class="font-medium text-sm text-gray-500 mt-1.5" v-if="lastLog">
+			<div class="font-medium text-sm text-gray-500 mt-1.5" v-if="lastLog?.time">
 				<span>{{ __("Last {0} was at {1}", [__(lastLogType), formatTimestamp(lastLog.time)]) }}</span>
 				<span class="whitespace-pre"> &middot; </span>
 				<router-link :to="{ name: 'EmployeeCheckinListView' }" v-slot="{ navigate }">
-					<span @click="navigate" class="underline">View List</span>
+					<span @click="navigate" class="underline">{{ __("View List") }}</span>
 				</router-link>
 			</div>
 			<Button
 				class="mt-4 mb-1 drop-shadow-sm py-5 text-base"
 				id="open-checkin-modal"
+				:loading="checkins.list.loading"
 				@click="handleEmployeeCheckin"
 			>
 				<template #prefix>
@@ -77,11 +78,12 @@
 </template>
 
 <script setup>
-import { createResource, createListResource, toast, FeatherIcon } from "frappe-ui"
+import { createListResource, toast, FeatherIcon } from "frappe-ui"
 import { computed, inject, ref, onMounted, onBeforeUnmount } from "vue"
 import { IonModal, modalController } from "@ionic/vue"
 
 import { formatTimestamp } from "@/utils/formatters"
+import { settings } from "@/data/settings"
 
 const DOCTYPE = "Employee Checkin"
 
@@ -93,10 +95,6 @@ const checkinTimestamp = ref(null)
 const latitude = ref(0)
 const longitude = ref(0)
 const locationStatus = ref("")
-const settings = createResource({
-	url: "hrms.api.get_hr_settings",
-	auto: true,
-})
 
 const checkins = createListResource({
 	doctype: DOCTYPE,
@@ -109,7 +107,7 @@ const checkins = createListResource({
 checkins.reload()
 
 const lastLog = computed(() => {
-	if (checkins.list.loading || !checkins.data) return {}
+	if (!checkins.data?.length) return null
 	return checkins.data[0]
 })
 
@@ -134,7 +132,7 @@ function handleLocationSuccess(position) {
 }
 
 function handleLocationError(error) {
-	locationStatus.value = "Unable to retrieve your location"
+	locationStatus.value = __("Unable to retrieve your location")
 	if (error) locationStatus.value += `: ERROR(${error.code}): ${error.message}`
 }
 
@@ -167,7 +165,18 @@ const submitLog = (logType) => {
 			longitude: longitude.value,
 		},
 		{
-			onSuccess() {
+			onSuccess(data) {
+				if (!data?.name) {
+					toast({
+						title: __("Error"),
+						text: __("{0} failed!", [actionLabel]),
+						icon: "alert-circle",
+						position: "bottom-center",
+						iconClasses: "text-red-500",
+					})
+					return
+				}
+
 				modalController.dismiss()
 				toast({
 					title: __("Success"),
@@ -178,7 +187,7 @@ const submitLog = (logType) => {
 				})
 			},
 			onError(error) {
-				let messages = error.messages || []
+				let messages = error.messages?.length ? error.messages : [__("{0} failed!", [actionLabel])]
 
 				for (const message of messages) {
 					toast({

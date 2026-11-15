@@ -12,9 +12,6 @@ frappe.ui.form.on("Employee Advance", {
 		});
 
 		frm.set_query("advance_account", function () {
-			if (!frm.doc.employee) {
-				frappe.msgprint(__("Please select employee first"));
-			}
 			return {
 				filters: {
 					root_type: "Asset",
@@ -32,12 +29,7 @@ frappe.ui.form.on("Employee Advance", {
 			frm.doc.docstatus === 1 &&
 			flt(frm.doc.paid_amount) < flt(frm.doc.advance_amount) &&
 			frappe.model.can_create("Payment Entry") &&
-			!(
-				(frm.doc.repay_unclaimed_amount_from_salary == 1 && frm.doc.paid_amount) ||
-				(frm.doc.__onload &&
-					frm.doc.__onload.make_payment_via_journal_entry == 1 &&
-					frm.doc.paid_amount)
-			)
+			!(frm.doc.repay_unclaimed_amount_from_salary == 1 && frm.doc.paid_amount)
 		) {
 			frm.add_custom_button(
 				__("Payment"),
@@ -46,7 +38,9 @@ frappe.ui.form.on("Employee Advance", {
 				},
 				__("Create"),
 			);
-		} else if (
+		}
+
+		if (
 			frm.doc.docstatus === 1 &&
 			flt(frm.doc.claimed_amount) < flt(frm.doc.paid_amount) - flt(frm.doc.return_amount) &&
 			frappe.model.can_create("Expense Claim")
@@ -89,6 +83,14 @@ frappe.ui.form.on("Employee Advance", {
 				);
 			}
 		}
+		if (frm.doc.status === "Returned") {
+			frm.dashboard.clear_headline();
+			return;
+		}
+
+		if (frm.doc.docstatus === 1) {
+			frm.trigger("render_employee_advance_return_banner");
+		}
 	},
 
 	make_deduction_via_additional_salary: function (frm) {
@@ -105,12 +107,8 @@ frappe.ui.form.on("Employee Advance", {
 	},
 
 	make_payment_entry: function (frm) {
-		let method = "hrms.overrides.employee_payment_entry.get_payment_entry_for_employee";
-		if (frm.doc.__onload && frm.doc.__onload.make_payment_via_journal_entry) {
-			method = "hrms.hr.doctype.employee_advance.employee_advance.make_bank_entry";
-		}
 		return frappe.call({
-			method: method,
+			method: "hrms.overrides.employee_payment_entry.get_payment_entry_for_employee",
 			args: {
 				dt: frm.doc.doctype,
 				dn: frm.doc.name,
@@ -126,18 +124,7 @@ frappe.ui.form.on("Employee Advance", {
 		return frappe.call({
 			method: "hrms.hr.doctype.expense_claim.expense_claim.get_expense_claim",
 			args: {
-				advance_details: {
-					employee_name: frm.doc.employee,
-					company: frm.doc.company,
-					currency: frm.doc.currency,
-					employee_advance_name: frm.doc.name,
-					posting_date: frm.doc.posting_date,
-					paid_amount: frm.doc.paid_amount,
-					base_paid_amount: frm.doc.base_paid_amount,
-					claimed_amount: frm.doc.claimed_amount,
-					return_amount: frm.doc.return_amount,
-					payment_via_journal_entry: frm.doc.__onload.make_payment_via_journal_entry,
-				},
+				employee_advance: frm.doc.name,
 			},
 			callback: function (r) {
 				const doclist = frappe.model.sync(r.message);
@@ -147,22 +134,52 @@ frappe.ui.form.on("Employee Advance", {
 	},
 
 	make_return_entry: function (frm) {
-		frappe.call({
-			method: "hrms.hr.doctype.employee_advance.employee_advance.make_return_entry",
-			args: {
-				employee: frm.doc.employee,
-				company: frm.doc.company,
-				employee_advance_name: frm.doc.name,
-				return_amount: flt(frm.doc.paid_amount - frm.doc.claimed_amount),
-				advance_account: frm.doc.advance_account,
-				mode_of_payment: frm.doc.mode_of_payment,
-				currency: frm.doc.currency,
-			},
-			callback: function (r) {
-				const doclist = frappe.model.sync(r.message);
-				frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+		let dialog = new frappe.ui.Dialog({
+			title: __("Return Advance"),
+			fields: [
+				{
+					label: __("Bank/Cash Account"),
+					fieldname: "bank_account",
+					fieldtype: "Link",
+					options: "Account",
+					description: __(
+						"Optional. Leave blank to use the Mode of Payment set on this Advance, or the Company's Default Cash Account.",
+					),
+					get_query: () => ({
+						filters: {
+							company: frm.doc.company,
+							account_type: ["in", ["Bank", "Cash"]],
+							account_currency: frm.doc.currency,
+							is_group: 0,
+						},
+					}),
+				},
+			],
+			primary_action_label: __("Create"),
+			primary_action: (values) => {
+				dialog.hide();
+				frappe.call({
+					method: "hrms.hr.doctype.employee_advance.employee_advance.make_return_entry",
+					args: {
+						employee: frm.doc.employee,
+						company: frm.doc.company,
+						employee_advance_name: frm.doc.name,
+						return_amount: flt(
+							frm.doc.paid_amount - frm.doc.claimed_amount - frm.doc.return_amount,
+						),
+						advance_account: frm.doc.advance_account,
+						mode_of_payment: frm.doc.mode_of_payment,
+						currency: frm.doc.currency,
+						bank_account: values.bank_account,
+					},
+					callback: function (r) {
+						const doclist = frappe.model.sync(r.message);
+						frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+					},
+				});
 			},
 		});
+		dialog.show();
 	},
 
 	employee: function (frm) {
@@ -172,8 +189,55 @@ frappe.ui.form.on("Employee Advance", {
 	},
 
 	update_fields_label: function (frm) {
-		frm.set_currency_labels(["paid_amount"], frm.doc.currency);
-		frm.set_currency_labels(["base_paid_amount"], erpnext.get_currency(frm.doc.company));
+		var company_currency = erpnext.get_currency(frm.doc.company);
+		if (frm.doc.currency != company_currency) {
+			frm.set_currency_labels(["paid_amount"], frm.doc.currency);
+			frm.set_currency_labels(["base_paid_amount"], company_currency);
+		}
+		frm.toggle_display("base_paid_amount", frm.doc.currency != company_currency);
 		frm.refresh_fields();
+	},
+
+	render_employee_advance_return_banner(frm) {
+		frappe.call({
+			method: "hrms.hr.doctype.employee_advance.employee_advance.get_employee_advance_return",
+			args: {
+				employee_advance: frm.doc.name,
+			},
+			error() {
+				frm.dashboard.clear_headline();
+			},
+			callback(r) {
+				const advance_return_data = r.message || {};
+
+				if (!advance_return_data.has_return_scheduled) {
+					frm.dashboard.clear_headline();
+					return;
+				}
+
+				const filters = {
+					ref_doctype: "Employee Advance",
+					ref_docname: frm.doc.name,
+					docstatus: 1,
+				};
+
+				const url =
+					"/app/list/additional-salary?" + new URLSearchParams(filters).toString();
+
+				frm.dashboard.set_headline(
+					__(
+						"Employee Advance return is scheduled via Additional Salary: {0} | <a href='{1}'> {2} </a>",
+						[
+							format_currency(
+								advance_return_data.total_return_scheduled,
+								frm.doc.currency,
+							),
+							url,
+							__("View Additional Salary entries").bold(),
+						],
+					),
+				);
+			},
+		});
 	},
 });
