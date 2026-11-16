@@ -67,7 +67,7 @@
  "query": "SELECT\r\n\temp.employee_name AS \"employee_name\",\r\n\tSUM(CASE WHEN hr_note.type = 'Checkin' THEN 1 ELSE 0 END) AS \"checkin_reminder\",\r\n\tSUM(CASE WHEN hr_note.type = 'Clockify' THEN 1 ELSE 0 END) AS \"clockify_reminder\",\r\n\tSUM(CASE WHEN hr_note.type = 'Other' THEN 1 ELSE 0 END) AS \"other\"\r\nFROM\r\n\t`tabHR Notifications` AS hr_note\r\nJOIN\r\n\t`tabHR Notification User` AS hr_note_user ON hr_note.name = hr_note_user.parent\r\nJOIN\r\n\t`tabUser` AS usr ON hr_note_user.user = usr.name\r\nJOIN\r\n\t`tabEmployee` AS emp ON usr.name = emp.user_id\r\nWHERE\r\n\t(%(start_date)s IS NULL OR hr_note.creation >= %(start_date)s)\r\n\tAND (%(end_date)s IS NULL OR hr_note.creation <= %(end_date)s)\r\n\tAND (%(employee)s IS NULL OR %(employee)s = '' OR emp.name = %(employee)s)\r\nGROUP BY\r\n\temp.name, emp.employee_name\r\nORDER BY\r\n\temp.employee_name\r\n",
  "ref_doctype": "HR Notifications",
  "report_name": "Employee Reminder Activity",
- "report_script": "  \"filters\": [\r\n    {\r\n      \"fieldname\": \"start_date\",\r\n      \"label\": \"Start Date\",\r\n      \"fieldtype\": \"Date\",\r\n    },\r\n    {\r\n      \"fieldname\": \"end_date\",\r\n      \"label\": \"End Date\",\r\n      \"fieldtype\": \"Date\",\r\n    },\r\n    {\r\n      \"fieldname\": \"employee\",\r\n      \"label\": \"Employee\",\r\n      \"fieldtype\": \"Link\",\r\n      \"options\": \"Employee\"\r\n    }\r\n  ]\r\n\r\n",
+ "report_script": "",
  "report_type": "Script Report",
  "roles": [
   {
