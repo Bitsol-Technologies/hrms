@@ -1,0 +1,33 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "creation": "2024-08-16 18:06:30.535154",
+ "disable_prepared_report": 0,
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "json": "{\"filters\":[[\"Leave Application\",\"status\",\"=\",\"Approved\",false],[\"Leave Application\",\"from_date\",\">=\",\"2024-01-01\",false],[\"Leave Application\",\"to_date\",\"<=\",\"2024-12-31\",false]],\"fields\":[[\"employee\",\"Leave Application\"],[\"_aggregate_column\",\"Leave Application\"]],\"order_by\":\"`tabLeave Application`.`modified` desc\",\"add_totals_row\":0,\"page_length\":20,\"column_widths\":{\"employee\":120,\"_aggregate_column\":200},\"group_by\":{\"group_by\":\"`tabLeave Application`.`employee`\",\"aggregate_function\":\"count\"}}",
+ "modified": "2024-09-20 15:54:34.513149",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Leaves Availed Report",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Leave Application",
+ "report_name": "Leaves Availed Report",
+ "report_type": "Report Builder",
+ "roles": [
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "HR User"
+  },
+  {
+   "role": "System Manager"
+  }
+ ]
+}

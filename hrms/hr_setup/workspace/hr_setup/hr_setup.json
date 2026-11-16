@@ -6,7 +6,7 @@
    "label": "Department Wise Employee Count"
   }
  ],
- "content": "[{\"id\":\"1f499fc2d6\",\"type\":\"onboarding\",\"data\":{\"onboarding_name\":\"HR Onboarding\",\"col\":12}},{\"id\":\"6ff1e7c3de\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Department Wise Employee Count\",\"col\":12}},{\"id\":\"a81b2c6bd8\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Employees\",\"col\":4}},{\"id\":\"9ba6aa02f7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Employees Joining (This Quarter)\",\"col\":4}},{\"id\":\"e1432ee93d\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Employees Relieving (This Quarter)\",\"col\":4}}]",
+ "content": "[{\"id\":\"1f499fc2d6\",\"type\":\"onboarding\",\"data\":{\"onboarding_name\":\"HR Onboarding\",\"col\":12}},{\"id\":\"6ff1e7c3de\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Department Wise Employee Count\",\"col\":12}},{\"id\":\"a81b2c6bd8\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Employees\",\"col\":4}},{\"id\":\"9ba6aa02f7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Employees Joining (This Quarter)\",\"col\":4}},{\"id\":\"e1432ee93d\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Employees Relieving (This Quarter)\",\"col\":4}},{\"id\":\"b7c1e4a2f0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Checked In (Today)\",\"col\":4}},{\"id\":\"c3d9f15e7a\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"On Leave (Today)\",\"col\":4}}]",
  "creation": "2020-03-02 15:48:58.322521",
  "custom_blocks": [],
  "docstatus": 0,
@@ -18,7 +18,7 @@
  "is_hidden": 0,
  "label": "HR Setup",
  "links": [],
- "modified": "2026-10-05 12:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR Setup",
  "module_onboarding": "HR Onboarding",
@@ -35,6 +35,14 @@
   {
    "label": "Employees Relieving (This Quarter)",
    "number_card_name": "Employees Relieving (This Quarter)"
+  },
+  {
+   "label": "Checked In (Today)",
+   "number_card_name": "Employees Checked IN"
+  },
+  {
+   "label": "On Leave (Today)",
+   "number_card_name": "Today Employee on Leave"
   }
  ],
  "owner": "Administrator",
@@ -42,7 +50,20 @@
  "public": 1,
  "quick_lists": [],
  "restrict_to_domain": "",
- "roles": [],
+ "roles": [
+  {
+   "role": "HR Executive"
+  },
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "Talent and Growth Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
  "sequence_id": 1.0,
  "shortcuts": [],
  "sidebar_items": [

@@ -29,9 +29,12 @@
   "leave_approver",
   "leave_approver_name",
   "follow_via_email",
+  "team_lead",
+  "lead_name",
   "column_break_18",
   "posting_date",
   "status",
+  "reason_for_rejection",
   "sb_other_details",
   "salary_slip",
   "color",
@@ -41,12 +44,13 @@
  ],
  "fields": [
   {
+   "default": "HR-LAP-.YYYY.-",
    "fieldname": "naming_series",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Series",
    "no_copy": 1,
    "options": "HR-LAP-.YYYY.-",
-   "print_hide": 1,
    "reqd": 1,
    "set_only_once": 1
   },
@@ -147,7 +151,8 @@
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Reason"
+   "label": "Reason",
+   "reqd": 1
   },
   {
    "fieldname": "section_break_7",
@@ -158,7 +163,8 @@
    "fieldname": "leave_approver",
    "fieldtype": "Link",
    "label": "Leave Approver",
-   "options": "User"
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "leave_approver_name",
@@ -187,6 +193,7 @@
    "fieldtype": "Date",
    "label": "Posting Date",
    "no_copy": 1,
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -249,14 +256,35 @@
    "fieldname": "sb_other_details",
    "fieldtype": "Section Break",
    "label": "Other Details"
+  },
+  {
+   "default": "\"\"",
+   "depends_on": "eval:doc.status == \"Rejected\"",
+   "fieldname": "reason_for_rejection",
+   "fieldtype": "Small Text",
+   "label": "Reason For Rejection",
+   "mandatory_depends_on": "eval:doc.status == \"Rejected\""
+  },
+  {
+   "fetch_from": "employee.team_lead",
+   "fieldname": "team_lead",
+   "fieldtype": "Data",
+   "label": "Team Lead "
+  },
+  {
+   "fetch_from": "employee.team_lead_name",
+   "fieldname": "lead_name",
+   "fieldtype": "Data",
+   "label": "Lead Name"
   }
  ],
+ "grid_page_length": 50,
  "icon": "plane",
  "idx": 1,
  "is_submittable": 1,
  "links": [],
  "max_attachments": 3,
- "modified": "2026-10-05 15:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Leave Application",
@@ -351,5 +379,6 @@
  "sort_order": "DESC",
  "states": [],
  "timeline_field": "employee",
- "title_field": "employee_name"
+ "title_field": "employee_name",
+ "track_changes": 1
 }

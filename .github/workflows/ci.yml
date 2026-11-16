@@ -114,6 +114,12 @@ jobs:
           FRAPPE_USER: ${{ github.event.inputs.user }}
           FRAPPE_BRANCH: ${{ github.event.inputs.branch }}
 
+        # Add the migration step here:
+      - name: Migrate Test Site
+        run: |
+          cd ~/frappe-bench/
+          bench --site test_site migrate
+
       - name: Run Tests
         run: cd ~/frappe-bench/ && bench --site test_site run-parallel-tests --app hrms --total-builds ${{ strategy.job-total }} --build-number ${{ matrix.container }} --lightmode
         env:

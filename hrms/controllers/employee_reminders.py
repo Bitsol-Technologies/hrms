@@ -11,6 +11,10 @@ from erpnext.setup.doctype.employee.employee import get_all_employee_emails, get
 
 from hrms.hr.utils import get_holidays_for_employee
 
+# Bitsol: Email Templates (site data) used for the personal wish mails
+BIRTHDAY_WISH_TEMPLATE = "Birthday Wish Template"
+ANNIVERSARY_WISH_TEMPLATE = "Anniversary Wish Email"
+
 
 # -----------------
 # HOLIDAY REMINDERS
@@ -101,8 +105,12 @@ def send_birthday_reminders():
 		birthday_person_emails = [get_employee_email(doc) for doc in birthday_persons]
 		recipients = list(set(employee_emails) - set(birthday_person_emails))
 
-		reminder_text, message = get_birthday_reminder_text_and_message(birthday_persons)
-		send_birthday_reminder(recipients, reminder_text, birthday_persons, message, sender)
+		# Bitsol: colleagues get the reminder only if they opted in on their User record
+		filtered_recipients = get_opted_in_recipients(recipients, "is_birthday_notification_active")
+
+		if filtered_recipients:
+			reminder_text, message = get_birthday_reminder_text_and_message(birthday_persons)
+			send_birthday_reminder(filtered_recipients, reminder_text, birthday_persons, message, sender)
 
 		if len(birthday_persons) > 1:
 			# special email for people sharing birthdays
@@ -111,6 +119,58 @@ def send_birthday_reminders():
 				others = [d for d in birthday_persons if d != person]
 				reminder_text, message = get_birthday_reminder_text_and_message(others)
 				send_birthday_reminder(person_email, reminder_text, others, message, sender)
+
+		# Bitsol: personal wish mail to every birthday person
+		for bd_employee in birthday_persons:
+			send_birthday_wishes(bd_employee, sender=sender)
+
+
+def get_opted_in_recipients(recipients: list, preference_field: str) -> list:
+	"""Bitsol: keep only the recipients that are Users with `preference_field` checked.
+
+	`preference_field` is one of the Check fields the Bitsol frappe fork adds to User:
+	`is_birthday_notification_active` / `is_anniversary_notification_active`.
+	Recipients without a User record (plain employee e-mail addresses) are dropped.
+	"""
+	recipients = [email for email in recipients if email]
+	if not recipients:
+		return []
+
+	if not frappe.get_meta("User").has_field(preference_field):
+		# preference fields come from the Bitsol frappe fork; without them nobody has opted in
+		return []
+
+	return frappe.get_all(
+		"User",
+		filters={"name": ("in", recipients), preference_field: 1},
+		pluck="name",
+	)
+
+
+def send_wish_email(recipient, email_template_name: str, args: dict, sender=None):
+	"""Bitsol: send the wish Email Template to the person and log it as a system notification."""
+	if not recipient:
+		return
+
+	if not frappe.db.exists("Email Template", email_template_name):
+		# the templates are site data; a missing one must not stop the remaining reminders
+		frappe.log_error(
+			title=_("Employee Reminders"),
+			message=_("Email Template {0} not found, wish email was not sent to {1}").format(
+				email_template_name, recipient
+			),
+		)
+		return
+
+	# create_notification_log / from_users / email_template_name are Bitsol extensions of frappe.sendmail
+	frappe.sendmail(
+		sender=sender,
+		recipients=recipient,
+		create_notification_log=True,
+		from_users=["Administrator"],
+		args=args,
+		email_template_name=email_template_name,
+	)
 
 
 def get_birthday_reminder_text_and_message(birthday_persons):
@@ -141,6 +201,17 @@ def send_birthday_reminder(recipients, reminder_text, birthday_persons, message,
 			message=message,
 		),
 		header=_("Birthday Reminder 🎂"),
+		create_notification_log=True,
+		from_users=["Administrator"],
+	)
+
+
+def send_birthday_wishes(birthday_person, sender=None):
+	send_wish_email(
+		birthday_person.get("user_id"),
+		BIRTHDAY_WISH_TEMPLATE,
+		dict(birthday_person=birthday_person),
+		sender=sender,
 	)
 
 
@@ -216,8 +287,14 @@ def send_work_anniversary_reminders():
 		anniversary_person_emails = [get_employee_email(doc) for doc in anniversary_persons]
 		recipients = list(set(employee_emails) - set(anniversary_person_emails))
 
-		reminder_text = get_work_anniversary_reminder_text(anniversary_persons)
-		send_work_anniversary_reminder(recipients, reminder_text, anniversary_persons, message, sender)
+		# Bitsol: colleagues get the reminder only if they opted in on their User record
+		filtered_recipients = get_opted_in_recipients(recipients, "is_anniversary_notification_active")
+
+		if filtered_recipients:
+			reminder_text = get_work_anniversary_reminder_text(anniversary_persons)
+			send_work_anniversary_reminder(
+				filtered_recipients, reminder_text, anniversary_persons, message, sender
+			)
 
 		if len(anniversary_persons) > 1:
 			# email for people sharing work anniversaries
@@ -226,6 +303,20 @@ def send_work_anniversary_reminders():
 				others = [d for d in anniversary_persons if d != person]
 				reminder_text = get_work_anniversary_reminder_text(others)
 				send_work_anniversary_reminder(person_email, reminder_text, others, message, sender)
+
+		# Bitsol: personal wish mail to every anniversary person
+		for an_person in anniversary_persons:
+			send_anniversary_wishes(an_person, sender=sender)
+
+
+def send_anniversary_wishes(anniversary_person, sender=None):
+	number_of_years = getdate().year - anniversary_person["date_of_joining"].year
+	send_wish_email(
+		anniversary_person.get("user_id"),
+		ANNIVERSARY_WISH_TEMPLATE,
+		dict(number_of_years=number_of_years, anniversary_person=anniversary_person),
+		sender=sender,
+	)
 
 
 def get_work_anniversary_reminder_text(anniversary_persons: list) -> str:
@@ -277,6 +368,8 @@ def send_work_anniversary_reminder(
 			message=message,
 		),
 		header=_("Work Anniversary Reminder"),
+		create_notification_log=True,
+		from_users=["Administrator"],
 	)
 
 

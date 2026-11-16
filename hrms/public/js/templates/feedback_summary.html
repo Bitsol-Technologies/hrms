@@ -30,19 +30,19 @@
 			<div class="col-md-7">
 				<div
 					class="progress rating-progress-bar"
-					title="{{ reviews_per_rating[i-1] }} % of reviews are {{ i }} star"
+					title="{{ reviews_per_rating[i] }} % of reviews are {{ i }} star"
 				>
 					<div
 						class="progress-bar progress-bar-cosmetic"
 						role="progressbar"
-						aria-valuenow="{{ reviews_per_rating[i-1] }}"
+						aria-valuenow="{{ reviews_per_rating[i] }}"
 						aria-valuemin="0"
 						aria-valuemax="100"
-						style="width: {{ reviews_per_rating[i-1] }}%;"
+						style="width: {{ reviews_per_rating[i] }}%;"
 					></div>
 				</div>
 			</div>
-			<div class="col-sm-1 small">{{ reviews_per_rating[i-1] }}%</div>
+			<div class="col-sm-1 small">{{ reviews_per_rating[i] }}%</div>
 		</div>
 		{% } %}
 	</div>

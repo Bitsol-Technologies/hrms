@@ -1,0 +1,170 @@
+{
+ "app": "hrms",
+ "charts": [
+  {
+   "chart_name": "Total Working Hours",
+   "label": "Working Hours"
+  },
+  {
+   "chart_name": "Employee Reimbursement Chart",
+   "label": "Medical Availed"
+  },
+  {
+   "chart_name": "Total Leaves Balanace Summary Chart",
+   "label": "Leaves Balance"
+  }
+ ],
+ "content": "[{\"id\":\"YAGFY6T9C4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">My Dashboard</span>\",\"col\":12}},{\"id\":\"A0i6I7rqzA\",\"type\":\"card\",\"data\":{\"card_name\":\"Shortcuts\",\"col\":4}},{\"id\":\"RJqWkYFIsd\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Leaves\",\"col\":4}},{\"id\":\"M9Ek6fv54u\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Work From Home\",\"col\":4}},{\"id\":\"53T6Xjl5zF\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Stats</b></span>\",\"col\":12}},{\"id\":\"1fo_iApLJa\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Absent (This Month)\",\"col\":4}},{\"id\":\"unooIWWnf0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Present (This Month)\",\"col\":4}},{\"id\":\"OomnK34lj7\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Early Exits (This Month)\",\"col\":4}},{\"id\":\"Pjssiybs4p\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"HR Notifications(This Month)\",\"col\":4}},{\"id\":\"40xZ30Talp\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Medical</b></span>\",\"col\":12}},{\"id\":\"P-7o9g1D2X\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Allowed\",\"col\":4}},{\"id\":\"J6LNNKwuEM\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Availed\",\"col\":4}},{\"id\":\"CW0m8YosgJ\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Remaining Balance\",\"col\":4}},{\"id\":\"3Zqe-efTyS\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Medical Availed\",\"col\":12}},{\"id\":\"NnHmr2HOi0\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Leaves</b></span>\",\"col\":12}},{\"id\":\"etaEJz2A1V\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Leaves Balance\",\"col\":12}},{\"id\":\"gEQ6xJbgpV\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Working Hours\",\"col\":12}},{\"id\":\"YzRF96YRG-\",\"type\":\"card\",\"data\":{\"card_name\":\"Assesments\",\"col\":4}}]",
+ "creation": "2023-08-06 22:31:04.826393",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "dashboard-list",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "My Dashboard",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Assesments",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Appraisal",
+   "link_count": 0,
+   "link_to": "Appraisal",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Shortcuts",
+   "link_count": 6,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Check-in/Check-out",
+   "link_count": 0,
+   "link_to": "Employee Checkin",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Leave Application",
+   "link_count": 0,
+   "link_to": "Leave Application",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Attendance",
+   "link_count": 0,
+   "link_to": "Attendance",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "WFH Request",
+   "link_count": 0,
+   "link_to": "Work From Home",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reimbursements",
+   "link_count": 0,
+   "link_to": "Reimbursement",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Create Support Ticket",
+   "link_count": 0,
+   "link_to": "Issue",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-11-16 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "My Dashboard",
+ "number_cards": [
+  {
+   "label": "HR Notifications(This Month)",
+   "number_card_name": "HR Notifications(This Month)"
+  },
+  {
+   "label": "Total Present (This Month)",
+   "number_card_name": "Total Present (This Month)"
+  },
+  {
+   "label": "Early Exits (This Month)",
+   "number_card_name": "Early Exit (This Month)"
+  },
+  {
+   "label": "Allowed",
+   "number_card_name": "Medical Allowed"
+  },
+  {
+   "label": "Availed",
+   "number_card_name": "Medical Availed"
+  },
+  {
+   "label": "Total Absent (This Month)",
+   "number_card_name": "Total Absent (This Month)"
+  },
+  {
+   "label": "Remaining Balance",
+   "number_card_name": "Medical Remaining Balance"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Work From Home",
+   "label": "Work From Home"
+  },
+  {
+   "document_type": "Leave Application",
+   "label": "Leaves"
+  }
+ ],
+ "roles": [],
+ "sequence_id": 7.0,
+ "shortcuts": [],
+ "standard": 1,
+ "title": "My Dashboard",
+ "type": "Workspace"
+}

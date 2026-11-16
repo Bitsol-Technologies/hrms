@@ -4,6 +4,7 @@
  "allow_rename": 1,
  "autoname": "HR-APP-.YYYY.-.#####",
  "creation": "2013-01-29 19:25:37",
+ "default_view": "Kanban",
  "description": "Applicant for a Job",
  "doctype": "DocType",
  "documentation": "https://docs.frappe.io/hr/job-applicant",
@@ -17,11 +18,22 @@
   "phone_number",
   "column_break_3",
   "job_title",
+  "title",
   "designation",
   "country",
   "column_break_enue",
   "status",
+  "applicant_status",
   "applicant_rating",
+  "section_break_lbuh",
+  "cv_reviews",
+  "telephonic_interviewers",
+  "telephonic_reviews",
+  "screening_from",
+  "screening_to",
+  "scoring",
+  "test_hardcopy",
+  "final_result",
   "section_break_6",
   "resume_link",
   "resume_preview_html",
@@ -38,7 +50,9 @@
   "currency",
   "column_break_18",
   "lower_range",
-  "upper_range"
+  "upper_range",
+  "interview_feedback_tab",
+  "custom_interview_feedback_html"
  ],
  "fields": [
   {
@@ -46,25 +60,26 @@
    "fieldname": "applicant_name",
    "fieldtype": "Data",
    "in_global_search": 1,
+   "in_list_view": 1,
    "label": "Full Name",
-   "reqd": 1
+   "permlevel": 1
   },
   {
    "bold": 1,
    "fieldname": "email_id",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Email Address",
    "options": "Email",
-   "reqd": 1
+   "permlevel": 2
   },
   {
+   "depends_on": "eval:in_list([\"Offer Accepted\", \"Background Check\", \"Onboarding\", \"Rejected\"], doc.applicant_status)",
    "fieldname": "status",
    "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Status",
-   "options": "Open\nReplied\nShortlisted\nRejected\nHold\nAccepted",
-   "reqd": 1
+   "hidden": 1,
+   "label": "Employment Status",
+   "options": "\nOpen\nReplied\nShortlisted\nRejected\nHold\nAccepted\nActive\nProbation\nIntern"
   },
   {
    "fieldname": "column_break_3",
@@ -77,20 +92,25 @@
    "in_list_view": 1,
    "label": "Job Opening",
    "options": "Job Opening",
+   "permlevel": 1,
    "search_index": 1
   },
   {
    "fieldname": "source",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Source",
-   "options": "Job Applicant Source"
+   "options": "Job Applicant Source",
+   "permlevel": 2
   },
   {
    "depends_on": "eval: doc.source==\"Employee Referral\" ",
    "fieldname": "source_name",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Source Name",
-   "options": "Employee"
+   "options": "Employee",
+   "permlevel": 2
   },
   {
    "fieldname": "section_break_6",
@@ -109,21 +129,23 @@
   },
   {
    "fieldname": "notes",
-   "fieldtype": "Data",
+   "fieldtype": "Text",
    "label": "Notes",
-   "read_only": 1
+   "permlevel": 2
   },
   {
    "fieldname": "phone_number",
    "fieldtype": "Data",
    "label": "Phone Number",
-   "options": "Phone"
+   "options": "Phone",
+   "permlevel": 2
   },
   {
    "fieldname": "country",
    "fieldtype": "Link",
    "label": "Country",
-   "options": "Country"
+   "options": "Country",
+   "permlevel": 1
   },
   {
    "fieldname": "resume_link",
@@ -134,22 +156,25 @@
    "fieldname": "applicant_rating",
    "fieldtype": "Rating",
    "in_list_view": 1,
-   "label": "Applicant Rating"
+   "label": "Applicant Rating",
+   "permlevel": 2
   },
   {
    "fieldname": "lower_range",
    "fieldtype": "Currency",
-   "label": "Lower Range",
+   "label": "Current Salary",
    "non_negative": 1,
    "options": "currency",
+   "permlevel": 2,
    "precision": "0"
   },
   {
    "fieldname": "upper_range",
    "fieldtype": "Currency",
-   "label": "Upper Range",
+   "label": "Expected Salary",
    "non_negative": 1,
    "options": "currency",
+   "permlevel": 2,
    "precision": "0"
   },
   {
@@ -160,13 +185,16 @@
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",
-   "options": "Currency"
+   "options": "Currency",
+   "permlevel": 2
   },
   {
    "fieldname": "employee_referral",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Employee Referral",
    "options": "Employee Referral",
+   "permlevel": 2,
    "read_only": 1
   },
   {
@@ -189,7 +217,8 @@
    "fieldname": "designation",
    "fieldtype": "Link",
    "label": "Designation",
-   "options": "Designation"
+   "options": "Designation",
+   "permlevel": 1
   },
   {
    "fieldname": "column_break_enue",
@@ -211,13 +240,104 @@
    "fieldtype": "Button",
    "hidden": 1,
    "label": "Open Resume in New Tab"
+  },
+  {
+   "fieldname": "applicant_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Applicant Status",
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nCV Accepted\nCV Rejected\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Accepted\nBackground Check\nJoined\nRejected",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_break_lbuh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Lead Screening\"",
+   "fieldname": "cv_reviews",
+   "fieldtype": "Select",
+   "label": "CV Review Status",
+   "options": "\nApproved\nRejected",
+   "read_only_depends_on": "eval:in_list([\"Approved\",\"Rejected\"], doc.cv_reviews) && !frappe.user.has_role(\"HR Manager\") && !frappe.user.has_role(\"Administrator\")"
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
+   "fieldname": "telephonic_interviewers",
+   "fieldtype": "Table",
+   "ignore_user_permissions": 1,
+   "label": "Telephonic Screening Interviewers",
+   "options": "CV Reviewer",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
+   "fieldname": "telephonic_reviews",
+   "fieldtype": "Select",
+   "label": "Telephonic Screening Review Status",
+   "options": "\nApproved\nRejected",
+   "read_only_depends_on": "eval:in_list([\"Approved\",\"Rejected\"], doc.telephonic_reviews) && !frappe.user.has_role(\"HR Manager\") && !frappe.user.has_role(\"Administrator\")"
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
+   "fieldname": "scoring",
+   "fieldtype": "Table",
+   "label": "Scoring",
+   "options": "Scoring",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Test Scheduled\"",
+   "fieldname": "final_result",
+   "fieldtype": "Select",
+   "label": "Final Score",
+   "options": "\nApproved\nRejected",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "test_hardcopy",
+   "fieldtype": "Attach",
+   "label": "Test Hardcopy",
+   "permlevel": 1
+  },
+  {
+   "fetch_from": "job_title.job_title",
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Job Title"
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
+   "fieldname": "screening_from",
+   "fieldtype": "Datetime",
+   "label": "Screening From"
+  },
+  {
+   "depends_on": "eval:doc.applicant_status == \"Telephonic Screening\"",
+   "fieldname": "screening_to",
+   "fieldtype": "Datetime",
+   "label": "Screening To"
+  },
+  {
+   "fieldname": "interview_feedback_tab",
+   "fieldtype": "Tab Break",
+   "label": "Interview Feedback"
+  },
+  {
+   "fieldname": "custom_interview_feedback_html",
+   "fieldtype": "HTML",
+   "label": "Interview Feedback HTML"
   }
  ],
+ "grid_page_length": 50,
  "icon": "user-round",
  "idx": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-05 15:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Job Applicant",
@@ -257,14 +377,51 @@
    "role": "HR Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  },
+  {
+   "permlevel": 2,
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
   }
  ],
  "row_format": "Dynamic",
  "search_fields": "applicant_name, email_id, job_title, phone_number",
  "sender_field": "email_id",
  "sort_field": "creation",
- "sort_order": "ASC",
+ "sort_order": "DESC",
  "states": [],
  "subject_field": "notes",
- "title_field": "applicant_name"
+ "title_field": "applicant_name",
+ "track_changes": 1
 }

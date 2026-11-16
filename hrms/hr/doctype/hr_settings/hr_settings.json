@@ -22,6 +22,7 @@
   "column_break_hyec",
   "sender",
   "sender_email",
+  "follow_up_checkin_reminder_interval",
   "leaves_tab",
   "leave_settings_section",
   "auto_leave_encashment",
@@ -255,6 +256,12 @@
    "read_only": 1
   },
   {
+   "description": "Minutes between follow-up check-in reminder push notifications (defaults to 30 when empty)",
+   "fieldname": "follow_up_checkin_reminder_interval",
+   "fieldtype": "Int",
+   "label": "Follow-up Check-in Reminder Interval (Minutes)"
+  },
+  {
    "fieldname": "column_break_hyec",
    "fieldtype": "Column Break"
   },
@@ -390,7 +397,7 @@
  "idx": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-06 14:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR Settings",

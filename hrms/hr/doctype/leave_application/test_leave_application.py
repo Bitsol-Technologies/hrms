@@ -97,6 +97,7 @@ class TestLeaveApplication(HRMSTestSuite):
 				company="_Test Company",
 				status="Approved",
 				leave_approver="test@example.com",
+				description="_Test Reason",
 			)
 		)
 		# Application period cannot be outside leave allocation period
@@ -116,6 +117,7 @@ class TestLeaveApplication(HRMSTestSuite):
 				company="_Test Company",
 				status="Approved",
 				leave_approver="test@example.com",
+				description="_Test Reason",
 			)
 		)
 
@@ -151,6 +153,7 @@ class TestLeaveApplication(HRMSTestSuite):
 				company="_Test Company",
 				status="Approved",
 				leave_approver="test@example.com",
+				description="_Test Reason",
 			)
 		)
 		self.assertRaises(InsufficientLeaveBalanceError, leave_application.insert)
@@ -729,6 +732,7 @@ class TestLeaveApplication(HRMSTestSuite):
 				to_date="2013-02-03",
 				company="_Test Company",
 				status="Approved",
+				description="_Test Reason",
 			)
 		).insert()
 
@@ -742,6 +746,7 @@ class TestLeaveApplication(HRMSTestSuite):
 				to_date="2013-02-10",
 				company="_Test Company",
 				status="Approved",
+				description="_Test Reason",
 			)
 		).insert()
 
@@ -757,6 +762,7 @@ class TestLeaveApplication(HRMSTestSuite):
 				to_date=to_date,
 				company="_Test Company",
 				status="Approved",
+				description="_Test Reason",
 			)
 		)
 
@@ -1430,6 +1436,7 @@ class TestLeaveApplication(HRMSTestSuite):
 			to_date=previous_month_start,
 			posting_date=previous_month_end,
 			status="Approved",
+			description="_Test Reason",
 		)
 		doc.save()
 		doc.submit()

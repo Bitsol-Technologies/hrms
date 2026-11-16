@@ -102,7 +102,11 @@ jinja = {
 
 # before_install = "hrms.install.before_install"
 after_install = "hrms.install.after_install"
-after_migrate = "hrms.setup.update_select_perm_after_install"
+after_migrate = [
+	"hrms.setup.update_select_perm_after_install",
+	# Bitsol: roles and Employee custom fields that Bitsol features rely on
+	"hrms.setup.setup_bitsol_defaults",
+]
 
 setup_wizard_requires = "assets/hrms/js/setup_wizard.js"
 setup_wizard_stages = "hrms.setup_wizard.get_setup_stages"
@@ -251,25 +255,27 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	"all": [
-		"hrms.hr.doctype.interview.interview.send_interview_reminder",
-	],
+	# Bitsol: interview reminders moved to the 08:00 cron entry below
+	"all": [],
 	"hourly": [
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.trigger_emails",
 	],
 	"hourly_long": [
-		"hrms.hr.doctype.shift_type.shift_type.update_last_sync_of_checkin",
-		"hrms.hr.doctype.shift_type.shift_type.process_auto_attendance_for_all_shifts",
+		# Bitsol: last-sync auto update is switched off and auto attendance runs
+		# nightly from the 02:00 cron entry below instead of hourly
+		# "hrms.hr.doctype.shift_type.shift_type.update_last_sync_of_checkin",
+		# "hrms.hr.doctype.shift_type.shift_type.process_auto_attendance_for_all_shifts",
 		"hrms.hr.doctype.shift_schedule_assignment.shift_schedule_assignment.process_auto_shift_creation",
+		"hrms.hr.doctype.employee_checkin.employee_checkin.check_today_checkins",
 	],
 	"daily": [
 		"hrms.controllers.employee_reminders.send_birthday_reminders",
-		"hrms.controllers.employee_reminders.send_work_anniversary_reminders",
 		"hrms.hr.doctype.daily_work_summary_group.daily_work_summary_group.send_summary",
 		"hrms.hr.doctype.interview.interview.send_daily_feedback_reminder",
 		"hrms.hr.doctype.shift_assignment.shift_assignment.mark_expired_shift_assignments_as_inactive",
 		"hrms.hr.doctype.job_opening.job_opening.close_expired_job_openings",
 		"hrms.telemetry.capture_daily_attendance_pulse",
+		"hrms.hr.doctype.employee_boarding_activity.employee_boarding_activity.send_onboarding_reminder",
 	],
 	"daily_long": [
 		"hrms.hr.doctype.leave_ledger_entry.leave_ledger_entry.process_expired_allocation",
@@ -277,7 +283,29 @@ scheduler_events = {
 		"hrms.hr.utils.allocate_earned_leaves",
 	],
 	"weekly": ["hrms.controllers.employee_reminders.send_reminders_in_advance_weekly"],
-	"monthly": ["hrms.controllers.employee_reminders.send_reminders_in_advance_monthly"],
+	"monthly": [
+		"hrms.controllers.employee_reminders.send_reminders_in_advance_monthly",
+		"hrms.hr.employee_allowances_data.allowances_calculation.calculate_employee_fuel_allowance",
+	],
+	"yearly": ["hrms.hr.employee_allowances_data.allowances_calculation.reset_medical_allowances"],
+	"cron": {
+		"0 2 * * *": ["hrms.hr.doctype.shift_type.shift_type.process_auto_attendance_for_all_shifts"],
+		"*/15 * * * *": ["hrms.hr.doctype.shift_type.shift_type.notify_employees_to_checkin_or_checkout"],
+		"0 10 * * *": ["hrms.hr.doctype.work_from_home.work_from_home.send_wfh_feedback_forms"],
+		"0 8 * * *": [
+			"hrms.hr.doctype.employee_checkin.employee_checkin.send_daily_compliance_report",
+			"hrms.hr.doctype.interview.interview.send_interview_reminder",
+		],
+		"0 9 * * *": [
+			"hrms.hr.doctype.employee_checkin.employee_checkin.send_yesterday_compliance_report_to_slack",
+			"hrms.controllers.employee_reminders.send_work_anniversary_reminders",
+		],
+		"0 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_late_report_to_HR"],
+		"1 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_leave_report_to_HR"],
+		"2 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_wfh_report_to_HR"],
+		"3 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_time_report"],
+		"4 9 * * 1": ["hrms.hr.doctype.employee_checkin.employee_checkin.send_weekly_compliance_report_to_HR"],
+	},
 }
 
 advance_payment_payable_doctypes = ["Leave Encashment", "Gratuity", "Employee Advance"]
@@ -332,9 +360,13 @@ global_search_doctypes = {
 	],
 }
 
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "hrms.event.get_events"
-# }
+override_whitelisted_methods = {
+	# "frappe.desk.doctype.event.event.get_events": "hrms.event.get_events"
+	"hrms.utils.holiday_list.get_current_month_working_days": "hrms.utils.holiday_list.get_current_month_working_days",
+	"hrms.utils.holiday_list.calculate_expected_hours": "hrms.utils.holiday_list.calculate_expected_hours",
+	"hrms.utils.holiday_list.get_leave_summary": "hrms.utils.holiday_list.get_leave_summary",
+}
+
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
@@ -347,6 +379,10 @@ override_doctype_dashboards = {
 	"Timesheet": "hrms.overrides.dashboard_overrides.get_dashboard_for_timesheet",
 	"Bank Account": "hrms.overrides.dashboard_overrides.get_dashboard_for_bank_account",
 }
+permission_query_conditions = {"Training Event": "hrms.permissions.te_query"}
+
+has_permission = {"Training Event": "hrms.permissions.has_te_permission_query"}
+
 
 # exempt linked doctypes from being automatically cancelled
 #

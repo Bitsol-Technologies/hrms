@@ -1,0 +1,98 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "HR-JP-.YYYY.-.####",
+ "creation": "2024-11-19 14:11:31.923391",
+ "default_view": "Kanban",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job_opening",
+  "job_title",
+  "job_requisition",
+  "staffing_plan",
+  "status",
+  "column_break_ndra",
+  "job_applications",
+  "interviews",
+  "job_offers"
+ ],
+ "fields": [
+  {
+   "fieldname": "job_opening",
+   "fieldtype": "Link",
+   "label": "Job Opening",
+   "options": "Job Opening"
+  },
+  {
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "label": "Job Title"
+  },
+  {
+   "fieldname": "job_requisition",
+   "fieldtype": "Link",
+   "label": "Job Requisition",
+   "options": "Job Requisition"
+  },
+  {
+   "fieldname": "staffing_plan",
+   "fieldtype": "Link",
+   "label": "Staffing Plan",
+   "options": "Staffing Plan"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Requisition\nStaffing Plan Created\nJob Poster Designed\nJob Opened\nPosted on Social Media\nApplications Received\nCV Screening By HR\nCV Screening By Lead\nInterviews Ongoing\nCandidate/s Finalized\nJob Offer/s Created\nOffer Accepted\nOffer Rejected\nBackground Checks\nClosed"
+  },
+  {
+   "fieldname": "column_break_ndra",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "job_applications",
+   "fieldtype": "Link",
+   "label": "Job Applications",
+   "options": "Job Applicant"
+  },
+  {
+   "fieldname": "interviews",
+   "fieldtype": "Link",
+   "label": "Interviews",
+   "options": "Interview"
+  },
+  {
+   "fieldname": "job_offers",
+   "fieldtype": "Link",
+   "label": "Job Offers",
+   "options": "Job Offer"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2024-11-25 10:17:41.413167",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Jobs Pipeline",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

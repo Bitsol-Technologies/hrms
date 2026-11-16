@@ -301,6 +301,7 @@ class TestAttendanceRequest(HRMSTestSuite):
 				"half_day": 1,
 				"half_day_date": today,
 				"status": "Approved",
+				"description": "_Test Reason",
 			}
 		).insert()
 		leave_application.submit()

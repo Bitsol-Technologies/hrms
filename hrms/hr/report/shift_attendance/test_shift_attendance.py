@@ -6,6 +6,7 @@ from frappe.utils import format_datetime
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
 from hrms.hr.doctype.attendance.attendance import mark_attendance
+from hrms.hr.doctype.employee_checkin.test_employee_checkin import disable_bitsol_checkin_rules
 from hrms.hr.doctype.shift_type.test_shift_type import setup_shift_type
 from hrms.hr.report.shift_attendance.shift_attendance import execute
 from hrms.tests.test_utils import create_company
@@ -14,6 +15,8 @@ from hrms.tests.utils import HRMSTestSuite
 
 class TestShiftAttendance(HRMSTestSuite):
 	def setUp(self):
+		# Bitsol: the report fixtures are check-ins dated in 2023
+		disable_bitsol_checkin_rules(self)
 		create_company()
 		self.create_records()
 

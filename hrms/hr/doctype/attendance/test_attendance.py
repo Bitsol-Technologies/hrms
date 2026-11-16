@@ -36,6 +36,10 @@ from hrms.tests.utils import HRMSTestSuite, make_company_restricted_user, make_u
 
 class TestAttendance(HRMSTestSuite):
 	def setUp(self):
+		# Bitsol: some tests create check-ins at fixed times of the day (possibly in the future)
+		from hrms.hr.doctype.employee_checkin.test_employee_checkin import disable_bitsol_checkin_rules
+
+		disable_bitsol_checkin_rules(self)
 		self.holiday_list = "Salary Slip Test Holiday List"
 
 	def test_duplicate_attendance(self):

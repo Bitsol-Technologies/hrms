@@ -52,14 +52,14 @@
    "allow_in_quick_entry": 1,
    "fieldname": "skill_assessment",
    "fieldtype": "Table",
-   "options": "Skill Assessment",
-   "reqd": 1
+   "options": "Skill Assessment"
   },
   {
    "fieldname": "average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Average Rating",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -83,7 +83,9 @@
   {
    "allow_in_quick_entry": 1,
    "fieldname": "feedback",
-   "fieldtype": "Text"
+   "fieldtype": "Text",
+   "label": "Reviews",
+   "reqd": 1
   },
   {
    "fieldname": "result",
@@ -91,8 +93,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Result",
-   "options": "\nCleared\nRejected",
-   "reqd": 1
+   "options": "\nCleared\nRejected"
   },
   {
    "fieldname": "details_section",
@@ -126,7 +127,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-10-05 15:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview Feedback",

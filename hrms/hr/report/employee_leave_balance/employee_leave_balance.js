@@ -46,6 +46,13 @@ frappe.query_reports["Employee Leave Balance"] = {
 			},
 		},
 		{
+			fieldname: "user_id",
+			label: __("Employee User"),
+			fieldtype: "Link",
+			options: "User",
+			default: "",
+		},
+		{
 			fieldname: "employee_status",
 			label: __("Employee Status"),
 			fieldtype: "Select",
@@ -76,6 +83,7 @@ frappe.query_reports["Employee Leave Balance"] = {
 				from_date: today,
 				to_date: today,
 				company: frappe.defaults.get_user_default("Company"),
+				employee: frappe.session.user,
 			},
 			freeze: true,
 			callback: (data) => {

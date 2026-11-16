@@ -433,7 +433,9 @@ class SalarySlip(TransactionBase):
 			)
 
 	def add_timesheet_earning_component(self, timesheet_config):
-		self.hour_rate = flt(timesheet_config.hour_rate)
+		# Bitsol: the timesheet hour rate comes from the Employee record (Employee.hourly_rate,
+		# added by the Bitsol erpnext fork); the Salary Structure's rate is only a fallback.
+		self.hour_rate = get_employee_hourly_rate(self.employee) or flt(timesheet_config.hour_rate)
 		self.base_hour_rate = flt(self.hour_rate) * flt(self.exchange_rate)
 		self.total_working_hours = sum([d.working_hours or 0.0 for d in self.timesheets]) or 0.0
 		wages_amount = self.hour_rate * self.total_working_hours
@@ -2591,6 +2593,15 @@ def generate_password_for_pdf(policy_template, employee):
 	employee = frappe.get_cached_doc("Employee", employee)
 	values = {key: format_dates_in_system_format(value) for key, value in employee.as_dict().items()}
 	return policy_template.format(**values)
+
+
+def get_employee_hourly_rate(employee: str | None) -> float:
+	"""Bitsol: the employee's own timesheet hour rate (Employee.hourly_rate, a field added by the
+	Bitsol erpnext fork). Returns 0 when unset or when the field is not installed, so callers can
+	fall back to the Salary Structure's hour_rate."""
+	if not employee or not frappe.get_meta("Employee").has_field("hourly_rate"):
+		return 0.0
+	return flt(frappe.get_cached_value("Employee", employee, "hourly_rate"))
 
 
 def get_salary_component_data(component):

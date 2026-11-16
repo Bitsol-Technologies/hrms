@@ -21,8 +21,8 @@ class InterviewFeedback(Document):
 		from hrms.hr.doctype.skill_assessment.skill_assessment import SkillAssessment
 
 		amended_from: DF.Link | None
-		average_rating: DF.Rating
-		feedback: DF.Text | None
+		average_rating: DF.Float
+		feedback: DF.Text
 		interview: DF.Link
 		interview_type: DF.Link
 		interviewer: DF.Link
@@ -76,28 +76,44 @@ class InterviewFeedback(Document):
 			)
 
 	def calculate_average_rating(self):
+		# Bitsol: ratings are half-point Selects ("0", "0.5" ... "5"); unrated skills are ignored
 		total_rating = 0
+		valid_ratings_count = 0
 		for d in self.skill_assessment:
-			if d.rating:
-				total_rating += flt(d.rating)
+			rating = parse_rating(d.rating)
+			if rating is not None:
+				total_rating += rating
+				valid_ratings_count += 1
 
-		self.average_rating = flt(
-			total_rating / len(self.skill_assessment) if len(self.skill_assessment) else 0
-		)
+		self.average_rating = flt(total_rating / valid_ratings_count if valid_ratings_count else 0)
 
 	def update_interview_average_rating(self):
 		interview_feedback = frappe.qb.DocType("Interview Feedback")
 		query = (
 			frappe.qb.from_(interview_feedback)
-			.where((interview_feedback.interview == self.interview) & (interview_feedback.docstatus == 1))
+			.where(
+				(interview_feedback.interview == self.interview)
+				& (interview_feedback.docstatus == 1)
+				& (interview_feedback.average_rating.isnotnull())
+			)
 			.select(Avg(interview_feedback.average_rating).as_("average"))
 		)
 		data = query.run(as_dict=True)
-		average_rating = data[0].average
+		average_rating = data[0]["average"] if data and data[0] and data[0]["average"] is not None else 0.0
 
 		interview = frappe.get_doc("Interview", self.interview)
 		interview.db_set("average_rating", average_rating)
 		interview.notify_update()
+
+
+def parse_rating(rating) -> float | None:
+	"""Return the rating as a float, or None when the skill was not rated."""
+	if rating is None or (isinstance(rating, str) and not rating.strip()):
+		return None
+	try:
+		return float(rating)
+	except (TypeError, ValueError):
+		return None
 
 
 @frappe.whitelist()

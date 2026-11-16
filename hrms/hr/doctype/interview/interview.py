@@ -1,14 +1,27 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-
 import datetime
+import json
+import uuid
+
+import requests
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Avg
 from frappe.utils import cint, cstr, get_datetime, get_link_to_form, get_time, getdate, nowtime
+
+# Bitsol: Google Meet space creation (service account with domain-wide delegation)
+SCOPES = [
+	"https://www.googleapis.com/auth/meetings.space.created",
+	"https://www.googleapis.com/auth/meetings.space.readonly",
+]
+MEET_IMPERSONATED_USER = "hr@bitsol.tech"
+CALENDAR_ORGANIZER_EMAIL = "no-reply@bitsol.tech"
+CALENDAR_TIMEZONE = "Asia/Karachi"
+SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
 
 class DuplicateInterviewRoundError(frappe.ValidationError):
@@ -27,18 +40,26 @@ class Interview(Document):
 		from hrms.hr.doctype.interview_detail.interview_detail import InterviewDetail
 
 		amended_from: DF.Link | None
-		average_rating: DF.Rating
+		applicant_email: DF.Data | None
+		applicant_name: DF.Data | None
+		average_rating: DF.Float
+		calendar_event_uid: DF.Data | None
 		designation: DF.Link | None
-		expected_average_rating: DF.Rating
+		expected_average_rating: DF.Float
 		from_time: DF.Time
 		interview_details: DF.Table[InterviewDetail]
 		interview_summary: DF.Text | None
 		interview_type: DF.Link
 		job_applicant: DF.Link
 		job_opening: DF.Link | None
+		job_title: DF.Data | None
+		location: DF.Literal["Onsite", "Remote"]
+		meeting_link: DF.Data | None
 		reminded: DF.Check
+		resume_attachment: DF.Attach | None
 		resume_link: DF.Data | None
 		scheduled_on: DF.Date
+		sequence_number: DF.Int
 		status: DF.Literal["Pending", "Under Review", "Cleared", "Rejected", "Cancelled"]
 		to_time: DF.Time
 	# end: auto-generated types
@@ -53,21 +74,113 @@ class Interview(Document):
 				_("Only Interviews with Cleared or Rejected status can be submitted."),
 				title=_("Not Allowed"),
 			)
-		self.show_job_applicant_update_dialog()
+		# Bitsol: the "update Job Applicant" dialog is not shown on submit
+
+	def after_insert(self):
+		"""Bitsol: create the Google Meet link and send the calendar invite to interviewers,
+		recruiters and the candidate."""
+		meeting_link = get_meeting_link()
+		self.db_set("meeting_link", meeting_link)
+
+		# Generate and store the calendar event UID once; reschedules reuse it
+		if not self.calendar_event_uid:
+			self.db_set({"calendar_event_uid": str(uuid.uuid4()), "sequence_number": 0})
+
+		recipients = list(set(get_recipients(self.name) + get_recruiter_emails()))
+
+		try:
+			ics_file = self.create_ics_file(recipients, meeting_link)
+			attachment = {"fname": "event.ics", "fcontent": ics_file}
+
+			email_template_name = self.get_scheduling_email_template()
+			email_args = self.get_scheduling_email_args("scheduled")
+
+			# Rendered here (instead of the frappe fork's `sendmail(email_template_name=...)`)
+			# so that the same content goes to the email, Notification Log and Communication.
+			email_template = frappe.get_doc("Email Template", email_template_name)
+			subject = email_template.get_formatted_subject(email_args)
+			message = email_template.get_formatted_response(email_args)
+			email_content = frappe.render_template(email_template.response or "", email_args)
+
+			frappe.sendmail(
+				recipients=recipients,
+				subject=subject,
+				header=subject,
+				message=message,
+				attachments=[attachment],
+			)
+
+			log_subject = f"Interview Scheduled - {email_args['interview_type']}"
+			self.create_notification_logs(recipients, log_subject, email_content)
+			log_email_in_comments(
+				doc=self,
+				subject=f"Interview Scheduled – {email_args['interview_type']}",
+				html_content=email_content,
+				recipients=recipients,
+			)
+		except Exception as e:
+			frappe.log_error(message=f"Error sending email: {e}", title="Interview Email Send Error")
+
+	def get_scheduling_email_template(self) -> str:
+		return "Interview Scheduling Template" if self.location == "Remote" else "Interview on site"
+
+	def get_scheduling_email_args(self, schedule_status: str) -> dict:
+		return {
+			"name": self.applicant_name,
+			"title": self.job_title,
+			"location": self.location,
+			"date": self.scheduled_on,
+			# `interview_round` is kept for the existing Email Templates; Interview Round was
+			# merged into Interview Type in v16
+			"interview_round": self.interview_type,
+			"time": self.parse_time(self.from_time).strftime("%I:%M %p"),
+			"meeting_link": self.meeting_link,
+			"interview_type": "Remote" if self.location == "Remote" else "On-Site",
+			"schedule_status": schedule_status,
+		}
+
+	def create_notification_logs(self, recipients: list[str], subject: str, email_content: str) -> None:
+		"""In-app notification for every recipient that is a system user (not the candidate)."""
+		for user in set(recipients):
+			if not user or user == self.applicant_email or not frappe.db.exists("User", user):
+				continue
+			try:
+				frappe.get_doc(
+					{
+						"doctype": "Notification Log",
+						"type": "Alert",
+						"for_user": user,
+						"subject": subject,
+						"email_content": email_content,
+						"document_type": "Interview",
+						"document_name": self.name,
+					}
+				).insert(ignore_permissions=True)
+			except Exception:
+				frappe.log_error(title="Interview Notification Log Error")
 
 	def validate_duplicate_interview(self):
+		# Bitsol: drafts count as duplicates too, and the check is per job opening
 		duplicate_interview = frappe.db.exists(
 			"Interview",
-			{"job_applicant": self.job_applicant, "interview_type": self.interview_type, "docstatus": 1},
+			{
+				"job_applicant": self.job_applicant,
+				"interview_type": self.interview_type,
+				"job_opening": self.job_opening or ["is", "not set"],
+				"docstatus": ["in", [0, 1]],
+				"name": ["!=", self.name],
+			},
 		)
 
 		if duplicate_interview:
 			frappe.throw(
 				_(
-					"Job Applicants are not allowed to appear twice for the same Interview Type. Interview {0} already scheduled for Job Applicant {1}"
+					"Job Applicants are not allowed to appear twice for the same Interview Type. Interview {0} already scheduled for Job Applicant {1} for Job Opening {2} against ID {3}"
 				).format(
 					frappe.bold(get_link_to_form("Interview", duplicate_interview)),
 					frappe.bold(self.job_applicant),
+					frappe.bold(self.job_opening),
+					frappe.bold(self.name),
 				)
 			)
 
@@ -104,7 +217,7 @@ class Interview(Document):
 		)
 
 	def get_job_applicant_status(self) -> str | None:
-		status_map = {"Cleared": "Accepted", "Rejected": "Rejected"}
+		status_map = {"Cleared": "Active", "Rejected": "Rejected"}
 		return status_map.get(self.status, None)
 
 	@frappe.whitelist(methods=["POST"])
@@ -121,31 +234,42 @@ class Interview(Document):
 			)
 			return
 
-		original_date = self.scheduled_on
-		original_from_time = self.from_time
-		original_to_time = self.to_time
-
+		# Update interview timings in DB
 		self.db_set({"scheduled_on": scheduled_on, "from_time": from_time, "to_time": to_time})
 		self.notify_update()
 
-		recipients = get_recipients(self.name)
+		# Bitsol: resend the invite (same calendar UID, higher sequence) using the scheduling templates
+		self.reload()
+
+		recipients = list(set(get_recipients(self.name) + get_recruiter_emails()))
 
 		try:
+			interview_template = frappe.get_doc("Email Template", self.get_scheduling_email_template())
+			email_args = self.get_scheduling_email_args("rescheduled")
+			message = frappe.render_template(interview_template.response or "", email_args)
+
+			ics_file = self.create_ics_file(recipients, self.meeting_link)
+			attachment = {"fname": "event.ics", "fcontent": ics_file}
+
 			frappe.sendmail(
 				recipients=recipients,
-				subject=_("Interview: {0} Rescheduled").format(self.name),
-				message=_("Your Interview session is rescheduled from {0} {1} - {2} to {3} {4} - {5}").format(
-					original_date,
-					original_from_time,
-					original_to_time,
-					self.scheduled_on,
-					self.from_time,
-					self.to_time,
+				sender=frappe.db.get_single_value("HR Settings", "sender_email") or "",
+				subject=_("Rescheduled: {0} Interview for the position of {1} at {2}, at {3}").format(
+					self.location, self.job_title, self.scheduled_on, email_args["time"]
 				),
+				message=message,
 				reference_doctype=self.doctype,
 				reference_name=self.name,
+				attachments=[attachment],
+			)
+			log_email_in_comments(
+				doc=self,
+				subject=f"Interview Rescheduled – {email_args['interview_type']}",
+				html_content=message,
+				recipients=recipients,
 			)
 		except Exception:
+			frappe.log_error(title="Interview Reschedule Email Error")
 			frappe.msgprint(
 				_(
 					"Failed to send the Interview Reschedule notification. Please configure your email account."
@@ -157,6 +281,77 @@ class Interview(Document):
 	def on_discard(self):
 		self.db_set("status", "Cancelled")
 
+	def parse_time(self, time_str) -> datetime.time:
+		"""Accepts "HH:MM:SS[.ffffff]" strings, `datetime.time` (v16 typed endpoints) and the
+		`datetime.timedelta` values returned when the document is reloaded from the database."""
+		return get_time(time_str)
+
+	def create_ics_file(self, recipients, meeting_link):
+		event_date = getdate(self.scheduled_on)
+		start_time = datetime.datetime.combine(event_date, self.parse_time(self.from_time))
+		end_time = datetime.datetime.combine(event_date, self.parse_time(self.to_time))
+
+		# Define event details
+		event_name = f"{self.applicant_name}-({self.job_title})-{self.location} Interview"
+		event_description = "Candidate Interview"
+		timezone = CALENDAR_TIMEZONE
+
+		# Use the existing UID if available, otherwise generate a new one
+		calendar_uid = self.calendar_event_uid or frappe.db.get_value(
+			"Interview", self.name, "calendar_event_uid"
+		)
+		if not calendar_uid:
+			calendar_uid = str(uuid.uuid4())
+			self.db_set({"calendar_event_uid": calendar_uid, "sequence_number": 0})
+		else:
+			# Ensure the object has the value from the database
+			self.calendar_event_uid = calendar_uid
+
+		# Increment the sequence number so calendar clients update the same event
+		current_sequence = cint(frappe.db.get_value("Interview", self.name, "sequence_number"))
+		new_sequence = current_sequence + 1
+		self.db_set("sequence_number", new_sequence)
+
+		now = datetime.datetime.now().strftime("%Y%m%dT%H%M%SZ")
+
+		# Create ICS content
+		ics_content = f"""BEGIN:VCALENDAR
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VTIMEZONE
+TZID:{timezone}
+X-LIC-LOCATION:{timezone}
+BEGIN:STANDARD
+TZOFFSETFROM:+0500
+TZOFFSETTO:+0500
+TZNAME:PKT
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTART;TZID={timezone}:{start_time.strftime("%Y%m%dT%H%M%S")}
+DTEND;TZID={timezone}:{end_time.strftime("%Y%m%dT%H%M%S")}
+DTSTAMP:{now}
+ORGANIZER;CN=Bitsol:mailto:{CALENDAR_ORGANIZER_EMAIL}
+UID:{calendar_uid}
+SEQUENCE:{new_sequence}
+X-GOOGLE-CONFERENCE:{meeting_link or ""}
+CREATED:{now}
+DESCRIPTION:{event_description}
+LAST-MODIFIED:{now}
+STATUS:CONFIRMED
+SUMMARY:{event_name}
+TRANSP:OPAQUE
+"""
+
+		for attendee in recipients:
+			ics_content += f"""ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=TRUE;CN={attendee};X-NUM-GUESTS=0:mailto:{attendee}\n"""
+
+		ics_content += "END:VEVENT\nEND:VCALENDAR"
+		return ics_content
+
 
 @frappe.whitelist()
 def get_interviewers(interview_type: str) -> list[dict]:
@@ -164,18 +359,50 @@ def get_interviewers(interview_type: str) -> list[dict]:
 	return frappe.get_all("Interviewer", filters={"parent": interview_type}, fields=["user as interviewer"])
 
 
+def log_email_in_comments(doc, subject, html_content, recipients):
+	"""Bitsol: keep a private Communication on the document timeline for every invite sent."""
+	frappe.get_doc(
+		{
+			"doctype": "Communication",
+			"communication_type": "Communication",
+			"communication_medium": "Email",
+			"sent_or_received": "Sent",
+			"subject": subject,
+			"content": html_content,  # full HTML body
+			"reference_doctype": doc.doctype,
+			"reference_name": doc.name,
+			"recipients": ", ".join(recipients),
+			"sender": frappe.session.user,
+			"private": 1,
+		}
+	).insert(ignore_permissions=True)
+
+
 def get_recipients(name, for_feedback=0):
 	interview = frappe.get_doc("Interview", name)
-	interviewers = [d.interviewer for d in interview.interview_details]
+	# Interviewers from the Interview Details table (explicit entries)
+	details = [d.interviewer for d in interview.interview_details if d.interviewer]
+
+	# Bitsol: interviewers configured on the Interview Type (v15: Interview Round), even if
+	# they were not explicitly added to the interview
+	type_interviewers = frappe.get_all(
+		"Interviewer",
+		filters={"parent": interview.interview_type, "parenttype": "Interview Type"},
+		pluck="user",
+	)
+
+	# Combine both lists and remove duplicates
+	recipients = list({d for d in details + type_interviewers if d})
 
 	if for_feedback:
 		feedback_given_interviewers = frappe.get_all(
 			"Interview Feedback", filters={"interview": name, "docstatus": 1}, pluck="interviewer"
 		)
-		recipients = [d for d in interviewers if d not in feedback_given_interviewers]
+		recipients = [d for d in recipients if d not in feedback_given_interviewers]
 	else:
-		recipients = interviewers
-		recipients.append(frappe.db.get_value("Job Applicant", interview.job_applicant, "email_id"))
+		applicant_email = frappe.db.get_value("Job Applicant", interview.job_applicant, "email_id")
+		if applicant_email and applicant_email not in recipients:
+			recipients.append(applicant_email)
 
 	return recipients
 
@@ -195,7 +422,7 @@ def get_feedback(interview: str) -> list[dict]:
 			interview_feedback.modified.as_("added_on"),
 			interview_feedback.interviewer.as_("user"),
 			interview_feedback.feedback,
-			(interview_feedback.average_rating * 5).as_("total_score"),
+			interview_feedback.average_rating.as_("total_score"),
 			employee.employee_name.as_("reviewer_name"),
 			employee.designation.as_("reviewer_designation"),
 		)
@@ -249,6 +476,18 @@ def update_job_applicant_status(status: str, job_applicant: str):
 		)
 
 
+def get_recruiter_emails():
+	"""Bitsol: every enabled user with the Recruiter role is copied on interview mails."""
+	user_ids = list(
+		set(frappe.get_all("Has Role", filters={"role": "Recruiter", "parenttype": "User"}, pluck="parent"))
+	)
+	if not user_ids:
+		return []
+
+	users = frappe.get_all("User", filters={"name": ["in", user_ids], "enabled": 1}, fields=["email"])
+	return [user.email for user in users if user.email]
+
+
 def send_interview_reminder():
 	reminder_settings = frappe.db.get_value(
 		"HR Settings",
@@ -280,20 +519,101 @@ def send_interview_reminder():
 
 	for d in interviews:
 		doc = frappe.get_doc("Interview", d.name)
+		formatted_date = getdate(doc.scheduled_on).strftime("%B %d, %Y")  # Example: April 22, 2025
+		formatted_time = get_time(doc.from_time).strftime("%I:%M %p")  # Example: 03:27 PM
 		context = doc.as_dict()
+		context["formatted_date"] = formatted_date
+		context["formatted_time"] = formatted_time
+		# kept for Email Templates written before Interview Round was merged into Interview Type
+		context["interview_round"] = doc.interview_type
 		message = frappe.render_template(interview_template.response, context)
-		recipients = get_recipients(doc.name)
 
-		frappe.sendmail(
-			sender=reminder_settings.hiring_sender_email,
-			recipients=recipients,
-			subject=interview_template.subject,
-			message=message,
-			reference_doctype=doc.doctype,
-			reference_name=doc.name,
+		# Bitsol: interviewers who have not given feedback yet + recruiters; the candidate gets
+		# a separate reminder
+		recipients = list(set(get_recipients(doc.name, for_feedback=1) + get_recruiter_emails()))
+		if recipients:
+			frappe.sendmail(
+				sender=reminder_settings.hiring_sender_email,
+				recipients=recipients,
+				subject=interview_template.subject,
+				message=message,
+				reference_doctype=doc.doctype,
+				reference_name=doc.name,
+			)
+		send_slack_message(
+			recipients, doc.location, doc.applicant_name, doc.job_title, formatted_date, formatted_time
 		)
+		send_candidate_reminders(doc, formatted_date, formatted_time)
 
 		doc.db_set("reminded", 1)
+
+
+def send_slack_message(emails, location, applicant_name, job_title, scheduled_on, from_time):
+	"""Bitsol: Slack DM reminder. Needs `System Settings.slack_token` (Bitsol frappe fork) and the
+	`Employee.custom_slack_user_id` custom field; silently skipped when either is missing."""
+	slack_token = frappe.get_single("System Settings").get("slack_token")
+	if not slack_token or not frappe.get_meta("Employee").has_field("custom_slack_user_id"):
+		return
+
+	headers = {"Authorization": f"Bearer {slack_token}", "Content-Type": "application/json"}
+
+	for email in emails:
+		slack_user_id = frappe.db.get_value("Employee", {"user_id": email}, "custom_slack_user_id")
+		if not slack_user_id:
+			# no Employee / Slack ID linked to this user (e.g. the candidate)
+			continue
+
+		message = (
+			f"Hey <@{slack_user_id}>, Just a quick reminder — you have {location} Interview scheduled with"
+			f" {applicant_name} for the position {job_title} on {scheduled_on} {from_time}.\n"
+			"Let me know if you need anything before the call. Good luck!"
+		)
+		payload = {"channel": slack_user_id, "text": message}
+		try:
+			response = requests.post(
+				SLACK_POST_MESSAGE_URL, headers=headers, data=json.dumps(payload), timeout=10
+			)
+			if not response.ok:
+				frappe.log_error(
+					title="Interview Slack Reminder Error",
+					message=f"Slack API error for {email}: {response.text}",
+				)
+		except Exception:
+			frappe.log_error(title="Interview Slack Reminder Error")
+
+
+def send_candidate_reminders(interview, formatted_date, formatted_time):
+	if not interview.applicant_email:
+		return
+
+	try:
+		reminder_template = frappe.get_doc("Email Template", "Interview Reminder - Candidate")
+		# Prepare context for the template
+		args = {
+			"job_title": interview.job_title,
+			"applicant_name": interview.applicant_name,
+			"location": interview.location,
+			# `interview_round` is kept for the existing Email Template
+			"interview_round": interview.interview_type,
+			"interview_type": interview.interview_type,
+			"scheduled_on": formatted_date,
+			"from_time": formatted_time,
+			"meeting_link": interview.meeting_link,
+		}
+		message = frappe.render_template(reminder_template.response, args)
+		subject = frappe.render_template(reminder_template.subject, args)
+		frappe.sendmail(
+			recipients=[interview.applicant_email],
+			message=message,
+			subject=subject,
+			reference_doctype=interview.doctype,
+			reference_name=interview.name,
+		)
+	except Exception as e:
+		frappe.log_error(
+			title="Interview Candidate Reminder Error",
+			message=f"Error sending interview reminder to {interview.applicant_email}: {e}",
+		)
 
 
 def send_daily_feedback_reminder():
@@ -355,10 +675,9 @@ def get_expected_skill_set(interview_type: str) -> list[dict]:
 
 @frappe.whitelist(methods=["POST"])
 def create_interview_feedback(data: str | dict, interview_name: str, interviewer: str, job_applicant: str):
-	import json
-
 	if isinstance(data, str):
-		data = frappe._dict(json.loads(data))
+		data = json.loads(data)
+	data = frappe._dict(data)
 
 	if frappe.session.user != interviewer:
 		frappe.throw(_("Only Interviewer Are allowed to submit Interview Feedback"))
@@ -368,7 +687,8 @@ def create_interview_feedback(data: str | dict, interview_name: str, interviewer
 	interview_feedback.interviewer = interviewer
 	interview_feedback.job_applicant = job_applicant
 
-	for d in data.skill_set:
+	# Bitsol: skills are optional in the feedback dialog
+	for d in data.skill_set or []:
 		d = frappe._dict(d)
 		interview_feedback.append("skill_assessment", d)
 
@@ -476,3 +796,31 @@ def get_events(start: str, end: str, filters: str | None = None):
 		events.append(interview_data)
 
 	return events
+
+
+def get_meeting_link():
+	"""Bitsol: create a Google Meet space with the service account stored in
+	`FCM Notification Settings.google_service_account` (fcm_notification app), impersonating
+	the HR mailbox. Returns None (and tells the user) when it cannot be created."""
+	try:
+		# imported lazily so that hrms loads without the google packages installed
+		from google.apps import meet_v2
+		from google.oauth2.service_account import Credentials
+
+		server_key = frappe.db.get_single_value("FCM Notification Settings", "google_service_account")
+		if isinstance(server_key, str):
+			server_key = json.loads(server_key)
+		creds = Credentials.from_service_account_info(server_key, scopes=SCOPES)
+		impersonated_creds = creds.with_subject(MEET_IMPERSONATED_USER)
+	except Exception as e:
+		frappe.msgprint(f"Error during authorization: {e}")
+		return None
+
+	try:
+		client = meet_v2.SpacesServiceClient(credentials=impersonated_creds)
+		request = meet_v2.CreateSpaceRequest()
+		response = client.create_space(request=request)
+		return response.meeting_uri
+	except Exception as e:
+		frappe.msgprint(f"Error creating space: {e}")
+		return None

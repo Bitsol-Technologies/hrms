@@ -1,0 +1,1 @@
+{{ doc.tool_name }} assigned to {{ doc.employee_name }} for Project {{ doc.project_name }}

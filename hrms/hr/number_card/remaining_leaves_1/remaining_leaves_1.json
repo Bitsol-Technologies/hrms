@@ -1,0 +1,23 @@
+{
+ "creation": "2025-01-23 15:17:44.102893",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "dynamic_filters_json": "{\"employee\":\"frappe.session.user\"}",
+ "filters_json": "{\"from_date\":\"2025-01-01\",\"to_date\":\"2025-12-31\",\"company\":\"Bitsol Technologies\",\"employee_status\":\"Active\",\"consolidate_leave_types\":1}",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 0,
+ "is_standard": 1,
+ "label": "Remaining Leaves",
+ "modified": "2025-01-23 16:43:40.934256",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Remaining Leaves-1",
+ "owner": "Administrator",
+ "report_field": "closing_balance",
+ "report_function": "Sum",
+ "report_name": "Employee Leave Balance",
+ "show_percentage_stats": 1,
+ "stats_time_interval": "Daily",
+ "type": "Report"
+}

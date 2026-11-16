@@ -29,6 +29,8 @@ from hrms.hr.utils import (
 )
 from hrms.utils.holiday_list import get_holiday_dates_between_range
 
+WORKING_HOURS = 8
+
 
 class DuplicateAttendanceError(frappe.ValidationError):
 	pass
@@ -53,6 +55,21 @@ class Attendance(Document):
 		self.validate_overlapping_shift_attendance()
 		self.validate_employee_status()
 		self.check_leave_record()
+		self.set_expected_working_hours()
+
+	def set_expected_working_hours(self):
+		"""
+		Sets the expected_working_hours field in the Attendance document
+		based on the status field before saving.
+		"""
+		if self.status in ["Present", "Absent"]:
+			self.expected_working_hours = WORKING_HOURS  # Default for Present
+		elif self.status == "Half Day":
+			self.expected_working_hours = WORKING_HOURS / 2  # Default for Half Day
+		elif self.status == "On Leave":
+			self.expected_working_hours = 0  # Default for Leave or Absent
+		else:
+			self.expected_working_hours = None
 
 	def on_cancel(self):
 		self.unlink_attendance_from_checkins()
@@ -258,9 +275,9 @@ class Attendance(Document):
 
 @frappe.whitelist()
 def get_events(start: date | str, end: date | str, filters: str | list | None = None) -> list[dict]:
+	# Bitsol: users without an Employee record (HR / managers) still get the attendance
+	# events they are permitted to see; only the holiday overlay needs an employee.
 	employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user})
-	if not employee:
-		return []
 
 	if isinstance(filters, str):
 		import json
@@ -270,7 +287,8 @@ def get_events(start: date | str, end: date | str, filters: str | list | None = 
 		filters = []
 	filters.append(["attendance_date", "between", [get_datetime(start).date(), get_datetime(end).date()]])
 	attendance_records = add_attendance(filters)
-	add_holidays(attendance_records, start, end, employee)
+	if employee:
+		add_holidays(attendance_records, start, end, employee)
 	return attendance_records
 
 
@@ -322,6 +340,7 @@ def mark_attendance(
 	savepoint = "attendance_creation"
 
 	try:
+		in_time = out_time = frappe.utils.now_datetime()
 		frappe.db.savepoint(savepoint)
 		attendance = frappe.new_doc("Attendance")
 		attendance.update(
@@ -335,6 +354,8 @@ def mark_attendance(
 				"late_entry": late_entry,
 				"early_exit": early_exit,
 				"half_day_status": half_day_status,
+				"in_time": in_time,
+				"out_time": out_time,
 			}
 		)
 		attendance.insert()

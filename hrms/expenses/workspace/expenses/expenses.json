@@ -18,7 +18,7 @@
  "is_hidden": 0,
  "label": "Expenses",
  "links": [],
- "modified": "2026-10-05 12:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Expenses",
  "module_onboarding": "Expenses Onboarding",
@@ -41,7 +41,20 @@
  "parent_page": "",
  "public": 1,
  "quick_lists": [],
- "roles": [],
+ "roles": [
+  {
+   "role": "HR User"
+  },
+  {
+   "role": "HR Executive"
+  },
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
  "sequence_id": 6.0,
  "shortcuts": [],
  "sidebar_items": [

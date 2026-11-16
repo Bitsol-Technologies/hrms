@@ -33,6 +33,30 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "layout-dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "HR Dashboard",
+   "link_to": "HR Dashboard",
+   "link_type": "Dashboard",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "layout-dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "CEO Dashboard",
+   "link_to": "CEO",
+   "link_type": "Dashboard",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "square-user-round",
    "indent": 0,
    "is_default_module": 1,
@@ -52,6 +76,42 @@
    "label": "Organizational Chart",
    "link_to": "organizational-chart",
    "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "bell-dot",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "HR Notifications",
+   "link_to": "HR Notifications",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "receipt-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Reimbursements",
+   "link_to": "Reimbursement",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Employee Reminder Activity",
+   "link_to": "Employee Reminder Activity",
+   "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
   },
@@ -148,7 +208,7 @@
    "url": "/desk/hr-settings#employee_tab"
   }
  ],
- "modified": "2026-10-05 12:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR Setup",
  "name": "HR Setup",

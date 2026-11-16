@@ -59,6 +59,10 @@ def create_leave_type(**flags):
 
 class TestTelemetry(HRMSTestSuite):
 	def setUp(self):
+		# Bitsol: the pulse tests create check-ins on frozen (past) dates
+		from hrms.hr.doctype.employee_checkin.test_employee_checkin import disable_bitsol_checkin_rules
+
+		disable_bitsol_checkin_rules(self)
 		self.captured = []
 
 		def collect(event, app, properties=None):

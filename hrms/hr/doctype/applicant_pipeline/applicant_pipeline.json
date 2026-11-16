@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-02-06 11:09:01.302924",
+ "default_view": "Kanban",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "applicant_name",
+  "job_id",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "applicant_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Applicant Name",
+   "options": "Job Applicant"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Applied\nHR Screening\nLead Screening\nTelephonic Screening\nSchedule Test\nTest Scheduled\nSchedule First Interview\nFirst Interview Scheduled\nSchedule Second Interview\nSecond Interview Scheduled\nAssignment Submission\nSchedule Final Interview\nFinal Interview Scheduled\nOffer Decision & Preparation\nOffer Acceptance\nBackground Check\nOnboarding\nRejected"
+  },
+  {
+   "fetch_from": "applicant_name.job_title",
+   "fieldname": "job_id",
+   "fieldtype": "Link",
+   "label": "Job ID",
+   "options": "Job Opening",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "link_doctype": "Interview Feedback",
+   "link_fieldname": "interview"
+  }
+ ],
+ "modified": "2025-02-13 13:43:15.000150",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Applicant Pipeline",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

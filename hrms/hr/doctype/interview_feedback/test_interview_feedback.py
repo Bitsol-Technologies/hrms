@@ -25,7 +25,7 @@ class TestInterviewFeedback(HRMSTestSuite):
 		create_skill_set(["Leadership"])
 
 		interview_feedback = create_interview_feedback(interview.name, interviewer, skill_ratings)
-		interview_feedback.append("skill_assessment", {"skill": "Leadership", "rating": 0.8})
+		interview_feedback.append("skill_assessment", {"skill": "Leadership", "rating": "4"})
 		frappe.set_user(interviewer)
 
 		self.assertRaises(frappe.ValidationError, interview_feedback.save)
@@ -75,6 +75,8 @@ def create_interview_feedback(interview, interviewer, skills_ratings):
 	interview_feedback.interview = interview
 	interview_feedback.interviewer = interviewer
 	interview_feedback.result = "Cleared"
+	# Bitsol: review text is mandatory
+	interview_feedback.feedback = "_Test Interview Feedback"
 
 	for rating in skills_ratings:
 		interview_feedback.append("skill_assessment", rating)
@@ -90,5 +92,6 @@ def get_skills_rating(interview_type):
 
 	skills = frappe.get_all("Expected Skill Set", filters={"parent": interview_type}, fields=["skill"])
 	for d in skills:
-		d["rating"] = random.random()
+		# Bitsol: half-point Select on a 0-5 scale
+		d["rating"] = random.choice(["0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5"])
 	return skills

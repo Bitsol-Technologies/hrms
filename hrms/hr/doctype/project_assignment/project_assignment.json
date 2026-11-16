@@ -1,0 +1,199 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "PROJ-PA-.YY.-.MM.-.#####",
+ "creation": "2024-10-03 11:45:14.391534",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_bndk",
+  "project",
+  "project_name",
+  "start_date",
+  "end_date",
+  "allocated_hours_daily",
+  "amended_from",
+  "column_break_qsme",
+  "employee",
+  "employee_name",
+  "employee_role",
+  "project_team_lead",
+  "status",
+  "allocated_hours_monthly",
+  "user",
+  "team_lead_user"
+ ],
+ "fields": [
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Project",
+   "options": "Project",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "employee_role",
+   "fieldtype": "Select",
+   "label": "Employee Role",
+   "options": "Backend Developer\nFrontend Developer\nQuality Assurance Engineer\nProject Manager\nTeam Lead\nHR\nGraphics Designer\nProject Coordinator\nFull Stack Developer\nDevOps Engineer\nOperations"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date "
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nInactive"
+  },
+  {
+   "fieldname": "allocated_hours_daily",
+   "fieldtype": "Float",
+   "label": "Allocated Hours (Daily)"
+  },
+  {
+   "fieldname": "allocated_hours_monthly",
+   "fieldtype": "Float",
+   "label": "Allocated Hours (Monthly) "
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Project Assignment",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "section_break_bndk",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_qsme",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "label": "Employee Name"
+  },
+  {
+   "fetch_from": "project.project_name",
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Project Name",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "project_team_lead",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Team Lead",
+   "options": "Employee"
+  },
+  {
+   "fetch_from": "employee.user_id",
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "User",
+   "options": "User"
+  },
+  {
+   "fetch_from": "project_team_lead.user_id",
+   "fieldname": "team_lead_user",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Team Lead User",
+   "options": "User",
+   "ignore_user_permissions": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [
+  {
+   "link_doctype": "Access Assignment",
+   "link_fieldname": "tool_project_assignment"
+  }
+ ],
+ "modified": "2025-01-28 15:41:17.966116",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Project Assignment",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Employee",
+   "share": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Project Manager",
+   "select": 1,
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "project_name, employee_name",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_seen": 1
+}

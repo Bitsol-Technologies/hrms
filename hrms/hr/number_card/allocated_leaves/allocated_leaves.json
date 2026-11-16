@@ -1,0 +1,22 @@
+{
+ "creation": "2023-08-24 14:42:55.499968",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "filters_json": "{\"from_date\":\"2023-01-01\",\"to_date\":\"2023-12-31\",\"company\":\"Bitsol Technologies\",\"employee_status\":\"Active\"}",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 0,
+ "is_standard": 1,
+ "label": "Allocated Leaves",
+ "modified": "2023-08-24 14:43:49.430574",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Allocated Leaves",
+ "owner": "Administrator",
+ "report_field": "leaves_allocated",
+ "report_function": "Sum",
+ "report_name": "Employee Leave Balance",
+ "show_percentage_stats": 1,
+ "stats_time_interval": "Daily",
+ "type": "Report"
+}

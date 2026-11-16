@@ -7,6 +7,11 @@ description = "Open Source HR & Payroll Software"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
+dependencies = [
+    # Bitsol: Google Meet links for interviews (hrms.hr.doctype.interview.interview.get_meeting_link)
+    "google-auth>=2.0",
+    "google-apps-meet>=0.1",
+]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

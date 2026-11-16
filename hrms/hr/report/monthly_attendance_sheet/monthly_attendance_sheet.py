@@ -531,6 +531,7 @@ def get_attendance_status_for_summarized_view(
 		+ summary.total_half_day_worked,
 		"total_leaves": summary.total_leaves + summary.total_half_day_leave,
 		"total_absent": summary.total_absent + summary.total_half_day_absent,
+		"total_work_from_home": summary.total_work_from_home,
 		"total_holidays": total_holidays,
 		"unmarked_days": total_unmarked_days,
 	}
@@ -587,6 +588,8 @@ def get_attendance_summary_and_days(employee: str, filters: Filters) -> tuple[di
 	sum_half_day_present = Sum(half_day_present_case).as_("total_half_day_present")
 
 	attendance_date_condition = get_date_condition(Attendance.attendance_date, filters)
+	work_from_home_case = frappe.qb.terms.Case().when(Attendance.status == "Work From Home", 1).else_(0)
+	sum_work_from_home = Sum(work_from_home_case).as_("total_work_from_home")
 
 	summary = (
 		frappe.qb.from_(Attendance)
@@ -598,6 +601,7 @@ def get_attendance_summary_and_days(employee: str, filters: Filters) -> tuple[di
 			sum_half_day_worked,
 			sum_half_day_present,
 			sum_half_day_absent,
+			sum_work_from_home,
 		)
 		.where(
 			(Attendance.docstatus == 1)

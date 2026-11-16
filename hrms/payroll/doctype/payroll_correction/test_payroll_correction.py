@@ -51,6 +51,7 @@ class TestPayrollCorrection(HRMSTestSuite):
 				"company": "_Test Company",
 				"status": "Approved",
 				"leave_approver": "test@example.com",
+				"description": "_Test Reason",
 			}
 		).insert()
 		leave_application.submit()

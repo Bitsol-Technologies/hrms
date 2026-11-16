@@ -1,0 +1,34 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "creation": "2025-01-28 16:31:53.788472",
+ "date_changed": "expected_end_date",
+ "days_in_advance": 1,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Project",
+ "enabled": 1,
+ "event": "Days After",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "Project {{ doc.project_name }} deadline passed 1 Day ago. Please Review\n",
+ "message_type": "Plain Text",
+ "modified": "2025-01-29 10:14:07.429212",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Project Deadline Passed",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "owner"
+  },
+  {
+   "receiver_by_document_field": "lead_user"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "Project {{ doc.project_name }} deadline passed 1 Day ago"
+}

@@ -2,22 +2,48 @@
 // MIT License. See license.txt
 
 frappe.listview_settings["Job Applicant"] = {
-	add_fields: ["status", "applicant_rating", "designation"],
+	add_fields: ["applicant_status", "status", "applicant_rating", "designation"],
 
 	onload: function () {
 		patch_kanban_dialog_for_job_applicant();
 	},
 
+	// Bitsol: the indicator follows the hiring pipeline (applicant_status), not upstream's status
 	get_indicator: function (doc) {
-		if (doc.status === "Accepted") {
-			return [__(doc.status), "green", "status,=," + doc.status];
-		} else if (doc.status === "Shortlisted") {
-			return [__(doc.status), "blue", "status,=," + doc.status];
-		} else if (["Open", "Replied"].includes(doc.status)) {
-			return [__(doc.status), "orange", "status,=," + doc.status];
-		} else if (["Hold", "Rejected"].includes(doc.status)) {
-			return [__(doc.status), "red", "status,=," + doc.status];
-		}
+		const status = doc.applicant_status;
+		if (!status) return;
+
+		const accepted_statuses = [
+			"CV Accepted",
+			"Offer Decision & Preparation",
+			"Offer Accepted",
+			"Background Check",
+			"Onboarding",
+			"Joined",
+		];
+		const rejected_statuses = ["CV Rejected", "Rejected"];
+		const in_progress_statuses = [
+			"Applied",
+			"HR Screening",
+			"Lead Screening",
+			"Telephonic Screening",
+			"Schedule Test",
+			"Test Scheduled",
+			"Schedule First Interview",
+			"First Interview Scheduled",
+			"Schedule Second Interview",
+			"Second Interview Scheduled",
+			"Assignment Submission",
+			"Schedule Final Interview",
+			"Final Interview Scheduled",
+		];
+
+		let color = "gray";
+		if (in_progress_statuses.includes(status)) color = "orange";
+		else if (accepted_statuses.includes(status)) color = "green";
+		else if (rejected_statuses.includes(status)) color = "red";
+
+		return [__(status), color, "applicant_status,=," + status];
 	},
 };
 
@@ -36,7 +62,11 @@ document.addEventListener(
 		e.preventDefault();
 
 		const column_title = add_card_btn.closest(".kanban-column").dataset.columnValue;
-		frappe.new_doc("Job Applicant", { status: column_title });
+		// Bitsol: boards are grouped by applicant_status (see create_kanban_board); honour the
+		// field of the board that is open so boards on other Select fields keep working.
+		const board_field =
+			(window.cur_list && cur_list.board && cur_list.board.field_name) || "applicant_status";
+		frappe.new_doc("Job Applicant", { [board_field]: column_title });
 	},
 	true, // capture phase
 );

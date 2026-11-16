@@ -11,7 +11,10 @@
   "interview_details_section",
   "interview_type",
   "job_applicant",
+  "applicant_name",
+  "applicant_email",
   "job_opening",
+  "job_title",
   "designation",
   "resume_link",
   "column_break_4",
@@ -19,10 +22,16 @@
   "scheduled_on",
   "from_time",
   "to_time",
+  "location",
+  "meeting_link",
+  "calendar_event_uid",
+  "sequence_number",
+  "resume_attachment",
   "section_break_hqvh",
   "interview_details",
   "ratings_section",
   "expected_average_rating",
+  "custom_feedback_button",
   "column_break_12",
   "average_rating",
   "section_break_13",
@@ -46,6 +55,7 @@
    "fetch_from": "job_applicant.job_title",
    "fieldname": "job_opening",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Job Opening",
    "options": "Job Opening",
    "read_only": 1
@@ -68,7 +78,7 @@
   {
    "allow_on_submit": 1,
    "fieldname": "average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Obtained Average Rating",
    "read_only": 1
@@ -87,6 +97,7 @@
    "fetch_if_empty": 1,
    "fieldname": "resume_link",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Resume link"
   },
   {
@@ -97,7 +108,7 @@
   {
    "fetch_from": "interview_type.expected_average_rating",
    "fieldname": "expected_average_rating",
-   "fieldtype": "Rating",
+   "fieldtype": "Float",
    "label": "Expected Average Rating",
    "read_only": 1
   },
@@ -105,6 +116,7 @@
    "collapsible": 1,
    "fieldname": "section_break_13",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Interview Summary"
   },
   {
@@ -128,14 +140,15 @@
    "no_copy": 1,
    "options": "Interview",
    "print_hide": 1,
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "scheduled_on",
    "fieldtype": "Date",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Scheduled On",
+   "label": "Interview Date",
    "reqd": 1,
    "set_only_once": 1
   },
@@ -180,8 +193,11 @@
    "allow_on_submit": 1,
    "fieldname": "interview_details",
    "fieldtype": "Table",
+   "ignore_user_permissions": 1,
    "label": "Interviewers",
-   "options": "Interview Detail"
+   "options": "Interview Detail",
+   "read_only_depends_on": "eval:frappe.user.has_role('Interviewer')",
+   "reqd": 1
   },
   {
    "fieldname": "interview_type",
@@ -191,18 +207,75 @@
    "label": "Interview Type",
    "options": "Interview Type",
    "reqd": 1
+  },
+  {
+   "fetch_from": "job_applicant.applicant_name",
+   "fieldname": "applicant_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Applicant Name"
+  },
+  {
+   "fetch_from": "job_opening.job_title",
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Job Title"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Select",
+   "label": "Location",
+   "options": "Onsite\nRemote",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meeting_link",
+   "fieldtype": "Data",
+   "label": "Meeting Link",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calendar_event_uid",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Calendar Event UID",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "sequence_number",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Sequence Number",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_applicant.email_id",
+   "fieldname": "applicant_email",
+   "fieldtype": "Data",
+   "label": "Applicant Email"
+  },
+  {
+   "fetch_from": "job_applicant.resume_attachment",
+   "fieldname": "resume_attachment",
+   "fieldtype": "Attach",
+   "label": "Resume Attachment"
+  },
+  {
+   "fieldname": "custom_feedback_button",
+   "fieldtype": "HTML",
+   "label": "Submit Feedback"
   }
  ],
+ "grid_page_length": 50,
  "icon": "messages-square",
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
- "links": [
-  {
-   "link_doctype": "Interview Feedback",
-   "link_fieldname": "interview"
-  }
- ],
- "modified": "2026-10-05 15:00:00.000000",
+ "links": [],
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Interview",

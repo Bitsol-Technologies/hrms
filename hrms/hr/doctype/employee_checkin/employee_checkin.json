@@ -55,7 +55,8 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Log Type",
-   "options": "\nIN\nOUT"
+   "options": "\nIN\nOUT",
+   "reqd": 1
   },
   {
    "fieldname": "shift",
@@ -75,27 +76,29 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Time",
-   "permlevel": 1,
-   "read_only_depends_on": "eval:doc.attendance;",
    "reqd": 1
   },
   {
    "fieldname": "device_id",
    "fieldtype": "Data",
-   "label": "Location / Device ID"
+   "hidden": 1,
+   "label": "Location / Device ID",
+   "permlevel": 1
   },
   {
    "default": "0",
    "fieldname": "skip_auto_attendance",
    "fieldtype": "Check",
-   "label": "Skip Auto Attendance"
+   "hidden": 1,
+   "label": "Skip Auto Attendance",
+   "permlevel": 1
   },
   {
    "fieldname": "attendance",
    "fieldtype": "Link",
    "label": "Attendance Marked",
    "options": "Attendance",
-   "read_only": 1
+   "permlevel": 1
   },
   {
    "fieldname": "shift_start",
@@ -187,7 +190,7 @@
  ],
  "icon": "fingerprint-pattern",
  "links": [],
- "modified": "2026-10-19 13:00:00.000000",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "Employee Checkin",
@@ -284,7 +287,7 @@
  ],
  "row_format": "Dynamic",
  "sort_field": "creation",
- "sort_order": "ASC",
+ "sort_order": "DESC",
  "states": [],
  "title_field": "employee_name",
  "track_changes": 1

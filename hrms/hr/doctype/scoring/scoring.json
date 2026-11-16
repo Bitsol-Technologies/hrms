@@ -1,0 +1,53 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-02-19 17:45:14.295747",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "feedback",
+  "marks",
+  "assignee"
+ ],
+ "fields": [
+  {
+   "fieldname": "feedback",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Feedback",
+   "options": "\nRecommended\nNot Recommended",
+   "reqd": 1
+  },
+  {
+   "fieldname": "marks",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Marks",
+   "non_negative": 1,
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "fieldname": "assignee",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_list_view": 1,
+   "label": "Assignee",
+   "options": "Employee",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-03-28 11:49:31.396462",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Scoring",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

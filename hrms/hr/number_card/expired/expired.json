@@ -1,0 +1,23 @@
+{
+ "color": "#60e074",
+ "creation": "2023-08-07 05:58:47.381144",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "filters_json": "{\"from_date\":\"2022-01-01\",\"to_date\":\"2022-12-31\",\"company\":\"Bitsol Technologies\",\"employee_status\":\"Active\"}",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Expired Leaves",
+ "modified": "2023-08-07 06:09:21.507333",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Expired",
+ "owner": "Administrator",
+ "report_field": "leaves_expired",
+ "report_function": "Sum",
+ "report_name": "Employee Leave Balance",
+ "show_percentage_stats": 1,
+ "stats_time_interval": "Daily",
+ "type": "Report"
+}

@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "ECR-EMP-.YYYY.-.#####",
+ "creation": "2025-04-17 14:20:06.370134",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "employee_email",
+  "total_hours",
+  "reason",
+  "leave_type",
+  "column_break_rfdl",
+  "report_date",
+  "checkin",
+  "checkout",
+  "expected_hours",
+  "compliant",
+  "late_entry",
+  "wfh"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee"
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Employee Name"
+  },
+  {
+   "fetch_from": "employee.user_id",
+   "fieldname": "employee_email",
+   "fieldtype": "Data",
+   "label": "Employee Email"
+  },
+  {
+   "fieldname": "column_break_rfdl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "report_date",
+   "fieldtype": "Date",
+   "label": "Report Date",
+   "read_only": 1
+  },
+  {
+   "default": "N/A",
+   "fieldname": "checkin",
+   "fieldtype": "Data",
+   "label": "Checkin",
+   "read_only": 1
+  },
+  {
+   "default": "N/A",
+   "fieldname": "checkout",
+   "fieldtype": "Data",
+   "label": "Checkout",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Data",
+   "label": "Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_hours",
+   "fieldtype": "Time",
+   "label": "Total Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_hours",
+   "fieldtype": "Time",
+   "label": "Expected Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "late_entry",
+   "fieldtype": "Check",
+   "label": "Late Entry",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "wfh",
+   "fieldtype": "Check",
+   "label": "Work From Home",
+   "read_only": 1
+  },
+  {
+   "fieldname": "leave_type",
+   "fieldtype": "Select",
+   "label": "Leave Type",
+   "options": "\nOn Leave\nHalf Day",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "compliant",
+   "fieldtype": "Check",
+   "label": "Compliant",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "link_doctype": "Timesheet",
+   "link_fieldname": "employee_compliance_report"
+  }
+ ],
+ "modified": "2026-11-16 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Employee Compliance Report",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "report_date"
+}

@@ -2,7 +2,89 @@ from datetime import date
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, formatdate, get_link_to_form, getdate
+from frappe.query_builder.functions import Sum
+from frappe.utils import add_days, formatdate, get_link_to_form, getdate, nowdate
+
+
+def is_holiday(holiday_list: str | None, check_date: date | str) -> bool:
+	"""Bitsol: True if `check_date` is a holiday in `holiday_list`"""
+	if not holiday_list:
+		return False
+
+	return bool(
+		frappe.db.exists("Holiday", {"parent": holiday_list, "holiday_date": getdate(check_date)})
+	)
+
+
+def get_session_employee() -> str | None:
+	"""Bitsol: Employee linked to the logged-in user"""
+	return frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+
+
+def get_employee_holiday_dates(
+	employee: str, start_date: date, end_date: date, company: str | None = None
+) -> set[date]:
+	"""
+	Bitsol: holiday dates for the employee in the range.
+	v16 resolves holiday lists via Holiday List Assignment (honouring changes within the range);
+	falls back to the company's default holiday list when nothing is assigned.
+	"""
+	holidays = get_holiday_dates_between_range(
+		employee, start_date, end_date, raise_exception_for_holiday_list=False
+	)
+	if not holidays:
+		company = company or frappe.db.get_value("Employee", employee, "company")
+		holiday_list = company and frappe.db.get_value("Company", company, "default_holiday_list")
+		if holiday_list:
+			holidays = get_holiday_dates_between(holiday_list, start_date, end_date)
+
+	return {getdate(d) for d in holidays or []}
+
+
+@frappe.whitelist()
+def get_current_month_working_days(company: str, start_date: str, end_date: str) -> dict:
+	"""Bitsol mobile-app API: working days / leave days of the session user's employee in a range"""
+	employee = get_session_employee()
+
+	if not employee:
+		frappe.throw(_("Employee record not found for the logged-in user"))
+
+	start_date = getdate(start_date)
+	end_date = getdate(end_date)
+	holiday_dates = get_employee_holiday_dates(employee, start_date, end_date, company)
+
+	total_working_days_count = 0
+	current_date = start_date
+
+	while current_date <= end_date:
+		# Count weekdays and non-holidays as working days
+		if current_date not in holiday_dates and current_date.weekday() < 5:
+			total_working_days_count += 1
+		current_date = add_days(current_date, 1)
+
+	leaves = frappe.db.get_all(
+		"Attendance",
+		filters={
+			"employee": employee,
+			"status": ["in", ["On Leave", "Half Day"]],
+			"attendance_date": ["between", [start_date, end_date]],
+			"docstatus": 1,
+		},
+		fields=["name", "employee", "status", "attendance_date"],
+	)
+	leave_days_count = 0
+	for leave in leaves:
+		if leave["status"] == "Half Day":
+			leave_days_count += 0.5
+		else:
+			leave_days_count += 1
+
+	actual_working_days_count = total_working_days_count - leave_days_count
+	return {
+		"total_working_days": total_working_days_count,
+		"off_days": leave_days_count,
+		"employee_working_days": actual_working_days_count,
+	}
 
 
 def get_holiday_dates_between(
@@ -413,3 +495,77 @@ def invalidate_cache(doc, method=None):
 	from hrms.payroll.doctype.salary_slip.salary_slip import HOLIDAYS_BETWEEN_DATES
 
 	frappe.cache().delete_value(HOLIDAYS_BETWEEN_DATES)
+
+
+@frappe.whitelist()
+def get_leave_summary(start_date: str, end_date: str) -> dict:
+	"""Bitsol mobile-app API: allocated / availed / remaining leaves of the session user's employee"""
+	employee = get_session_employee()
+
+	if not employee:
+		frappe.throw(_("No Employee record found for the current user."))
+
+	# Total allocated leaves for allocations lying within the given date range
+	LeaveAllocation = frappe.qb.DocType("Leave Allocation")
+	total_allocated_leaves = (
+		frappe.qb.from_(LeaveAllocation)
+		.select(Sum(LeaveAllocation.total_leaves_allocated))
+		.where(
+			(LeaveAllocation.employee == employee)
+			& (LeaveAllocation.from_date >= start_date)
+			& (LeaveAllocation.to_date <= end_date)
+			& (LeaveAllocation.docstatus == 1)
+		)
+	).run()[0][0] or 0
+
+	# Total availed leaves (approved leave applications) within the given date range
+	LeaveApplication = frappe.qb.DocType("Leave Application")
+	availed_leaves = (
+		frappe.qb.from_(LeaveApplication)
+		.select(Sum(LeaveApplication.total_leave_days))
+		.where(
+			(LeaveApplication.employee == employee)
+			& (LeaveApplication.status == "Approved")
+			& (LeaveApplication.from_date >= start_date)
+			& (LeaveApplication.to_date <= end_date)
+			& (LeaveApplication.docstatus == 1)
+		)
+	).run()[0][0] or 0
+
+	return {
+		"total_allocated_leaves": total_allocated_leaves,
+		"availed_leaves": availed_leaves,
+		"remaining_leaves": total_allocated_leaves - availed_leaves,
+	}
+
+
+@frappe.whitelist()
+def calculate_expected_hours(start_date: str | None = None, end_date: str | None = None) -> dict:
+	"""Bitsol mobile-app API: sum of Attendance.expected_working_hours of the session user's employee"""
+	employee = get_session_employee()
+	if not employee:
+		return {"error": "No employee record found for the current user."}
+
+	# Default to the current year's date range if not provided
+	if not start_date or not end_date:
+		current_year = getdate(nowdate()).year
+		start_date = f"{current_year}-01-01"
+		end_date = f"{current_year}-12-31"
+
+	Attendance = frappe.qb.DocType("Attendance")
+	total_hours = (
+		frappe.qb.from_(Attendance)
+		.select(Sum(Attendance.expected_working_hours))
+		.where(
+			(Attendance.docstatus == 1)
+			& Attendance.attendance_date.between(start_date, end_date)
+			& (Attendance.employee == employee)
+		)
+	).run()[0][0] or 0
+
+	return {
+		"employee": employee,
+		"start_date": start_date,
+		"end_date": end_date,
+		"total_expected_working_hours": total_hours,
+	}

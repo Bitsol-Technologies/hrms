@@ -93,6 +93,28 @@ frappe.ui.form.on("Employee Onboarding", {
 		}
 	},
 
+	// Bitsol: onboardings can be started from a Job Applicant without a Job Offer
+	job_applicant: function (frm) {
+		if (frm.doc.job_offer) return;
+		if (frm.doc.job_applicant) {
+			frappe.db.get_value(
+				"Employee",
+				{ job_applicant: frm.doc.job_applicant },
+				"name",
+				(r) => {
+					frm.set_value("employee", r && r.name ? r.name : "");
+				},
+			);
+			frappe.db.get_value("Job Applicant", frm.doc.job_applicant, "applicant_name", (r) => {
+				if (r && r.applicant_name && !frm.doc.employee_name) {
+					frm.set_value("employee_name", r.applicant_name);
+				}
+			});
+		} else {
+			frm.set_value("employee", "");
+		}
+	},
+
 	mark_as_completed(frm) {
 		frm.call({
 			method: "mark_onboarding_as_completed",

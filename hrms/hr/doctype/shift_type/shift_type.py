@@ -26,6 +26,11 @@ from erpnext.setup.doctype.holiday_list.holiday_list import is_half_holiday, is_
 from hrms.hr.doctype.attendance.attendance import mark_attendance
 from hrms.hr.doctype.employee_checkin.employee_checkin import (
 	calculate_working_hours,
+	get_bitsol_logger,
+	get_clockify_time_entries,
+	get_employee_clockify_details,
+	get_employee_leave_status,
+	is_clockify_timer_active,
 	mark_attendance_and_link_log,
 )
 from hrms.hr.doctype.shift_assignment.shift_assignment import (
@@ -38,6 +43,21 @@ from hrms.utils import get_date_range
 from hrms.utils.holiday_list import get_holiday_dates_between, get_holiday_dates_between_range
 
 EMPLOYEE_CHUNK_SIZE = 50
+
+
+
+class _ShiftTypeLogger:
+	"""Bitsol: verbose auto attendance log in logs/shift_type.log.
+
+	Resolved lazily so that importing this module neither opens log files nor switches the
+	whole process to DEBUG (v15 did both at import time), and so each site gets its own file.
+	"""
+
+	def __getattr__(self, name):
+		return getattr(get_bitsol_logger("shift_type"), name)
+
+
+logger = _ShiftTypeLogger()
 
 
 class ShiftType(Document):
@@ -142,7 +162,8 @@ class ShiftType(Document):
 		return (
 			not cint(self.enable_auto_attendance)
 			or not self.process_attendance_after
-			or not self.last_sync_of_checkin
+			# Bitsol: `last_sync_of_checkin` is not required; when empty, check-ins of shifts
+			# that ended before today are processed (see get_employee_checkins)
 		)
 
 	def _process(self, logs):
@@ -153,6 +174,7 @@ class ShiftType(Document):
 			employee = key[0]
 
 			if not self.should_mark_attendance(employee, attendance_date):
+				logger.info(f"Skipping Attendance due to holiday. {employee}-{attendance_date}")
 				continue
 
 			working_hours_threshold_for_half_day = flt(self.working_hours_threshold_for_half_day)
@@ -228,7 +250,7 @@ class ShiftType(Document):
 				"skip_auto_attendance": 0,
 				"attendance": ("is", "not set"),
 				"time": (">=", self.process_attendance_after),
-				"shift_actual_end": ("<", self.last_sync_of_checkin),
+				"shift_actual_end": ("<", getdate(self.last_sync_of_checkin)),
 				"shift": self.name,
 				"offshift": 0,
 			},
@@ -277,14 +299,17 @@ class ShiftType(Document):
 		"""
 		start_time = get_time(self.start_time)
 		dates = self.get_dates_for_attendance(employee)
+		logger.info(f"Dates = {dates}")
 
 		for date in dates:
+			logger.info(f"Getting employee {employee} shift having data: {date} {start_time}")
 			timestamp = datetime.combine(date, start_time)
 			shift_details = get_employee_shift(employee, timestamp, True)
-
 			if shift_details and shift_details.shift_type.name == self.name:
+				logger.info(f"Shift Assigned {shift_details} and employee {employee}")
+				logger.info(f"Going to mark attendance date: {date} as Absent due to no attendance")
 				attendance = mark_attendance(employee, date, "Absent", self.name)
-
+				logger.info(f"Attendance marked: {attendance}")
 				if not attendance:
 					continue
 
@@ -300,6 +325,9 @@ class ShiftType(Document):
 
 	def get_dates_for_attendance(self, employee: str) -> list[str]:
 		start_date, end_date = self.get_start_and_end_dates(employee)
+		logger.info(
+			f"Employee: {employee}, Attendance Start Date: {start_date}, Attendance End Date: {end_date}"
+		)
 
 		# no shift assignment found, no need to process absent attendance records
 		if start_date is None:
@@ -492,5 +520,270 @@ def process_auto_attendance_for_all_shifts():
 	"""Called from hooks"""
 	shift_list = frappe.get_all("Shift Type", filters={"enable_auto_attendance": "1"}, pluck="name")
 	for shift in shift_list:
+		logger.info(f"Shift Type: {shift}")
 		doc = frappe.get_cached_doc("Shift Type", shift)
 		doc.process_auto_attendance()
+
+
+def get_time_difference(obj1, obj2):
+	"""Minutes elapsed on the clock between a datetime and a time of day (timedelta), wrapping at midnight."""
+	difference = (obj1 - obj2).time()
+	total_minutes = (
+		difference.hour * 60
+		+ difference.minute
+		+ difference.second / 60
+		+ difference.microsecond / 60000000
+	)
+	return round(total_minutes)
+
+
+def get_assigned_employees_with_specified_threshold(
+	name, from_date=None, start_time=None, end_time=None
+) -> list[str]:
+	filters = {"shift_type": name, "docstatus": "1", "status": "Active"}
+	if from_date:
+		filters["start_date"] = (">=", from_date)
+	assigned_employees = frappe.get_all("Shift Assignment", filters=filters, pluck="employee")
+
+	# exclude inactive employees
+	inactive_employees = frappe.db.get_all("Employee", {"status": "inactive"}, pluck="name")
+
+	if start_time is not None:
+		assigned_employees = [
+			emp
+			for emp in assigned_employees
+			if (
+				start_time - 1
+				<= int(frappe.get_value("Employee", emp, "custom_notification_threshold_checkin") or 15)
+				<= start_time + 1
+			)
+			and not has_valid_log_for_today(in_log="IN", emp=emp)
+		]
+	elif end_time is not None:
+		assigned_employees = [
+			emp
+			for emp in assigned_employees
+			if (
+				end_time - 1
+				<= int(frappe.get_value("Employee", emp, "custom_notification_threshold_checkout") or 15)
+				<= end_time + 1
+			)
+			and not has_valid_log_for_today(in_log="OUT", emp=emp)
+		]
+	return list(set(assigned_employees) - set(inactive_employees))
+
+
+def has_valid_log_for_today(in_log=None, out_log=None, emp=None):
+	today = datetime.today()
+	log_type = in_log if in_log else out_log
+	valid_log = frappe.db.sql(
+		"""SELECT log_type FROM `tabEmployee Checkin`
+		WHERE CAST(time as DATE)=%(time_val)s AND log_type=%(log_type)s AND employee = %(emp)s
+		""",
+		{"time_val": today.strftime("%Y-%m-%d"), "log_type": log_type, "emp": emp},
+	)
+	return True if valid_log else False
+
+
+def notify_employees_to_checkin_or_checkout():
+	notification_logger = get_bitsol_logger("reminder_notifications")
+	notify_checkin = notify_checkout = []
+	# Fetch reminder interval from HR Settings
+	reminder_interval_minutes = (
+		frappe.db.get_single_value("HR Settings", "follow_up_checkin_reminder_interval") or 30
+	)
+	reminder_interval_seconds = reminder_interval_minutes * 60
+	now = frappe.utils.now_datetime()
+	today = frappe.utils.getdate(now)
+	two_hours_back = frappe.utils.add_to_date(now, hours=-2)
+	query = """
+			SELECT start_time, end_time, name, holiday_list
+			FROM `tabShift Type`
+			WHERE (start_time BETWEEN %s AND %s) OR (end_time BETWEEN %s AND %s)
+		"""
+
+	# Execute the query with the formatted time strings
+	shifts = frappe.db.sql(query, (two_hours_back, now, two_hours_back, now), as_dict=True)
+	for shift in shifts:
+		if is_holiday(shift.holiday_list, today):
+			continue
+		notify_checkin = []
+		notify_checkout = []
+		time_difference_in = get_time_difference(now, shift.start_time)
+		time_difference_out = get_time_difference(now, shift.end_time)
+		# Get all employees for the shift. Reminder timing will be checked inside the loop.
+		employees_assigned_to_shift = get_assigned_employees_with_specified_threshold(shift.name)
+
+		for emp in employees_assigned_to_shift:
+			# Skip if already checked-in for the day
+			if has_valid_log_for_today(in_log="IN", emp=emp):
+				continue
+
+			employee = frappe.get_doc("Employee", emp)
+			if not employee or not employee.user_id:
+				continue
+
+			# 1. Skip if on leave
+			leave_status = get_employee_leave_status(employee.name, today, status=["Approved", "Open"])
+			if leave_status in ["On Leave", "Half Day"]:
+				continue
+
+			reminder_count = _get_today_checkin_reminder_count(employee.user_id, today)
+			custom_checkin_threshold = int(
+				frappe.get_value("Employee", emp, "custom_notification_threshold_checkin") or 15
+			)
+
+			if reminder_count == 0:
+				# First reminder: Send if current time is past the grace period.
+				if time_difference_in >= custom_checkin_threshold:
+					_send_checkin_reminder(employee)
+					notify_checkin.append(employee.user_id)
+			elif reminder_count < 3:
+				# 2nd and 3rd reminder logic (30 mins after previous)
+				last_reminder_time = _get_last_checkin_reminder_time(employee.user_id, today)
+				if (
+					last_reminder_time
+					and (now - get_datetime(last_reminder_time)).total_seconds() >= reminder_interval_seconds
+				):  # 30 minutes
+					_send_checkin_reminder(employee)
+					notify_checkin.append(employee.user_id)
+
+					if reminder_count == 2:  # This was the 2nd reminder, making the current one the 3rd
+						if not _check_clockify_activity(employee):
+							_notify_hr_about_missed_checkin(employee)
+
+		employees_closer_to_checkout = get_assigned_employees_with_specified_threshold(
+			shift.name, end_time=time_difference_out
+		)
+		for emp in employees_closer_to_checkout:
+			employee = frappe.get_doc("Employee", emp)
+			if employee:
+				notify_checkout.append(employee.user_id)
+			frappe.enqueue(
+				method="fcm_notification.send_notification.send_push_to_user",
+				email=employee.user_id,
+				title="Time to Check Out!",
+				message="Your shift is almost over. Please remember to check out. Have a great evening!",
+			)
+		notification_logger.info(f"Employees to be notified for Check In: {notify_checkin}")
+		notification_logger.info(f"Employees to be notified for Check Out: {notify_checkout}")
+
+
+def _get_today_checkin_reminder_count(user_id, date):
+	"""Counts the number of check-in reminders sent to a user for a specific day."""
+	count = frappe.db.sql(
+		"""
+		SELECT count(*)
+		FROM `tabHR Notifications` notif
+		JOIN `tabNotification User` user ON notif.name = user.parent
+		WHERE user.user = %s
+		AND notif.type = 'Daily Check-in Reminder'
+		AND DATE(notif.creation) = %s
+	""",
+		(user_id, date),
+	)
+	return count[0][0] if count else 0
+
+
+def _get_last_checkin_reminder_time(user_id, date):
+	"""Gets the timestamp of the last check-in reminder sent to a user for a specific day."""
+	time = frappe.db.sql(
+		"""
+		SELECT notif.creation
+		FROM `tabHR Notifications` notif
+		JOIN `tabNotification User` user ON notif.name = user.parent
+		WHERE user.user = %s
+		AND notif.type = 'Daily Check-in Reminder'
+		AND DATE(notif.creation) = %s
+		ORDER BY notif.creation DESC
+		LIMIT 1
+	""",
+		(user_id, date),
+	)
+	return time[0][0] if time else None
+
+
+def _send_checkin_reminder(employee):
+	"""Sends a check-in reminder push notification and logs it."""
+	message = "Good morning! Please remember to check in for your shift. Have a productive day!"
+	frappe.enqueue(
+		method="fcm_notification.send_notification.send_push_to_user",
+		email=employee.user_id,
+		title="Don’t Forget to Check In!",
+		message=message,
+	)
+	notification_doc = frappe.get_doc(
+		{
+			"doctype": "HR Notifications",
+			"subject": f"Check-in Reminder Notification for Employee {employee.employee_name}",
+			"message": message,
+			"type": "Daily Check-in Reminder",
+			"user": [{"user": employee.user_id}],
+			"send_push": 0,
+			"send_slack": 1,
+		}
+	)
+	notification_doc.insert(ignore_permissions=True)
+
+	# Update the doc to reflect that a push was sent, without triggering another send
+	frappe.db.set_value("HR Notifications", notification_doc.name, "send_push", 1, update_modified=False)
+
+
+
+def _check_clockify_activity(employee):
+	"""
+	Checks for active Clockify timers or any time entries for the employee for the current day.
+	"""
+	now = frappe.utils.now_datetime()
+	today_start = now.replace(hour=0, minute=0, second=0)
+	today_end = now.replace(hour=23, minute=59, second=59)
+
+	custom_api_key, custom_user_id, workspace_ids, _, _ = get_employee_clockify_details(
+		employee.name
+	)
+
+	if not (custom_api_key and custom_user_id and workspace_ids):
+		# Cannot check credentials, assume no activity to allow HR notification to proceed.
+		msg = f"Employee {employee.name} missing one or more custom Clockify credentials."
+		frappe.log(msg)
+		return False
+
+	# Check for an active timer in any workspace
+	for ws in workspace_ids:
+		if is_clockify_timer_active(custom_api_key, ws, custom_user_id):
+			return True  # Active timer found, so we skip notifying HR.
+		# Check for any time entries for the entire day
+		entries = get_clockify_time_entries(custom_api_key, ws, custom_user_id, today_start, today_end)
+		if entries:
+			return True  # Entries found, so we skip notifying HR.
+
+	return False  # No activity found
+
+def _get_last_checkin_reminder_name(user_id, date):
+	"""Gets the name of the last check-in reminder doc sent to a user for a specific day."""
+	doc_name = frappe.db.sql(
+		"""
+		SELECT notif.name
+		FROM `tabHR Notifications` notif
+		JOIN `tabNotification User` user ON notif.name = user.parent
+		WHERE user.user = %s
+		AND notif.type = 'Daily Check-in Reminder'
+		AND DATE(notif.creation) = %s
+		ORDER BY notif.creation DESC
+		LIMIT 1
+	""",
+		(user_id, date),
+	)
+	return doc_name[0][0] if doc_name else None
+
+def _notify_hr_about_missed_checkin(employee):
+	"""Notifies HR about an employee who missed check-in after 3 reminders."""
+	from frappe.integrations.doctype.slack_webhook_url.slack_webhook_url import send_slack_message
+
+	notification = frappe.get_doc("Notification", "Notify HR about Missed Checkins")
+	message = _(
+		"{0} has not checked in after 3 reminders and no Leave or Clockify activity was detected. Please follow up."
+	).format(employee.employee_name)
+	webhook_url= notification.slack_webhook_url
+	last_reminder_name = _get_last_checkin_reminder_name(employee.user_id, frappe.utils.getdate(frappe.utils.now()))
+	send_slack_message(webhook_url, message, "HR Notifications", last_reminder_name)

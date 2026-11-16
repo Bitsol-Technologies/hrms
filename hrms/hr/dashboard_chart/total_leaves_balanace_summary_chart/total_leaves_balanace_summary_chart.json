@@ -1,0 +1,61 @@
+{
+ "chart_name": "Total Leaves Balanace Summary Chart",
+ "chart_type": "Report",
+ "creation": "2023-08-07 01:04:56.854377",
+ "custom_options": "{\"x_field\": \"leave_type\", \"chart_type\": \"Bar\", \"y_axis_fields\": [{\"idx\": 1, \"__islocal\": true, \"name\": \"row 2\", \"y_field\": \"leaves_allocated\"}, {\"idx\": 2, \"__islocal\": true, \"name\": \"row 3\", \"y_field\": \"leaves_taken\"}, {\"idx\": 3, \"__islocal\": true, \"name\": \"row 1\", \"y_field\": \"opening_balance\"}, {\"idx\": 4, \"__islocal\": true, \"name\": \"row 5\", \"y_field\": \"closing_balance\"}, {\"idx\": 5, \"__islocal\": true, \"name\": \"row 4\", \"y_field\": \"leaves_expired\"}], \"y_fields\": [\"leaves_allocated\", \"leaves_taken\", \"opening_balance\", \"closing_balance\", \"leaves_expired\"], \"colors\": [null, null, null, null, null]}",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{\"user_id\":\"frappe.session.user\"}",
+ "filters_json": "{\"from_date\":\"2025-01-01\",\"to_date\":\"2025-12-31\",\"company\":\"Bitsol Technologies\",\"employee_status\":\"Active\",\"consolidate_leave_types\":1}",
+ "group_by_type": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "modified": "2025-01-24 10:52:55.363266",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Total Leaves Balanace Summary Chart",
+ "number_of_groups": 0,
+ "owner": "wajahat+admin@bitsol.tech",
+ "report_name": "Employee Leave Balance",
+ "roles": [
+  {
+   "role": "Employee"
+  },
+  {
+   "role": "HR"
+  },
+  {
+   "role": "HR Executive"
+  },
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "HR User"
+  }
+ ],
+ "time_interval": "Yearly",
+ "timeseries": 0,
+ "timespan": "Last Year",
+ "type": "Bar",
+ "use_report_chart": 0,
+ "x_field": "leave_type",
+ "y_axis": [
+  {
+   "y_field": "leaves_allocated"
+  },
+  {
+   "y_field": "leaves_taken"
+  },
+  {
+   "y_field": "opening_balance"
+  },
+  {
+   "y_field": "closing_balance"
+  },
+  {
+   "y_field": "leaves_expired"
+  }
+ ]
+}

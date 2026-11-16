@@ -3,7 +3,8 @@
 
 frappe.ui.form.on("Training Feedback", {
 	onload: function (frm) {
-		frm.add_fetch("training_event", "course", "course");
+		// Bitsol: Training Event.course is a table of courses (Training Event Courses), so it is no
+		// longer fetched into Training Feedback.course
 		frm.add_fetch("training_event", "event_name", "event_name");
 		frm.add_fetch("training_event", "trainer_name", "trainer_name");
 	},

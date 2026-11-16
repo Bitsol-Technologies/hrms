@@ -8,7 +8,7 @@ import frappe
 from frappe import _
 from frappe.core.doctype.user_permission.test_user_permission import create_user
 from frappe.permissions import add_user_permission
-from frappe.utils import add_days, get_datetime, get_time, getdate, nowtime
+from frappe.utils import add_days, flt, get_datetime, get_time, getdate, nowtime
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -130,7 +130,7 @@ class TestInterview(HRMSTestSuite):
 				"name": interview.name,
 				"interview_type": interview.interview_type,
 				"scheduled_on": interview.scheduled_on,
-				"average_rating": interview.average_rating * 5,
+				"average_rating": interview.average_rating,  # Bitsol: stored on a 0-5 scale
 				"status": "Pending",
 			},
 		)
@@ -144,16 +144,20 @@ class TestInterview(HRMSTestSuite):
 		create_interview_feedback(
 			interview.name,
 			"test_interviewer1@example.com",
-			[{"skill": "Python", "rating": 0.9}, {"skill": "JS", "rating": 0.8}],
+			[{"skill": "Python", "rating": "4.5"}, {"skill": "JS", "rating": "4"}],
 		)
 		create_interview_feedback(
 			interview.name,
 			"test_interviewer2@example.com",
-			[{"skill": "Python", "rating": 0.6}, {"skill": "JS", "rating": 0.9}],
+			[{"skill": "Python", "rating": "3"}, {"skill": "JS", "rating": "4.5"}],
 		)
 
 		ratings = get_skill_wise_average_rating(interview.name)
-		self.assertEqual(ratings, [{"skill": "Python", "rating": 0.75}, {"skill": "JS", "rating": 0.85}])
+		# Bitsol: skill ratings are half-point Selects on a 0-5 scale
+		self.assertEqual(
+			[{"skill": d.skill, "rating": flt(d.rating, 2)} for d in ratings],
+			[{"skill": "Python", "rating": 3.75}, {"skill": "JS", "rating": 4.25}],
+		)
 
 	def test_get_feedback(self):
 		from hrms.hr.doctype.interview_feedback.test_interview_feedback import create_interview_feedback
@@ -172,12 +176,12 @@ class TestInterview(HRMSTestSuite):
 		feedback_1 = create_interview_feedback(
 			interview.name,
 			"test_interviewer1@example.com",
-			[{"skill": "Python", "rating": 0.9}, {"skill": "JS", "rating": 0.8}],
+			[{"skill": "Python", "rating": "4.5"}, {"skill": "JS", "rating": "4"}],
 		)
 		feedback_2 = create_interview_feedback(
 			interview.name,
 			"test_interviewer2@example.com",
-			[{"skill": "Python", "rating": 0.6}, {"skill": "JS", "rating": 0.9}],
+			[{"skill": "Python", "rating": "3"}, {"skill": "JS", "rating": "4.5"}],
 		)
 
 		feedback = get_feedback(interview.name)
@@ -187,7 +191,7 @@ class TestInterview(HRMSTestSuite):
 				"added_on": get_datetime(feedback_1.modified),
 				"user": feedback_1.interviewer,
 				"feedback": feedback_1.feedback,
-				"total_score": feedback_1.average_rating * 5,
+				"total_score": feedback_1.average_rating,  # Bitsol: stored on a 0-5 scale
 				"reviewer_name": None,
 				"reviewer_designation": None,
 			},
@@ -196,7 +200,7 @@ class TestInterview(HRMSTestSuite):
 				"added_on": get_datetime(feedback_2.modified),
 				"user": feedback_2.interviewer,
 				"feedback": feedback_2.feedback,
-				"total_score": feedback_2.average_rating * 5,
+				"total_score": feedback_2.average_rating,  # Bitsol: stored on a 0-5 scale
 				"reviewer_name": "Test",
 				"reviewer_designation": "Engineer",
 			},
@@ -275,6 +279,8 @@ def create_interview_and_dependencies(
 	interview.interview_type = interview_type.name
 	interview.job_applicant = job_applicant
 	interview.scheduled_on = scheduled_on or getdate()
+	# Bitsol: mandatory Location (Onsite avoids creating a Google Meet space)
+	interview.location = "Onsite"
 	interview.from_time = from_time or nowtime()
 	interview.to_time = to_time or nowtime()
 	interview.append("interview_details", {"interviewer": "test_interviewer1@example.com"})
@@ -294,8 +300,8 @@ def create_interview_type(name, skill_set, interviewers=None, designation=None, 
 	interview_type = frappe.new_doc("Interview Type")
 	interview_type.interview_type_name = name
 	interview_type.description = "_Test_Description"
-	# average rating = 4
-	interview_type.expected_average_rating = 0.8
+	# Bitsol: half-point Select on a 0-5 scale
+	interview_type.expected_average_rating = "4"
 	if designation:
 		interview_type.designation = designation
 

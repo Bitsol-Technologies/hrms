@@ -119,19 +119,29 @@ def create_employee_onboarding():
 	onboarding.company = "_Test Company"
 	onboarding.holiday_list = holiday_list.name
 	onboarding.designation = "Engineer"
+	# Bitsol: tasks (and assignee e-mails) are only created when "Notify users by email" is ticked
+	onboarding.notify_users_by_email = 1
+	# Bitsol: "Begin On" is an explicit date-time and "Activity Type" is mandatory on every activity
 	onboarding.append(
 		"activities",
 		{
 			"activity_name": "Assign ID Card",
+			"activity_type": "Other",
 			"role": "HR User",
 			"required_for_employee_creation": 1,
-			"begin_on": 0,
+			"begin_on": f"{onboarding.boarding_begins_on} 09:00:00",
 			"duration": 1,
 		},
 	)
 	onboarding.append(
 		"activities",
-		{"activity_name": "Assign a laptop", "role": "HR User", "begin_on": 1, "duration": 1},
+		{
+			"activity_name": "Assign a laptop",
+			"activity_type": "Other",
+			"role": "HR User",
+			"begin_on": f"{add_days(onboarding.boarding_begins_on, 1)} 09:00:00",
+			"duration": 1,
+		},
 	)
 	onboarding.status = "Pending"
 	onboarding.insert()

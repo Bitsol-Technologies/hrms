@@ -1,0 +1,49 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-02-26 15:29:45.021019",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "role_profile_column",
+  "role_profile",
+  "column_break_nozn",
+  "role_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "role_profile_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "role_profile",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Role Profile",
+   "options": "Role Profile"
+  },
+  {
+   "fetch_from": "role_profile.role_profile",
+   "fieldname": "role_name",
+   "fieldtype": "Read Only",
+   "label": "Role Name"
+  },
+  {
+   "fieldname": "column_break_nozn",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-02-26 16:59:36.045090",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Training Event Role Profile",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

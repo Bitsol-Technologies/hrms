@@ -3198,6 +3198,7 @@ def make_leave_application(
 		company=company or "_Test Company" or "_Test Company",
 		status=status or "Approved",
 		leave_approver=leave_approver or "test@example.com",
+		description="Test leave reason",
 	).insert()
 
 	if submit:

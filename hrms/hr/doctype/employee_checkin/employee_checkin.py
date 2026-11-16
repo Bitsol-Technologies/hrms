@@ -2,12 +2,19 @@
 # For license information, please see license.txt
 
 
+import json
+import logging
+import re
+import time
 from datetime import date, datetime, timedelta
+
+import pytz
+import requests
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, get_datetime
+from frappe.utils import DATE_FORMAT, cint, flt, get_datetime, now, today
 
 from hrms.hr.doctype.shift_assignment.shift_assignment import get_actual_start_end_datetime_of_shift
 from hrms.hr.utils import (
@@ -27,11 +34,81 @@ class EmployeeCheckin(Document):
 
 	def validate(self):
 		validate_active_employee(self.employee)
+		self.validate_previous_date_logs()
+		self.validate_date_time()
 		self.validate_duplicate_log()
 		self.validate_time_change()
 		self.fetch_shift()
 		self.set_geolocation()
 		self.validate_distance_from_shift_location()
+		self.validate_check_leave_on_same_day()
+		if self.log_type == "OUT":
+			self.validate_current_day_checkin()
+		self.validate_same_consecutive_logs()
+
+	def validate_date_time(self):
+		date_format = f"{DATE_FORMAT} %H%M%S"
+		current_date_time = datetime.strptime(
+			datetime.now(pytz.timezone("Asia/Karachi")).strftime(date_format), date_format
+		)
+		if get_datetime(self.time) > current_date_time:
+			frappe.throw(_("check-{0} can't be set for the future date/time").format(self.log_type.lower()))
+
+	def validate_previous_date_logs(self):
+		current_date = datetime.now().date()
+
+		# Check if the attendance date is earlier than the current date
+		if frappe.utils.getdate(self.time) < current_date:
+			frappe.throw(
+				_(
+					f"Cannot Check-{self.log_type.capitalize()} for past dates. Please select the current date or consult HR department."
+				)
+			)
+
+	def validate_same_consecutive_logs(self):
+		# Get the current date
+
+		# Fetch the last check-in/check-out entry for the employee
+		last_log = frappe.db.get_value(
+			"Employee Checkin", {"employee": self.employee}, ["log_type", "time"], order_by="time desc"
+		)
+
+		if last_log:
+			last_log_type, last_log_time = last_log
+
+			# Get the date part of the last log time
+			last_log_date = frappe.utils.getdate(last_log_time)
+
+			# Check if the last log type is the same as the current log type and on the same day
+			if self.log_type.lower() == last_log_type.lower() and last_log_date == frappe.utils.getdate(
+					frappe.utils.nowdate()
+			):
+				frappe.throw(
+					_(
+						"You cannot mark consecutive 'Check-{0}' entries on the same day without a '{1}' entry first."
+					).format(
+						self.log_type.lower(), "Check-out" if self.log_type.lower() == "in" else "Check-in"
+					)
+				)
+			if frappe.utils.get_datetime(self.time) < frappe.utils.get_datetime(last_log_time):
+				frappe.throw(_("Current log time cannot be earlier than the previous log time."))
+
+	def validate_check_leave_on_same_day(self):
+		checkin_date = self.time.date()
+		doc = frappe.db.exists(
+			"Leave Application",
+			{
+				"employee": self.employee,
+				"from_date": [">=", checkin_date],
+				"to_date": ["<=", checkin_date],
+				"status": "Approved",
+				"half_day": ["!=", True],
+			},
+		)
+		if doc:
+			frappe.throw(
+				_("<b>Not Permitted:</b> Leave has been approved on the same date {0}").format(checkin_date)
+			)
 
 	def validate_duplicate_log(self):
 		doc = frappe.db.exists(
@@ -62,22 +139,33 @@ class EmployeeCheckin(Document):
 	def set_geolocation(self):
 		set_geolocation_from_coordinates(self)
 
+	def validate_current_day_checkin(self):
+		docs = frappe.db.sql(
+			"""SELECT COUNT(log_type) FROM `tabEmployee Checkin` WHERE CAST(time as DATE)=%(time_val)s AND
+			log_type='IN' AND employee = %(employee)s""",
+			{"time_val": self.time.date(), "employee": self.employee},
+		)
+		if docs[0][0] < 1:
+			frappe.throw(_("Please add check-in first"))
+		else:
+			pass
+
 	@frappe.whitelist()
 	def fetch_shift(self):
 		if not (
-			shift_actual_timings := get_actual_start_end_datetime_of_shift(
-				self.employee, get_datetime(self.time), True
-			)
+				shift_actual_timings := get_actual_start_end_datetime_of_shift(
+					self.employee, get_datetime(self.time), True
+				)
 		):
 			self.shift = None
 			self.offshift = 1
 			return
 
 		if (
-			shift_actual_timings.shift_type.determine_check_in_and_check_out
-			== "Strictly based on Log Type in Employee Checkin"
-			and not self.log_type
-			and not self.skip_auto_attendance
+				shift_actual_timings.shift_type.determine_check_in_and_check_out
+				== "Strictly based on Log Type in Employee Checkin"
+				and not self.log_type
+				and not self.skip_auto_attendance
 		):
 			frappe.throw(
 				_("Log Type is required for check-ins falling in the shift: {0}.").format(
@@ -203,6 +291,17 @@ def bulk_fetch_shift(checkins: list[str] | str) -> None:
 		doc.save()
 
 
+def get_bitsol_logger(module: str = "checkin") -> logging.Logger:
+	"""Bitsol: site level log file (logs/<module>.log) for the attendance automation.
+
+	v15 called `frappe.utils.logger.set_log_level("DEBUG")`, which switches every logger of the
+	process to DEBUG. Only the level of this one logger is raised here.
+	"""
+	logger = frappe.logger(module, allow_site=True, file_count=10)
+	logger.setLevel(logging.DEBUG)
+	return logger
+
+
 def mark_attendance_and_link_log(
 	logs: list[Document],
 	attendance_status: str,
@@ -223,11 +322,13 @@ def mark_attendance_and_link_log(
 	:param attendance_date: Date of the attendance to be created.
 	:param working_hours: (optional)Number of working hours for the given date.
 	"""
+	logger = get_bitsol_logger("checkin")
 	log_names = [x.name for x in logs]
 	employee = logs[0].employee
 
 	if attendance_status == "Skip":
 		skip_attendance_in_checkins(log_names)
+		logger.info("Attendance skipped due to attendance_status")
 		return None
 
 	if attendance_status not in ("Present", "Absent", "Half Day"):
@@ -254,6 +355,10 @@ def mark_attendance_and_link_log(
 				text=_("Employee was marked Absent for not meeting the working hours threshold.")
 			)
 
+		logger.info(
+			f"{attendance_status} marked for {employee} in shift {shift}. Time for checkin is {in_time} and checkout is {out_time} and total working hours are {working_hours}"
+		)
+		logger.info(f"date: {attendance_date}, late_entry: {late_entry}, early_exit: {early_exit}")
 		update_attendance_in_checkins(log_names, attendance.name)
 		return attendance
 
@@ -423,9 +528,13 @@ def calculate_working_hours(logs, check_in_out_type, working_hours_calc_type):
 				elif not out_log:
 					out_log = log if log.log_type == "OUT" else None
 
+			# Bitsol: an IN without a matching OUT is closed at the shift end, so the day is not lost
+			if in_log and not out_log:
+				out_time = in_log.shift_end
 			if in_log and out_log:
 				out_time = out_log.time
-				total_hours += time_diff_in_hours(in_log.time, out_log.time)
+			if in_log and out_time:
+				total_hours += time_diff_in_hours(in_log.time, out_time)
 
 	return total_hours, in_time, out_time
 
@@ -486,3 +595,1966 @@ def calculate_time_difference(start_time, end_time):
 	time_difference = abs(start_time - end_time)
 
 	return round(time_difference.total_seconds() / 3600, 2)
+
+
+# ---------------------------------------------------------------------------------------------
+# Bitsol: Clockify / Slack compliance checks and HR reports (feature "clockify-slack-compliance").
+# Kept in this module because hooks.py, shift_type.py and hr_notifications.py import from here.
+# ---------------------------------------------------------------------------------------------
+
+
+def get_today_date_range():
+	# today_str = "2025-05-21"
+	today_str = today()  # e.g., "2025-03-18"
+	start_dt_str = f"{today_str} 00:00:00"
+	end_dt_str = f"{today_str} 23:59:59"
+	return today_str, start_dt_str, end_dt_str, get_datetime(start_dt_str), get_datetime(end_dt_str)
+
+
+def get_system_clockify_settings():
+	settings = frappe.get_single("System Settings")
+	api_key = settings.get("clockify_api_key")
+	workspaces = [ws.strip() for ws in (settings.get("clockify_workspace_id") or "").split(",") if ws.strip()]
+	return api_key, workspaces
+
+
+def get_employee_checkins(log_type):
+	_, start_dt_str, end_dt_str, _, _ = get_today_date_range()
+	checkins = frappe.get_all(
+		"Employee Checkin",
+		filters={"time": ["between", [start_dt_str, end_dt_str]], "log_type": log_type},
+		fields=["name", "employee", "time"],
+		order_by="time DESC",
+	)
+	# Keep only the latest check-in per employee
+	latest_checkins = {}
+	for checkin in checkins:
+		if checkin["employee"] not in latest_checkins:
+			latest_checkins[checkin["employee"]] = checkin
+
+	return list(latest_checkins.values())  # Return only the latest check-ins
+
+
+def get_default_workspace_id(custom_api_key):
+	"""
+	Fetches all workspaces accessible by the API key and returns the first workspace's ID.
+	"""
+	headers = {"X-Api-Key": custom_api_key}
+	url = "https://api.clockify.me/api/v1/workspaces"
+	try:
+		response = requests.get(url, headers=headers)
+		response.raise_for_status()
+		workspaces = response.json()
+		if workspaces:
+			return [ws.get("id") for ws in workspaces if ws.get("id")]
+	except Exception as e:
+		frappe.log_error(f"Error fetching workspaces for api key: {custom_api_key}", "Clockify Task")
+	return []
+
+
+def get_clockify_user_id_by_email(custom_api_key, workspace_id, email):
+	"""
+	Looks up the Clockify user ID for a given email within a workspace.
+	The workspace user list is cached for the current request/job so that
+	looking up many employees does not hit the Clockify rate limit.
+	"""
+	if not hasattr(frappe.local, "clockify_workspace_users"):
+		frappe.local.clockify_workspace_users = {}
+	cache = frappe.local.clockify_workspace_users
+
+	if workspace_id not in cache:
+		headers = {"X-Api-Key": custom_api_key}
+		url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/users?page-size=500"
+		try:
+			response = requests.get(url, headers=headers)
+			response.raise_for_status()
+			cache[workspace_id] = {
+				user.get("email").lower(): user.get("id") for user in response.json() if user.get("email")
+			}
+		except Exception:
+			frappe.log_error(
+				message=f"Error fetching Clockify user for email {email} for workspace {workspace_id}\n{frappe.get_traceback()}",
+				title="Clockify Task",
+			)
+			# Cache the failure for this job so other employees don't retry and worsen rate limiting
+			cache[workspace_id] = {}
+
+	return cache[workspace_id].get((email or "").lower())
+
+
+def get_employee_clockify_details(employee_id):
+	"""
+	Retrieves Clockify details for an employee. If workspace or user ID is missing,
+	it uses the API key to fetch a default workspace and then looks up the user by email.
+	If the user is not found in the first workspace, tries the other workspaces.
+	"""
+	emp = frappe.get_doc("Employee", employee_id)
+	user_id = emp.get("user_id")
+	custom_user_id = emp.get("custom_clockify_user_id")  # Might be empty
+
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+
+	# If user ID is not provided, try to look it up using employee's email.
+	if not custom_user_id:
+		email = user_id
+		if custom_api_key and workspace_ids and email:
+			for ws_id in workspace_ids:
+				custom_user_id = get_clockify_user_id_by_email(custom_api_key, ws_id, email)
+				if custom_user_id:
+					break
+	return (custom_api_key, custom_user_id, workspace_ids, emp, user_id)
+
+
+def is_clockify_timer_active(custom_api_key, workspace_id, clockify_user_id, raise_on_error=False):
+	"""
+	Check Clockify for an active timer for the given user.
+	Returns True if an active (in-progress) timer is found, else False.
+	If raise_on_error is True, API errors are raised instead of returning False.
+	"""
+	headers = {"X-Api-Key": custom_api_key}
+	active_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries?in-progress=true"
+
+	try:
+		response = requests.get(active_url, headers=headers)
+		response.raise_for_status()
+		active_entries = response.json()
+		return bool(active_entries)
+	except Exception as e:
+		if raise_on_error:
+			raise
+		frappe.log(f"Error for user {clockify_user_id} checking for active timer")
+		return False
+
+
+def get_clockify_time_entries(custom_api_key, workspace_id, clockify_user_id, start_dt, end_dt, raise_on_error=False):
+	"""
+	Fetch all Clockify time entries for the given user between start_dt and end_dt.
+	Returns a list of time entry objects.
+	If raise_on_error is True, API errors are raised instead of returning an empty list.
+	"""
+	headers = {"X-Api-Key": custom_api_key}
+	# Format in ISO 8601 with a trailing "Z" to indicate UTC timezone
+	start_str = start_dt.isoformat() + "Z"
+	end_str = end_dt.isoformat() + "Z"
+	entries_url = f"https://api.clockify.me/api/v1/workspaces/{workspace_id}/user/{clockify_user_id}/time-entries"
+	page_size = 1000
+	max_pages = 50  # safety cap against an endless loop
+
+	try:
+		# Clockify paginates time entries (default 50 per page), so fetch until a short page is returned
+		entries = []
+		for page in range(1, max_pages + 1):
+			params = {"start": start_str, "end": end_str, "page": page, "page-size": page_size}
+			response = requests.get(entries_url, headers=headers, params=params)
+			response.raise_for_status()
+			page_entries = response.json()
+			entries.extend(page_entries)
+			if len(page_entries) < page_size:
+				break
+		return entries
+	except Exception as e:
+		if raise_on_error:
+			raise
+		frappe.log(f"Error fetching Clockify entries for user {clockify_user_id} and workspace = {workspace_id}")
+		return []
+
+
+def get_slack_user_id(email):
+	"""
+	Fetch Slack User ID from the Employee record using the email address.
+	Matches 'user_id' directly (case-insensitive in MariaDB).
+	"""
+	custom_slack_user_id = frappe.db.get_value(
+		"Employee",
+		filters={"user_id": email},
+		fieldname="custom_slack_user_id"
+	)
+
+	if custom_slack_user_id: 
+		return custom_slack_user_id
+	else:
+		return None
+
+
+def send_slack_message_for_employee(emails, message):
+	"""
+	Loop over a list of emails, fetch each user's Slack ID, and send them a Slack message.
+	"""
+	system_settings = frappe.get_single("System Settings")
+	slack_post_message_url = "https://slack.com/api/chat.postMessage"
+	slack_token = system_settings.slack_token
+	env = frappe.db.get_single_value("FCM Notification Settings", "environment")
+
+	for email in emails:
+		if "@" not in email:
+			user_id = email
+		else:
+			user_id = get_slack_user_id(email)
+			if not user_id:
+				frappe.log(f"Could not fetch Slack user ID for {email}")
+				continue
+
+		payload = {
+			"channel": user_id,
+			"text": f"[{env}] {message}" if env else message
+		}
+		headers = {
+			"Authorization": f"Bearer {slack_token}",
+			"Content-Type": "application/json"
+		}
+		response = requests.post(slack_post_message_url, headers=headers, data=json.dumps(payload))
+		result = response.json()
+		if not result.get("ok"):
+			frappe.log_error(
+				message=f"Error sending Slack message to {email}: {result.get('error')}",
+				title="Slack Notification",
+			)
+
+
+# send reminder to turn on clockify timer
+def check_today_checkins():
+	"""
+	Scheduled task that:
+	  - Retrieves all Employee Checkin records for today.
+	  - For each checkin that is at least 4 hours old:
+		  • If the check-in falls within a defined shift, check if current time is past the shift's end time.
+		  • If no shift applies to the check-in time, no reminder is sent.
+		  • Otherwise, checks if there is an active Clockify timer or logged entries.
+	  - If conditions suggest a reminder is needed:
+			sends a Slack/Push notification
+			creates a notfication log in ERPNext
+	"""
+
+	checkins = get_employee_checkins("IN")
+
+	for checkin in checkins:
+		try:
+			checkin_dt = get_datetime(checkin["time"])
+			current_dt = get_datetime(now())
+			time_since_checkin = current_dt - checkin_dt
+
+			if time_since_checkin < timedelta(hours=4):
+				continue
+
+			# Fetch employee's shift details for the day of the checkin.
+			# This also fetches the default shift if no assignment is found.
+			shift_details = get_actual_start_end_datetime_of_shift(checkin["employee"], checkin_dt, True)
+			if not shift_details:
+				continue
+
+			# At this point, shift_details is not empty, meaning the check-in occurred within a recognized shift period.
+			pure_shift_end_dt = shift_details.get("end_datetime")
+			if pure_shift_end_dt and (current_dt > pure_shift_end_dt):
+				continue
+			# If pure_shift_end_dt is None (should be rare if shift_details is populated and valid),
+			# or if current time is not past shift end, the reminder process continues based on Clockify.
+
+			# If employee has checked out after this specific check-in
+			subsequent_checkout_exists = frappe.db.exists(
+				"Employee Checkin",
+				{
+					"employee": checkin["employee"],
+					"log_type": "OUT",
+					"time": [">", checkin_dt],
+					"docstatus": ["!=", 2] # Consider only non-cancelled checkouts
+				}
+			)
+			if subsequent_checkout_exists:
+				continue
+
+			# Check if user has clockify notifications enabled before making any Clockify API calls
+			email_user_id = frappe.db.get_value("Employee", checkin.employee, "user_id")
+			if not email_user_id:
+				msg = f"Employee {checkin.employee} missing email/user_id for Slack/Push notification."
+				frappe.log_error(message=msg, title="Clockify Reminder Check")
+				continue
+			try:
+				user_doc = frappe.get_doc("User", email_user_id)
+				is_clockify_active = user_doc.get("is_clockify_active")
+
+				# Skip if clockify notifications are disabled for this user
+				if not is_clockify_active:
+					continue
+			except Exception as e:
+				# If there's an error fetching the user or field doesn't exist, log and skip
+				frappe.log_error(
+					message=f"Error checking is_clockify_active for user {email_user_id}: {str(e)}",
+					title="Clockify Notification Check"
+				)
+				continue
+
+			custom_api_key, custom_user_id, workspace_ids, emp, _ = get_employee_clockify_details(checkin.employee)
+
+			if not (custom_api_key and custom_user_id and workspace_ids):
+				msg = f"Employee {emp.name if emp else checkin.employee} missing one or more custom Clockify credentials."
+				frappe.log(msg)
+				continue
+
+			# Check for active timer in any workspace
+			active_timer = False
+			for ws in workspace_ids:
+				if is_clockify_timer_active(custom_api_key, ws, custom_user_id):
+					active_timer = True
+					break
+
+			if active_timer:
+				continue
+
+			# Check for time entries in any workspace
+			entries_found = False
+			end_of_day_dt = current_dt.replace(hour=23, minute=59, second=59)
+			for ws in workspace_ids:
+				entries = get_clockify_time_entries(
+					custom_api_key, ws, custom_user_id, checkin_dt, end_of_day_dt
+				)
+				if entries:
+					entries_found = True
+					break
+
+			if entries_found:
+				continue
+
+			# If no active timer and no time entries across all workspaces, send Slack reminder
+			reminder_message = (
+				"Reminder: You are checked in, but no time is logged in Clockify for the past 4 hours. "
+				"Please start your Clockify timer to ensure compliance."
+			)
+			push_title = "Clockify Timer Reminder"
+			
+			# Create Notification Log
+			hr_notf = frappe.get_doc(
+				{
+				"doctype": "HR Notifications",
+				"subject": f"{push_title} for {emp.employee_name}",
+				"message": reminder_message,
+				"type": "Clockify Time Log Reminder",
+				"user": [{"user": email_user_id}],
+				"send_push": 1,
+				"send_slack": 1,
+				"send_email": 0
+				}
+			).insert(ignore_permissions=True)
+		except Exception as e:
+			frappe.log_error(
+				message=f"Error processing Clockify reminder for check-in {checkin.name} (Employee: {checkin.employee}): {frappe.get_traceback()}",
+				title="Clockify Reminder Check Failure"
+			)
+			continue # Continue to the next check-in
+
+def build_compliance_report_table(non_compliant):
+	# Define fixed widths for each column (adjust as needed)
+	header = f"{'Employee':20} | {'Checkin':10} | {'Reason':30}\n"
+	header += "-" * 80 + "\n"
+	rows = []
+	for rec in non_compliant:
+		emp = rec["employee"]
+		checkin = rec["checkin"]
+		reason = rec["reason"]
+		row = f"{emp:20} | {checkin:10} | {reason:30}"
+		rows.append(row)
+	table_text = header + "\n".join(rows)
+	return table_text
+
+
+def get_all_active_employees():
+	"""
+	Fetch all employees from ERPNext where status is 'Active'.
+	Returns a list of dictionaries with 'user_id' mapping to Clockify user ID.
+	"""
+	fields = ["user_id", "name", "employee_name"]
+	if frappe.db.has_column("Employee", "custom_clockify_user_id"):
+		fields.append("custom_clockify_user_id")
+
+	employees = frappe.get_all(
+		"Employee",
+		filters={"status": "Active", "user_id": ["is", "set"]},
+		fields=fields
+	)
+	return employees
+
+
+def send_compliance_report(non_compliant, today_str):
+	target = get_compliance_channel()  # Management Channel
+	if non_compliant:
+		# Build a plain text header
+		header_text = f"📢 Daily Clockify Compliance Report – {today_str}\n"
+		header_text += f"Total Non-Compliant Employees: {len(non_compliant)}\n\n"
+		# Build the table as a code block
+		
+		report_message = build_compliance_report_table(non_compliant)
+		# Ensure message is within Slack's 4000-character limit
+		split_messages = split_long_message(header_text + report_message)
+
+	else:
+		# Build a plain text message
+		split_messages = [f"📢 Daily Clockify Compliance Report – {today_str}\nAll employees are compliant with Clockify logs for {today_str}."]
+
+	for msg in split_messages:
+		send_slack_message_for_employee([target], msg)
+
+def get_compliance_channel():
+	"""
+	Fetches the 'operation_compliance_channel' from System Settings.
+	Logs an error and aborts if the field or value is missing.
+	"""
+	try:
+		channel = frappe.db.get_single_value("System Settings", "operation_compliance_channel")
+	except Exception:
+		frappe.log_error("Failed to fetch Operation Compliance Channel", "Operation Compliance Channel")
+		frappe.throw(_("System Settings or the field operation_compliance_channel is missing."))
+	if not channel:
+		frappe.log_error("No Operation Compliance Channel configured", "Configuration Error")
+		frappe.throw(_("Please configure Operation Compliance Channel in System Settings."))
+	return channel
+
+def split_long_message(message, max_length=3800):
+	"""
+	Splits long Slack messages into multiple parts while keeping code block formatting.
+	"""
+	messages = []
+	while len(message) > max_length:
+		split_index = message[:max_length].rfind("\n")  # Split at the last newline
+		if split_index == -1:
+			split_index = max_length  # If no newline found, force split
+
+		# Ensure code block formatting stays intact
+		messages.append(f"```{message[:split_index]}```")
+		message = message[split_index:].strip()
+
+	# Add the last part
+	if message:
+		messages.append(f"```{message}```")
+
+	return messages
+
+
+def parse_iso8601_duration(duration_str):
+	"""
+	Parse an ISO 8601 duration string (e.g., "PT2H16M30S") and return total seconds.
+	"""
+	pattern = re.compile(r'^PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?$')
+	match = pattern.match(duration_str)
+	if not match:
+		return 0
+	hours = int(match.group("hours") or 0)
+	minutes = int(match.group("minutes") or 0)
+	seconds = int(match.group("seconds") or 0)
+	return hours * 3600 + minutes * 60 + seconds
+
+
+def sum_clockify_durations(entries):
+	"""
+	Given a list of Clockify time entries, compute the total duration in seconds.
+	Assumes the "duration" field is always provided as an ISO 8601 duration string.
+	If a "duration" field is not present, falls back to calculating the duration from the timeInterval.
+	"""
+	total_seconds = 0
+	for entry in entries:
+		if entry.get("duration"):
+			total_seconds += parse_iso8601_duration(entry["duration"])
+		elif entry.get("timeInterval"):
+			interval = entry["timeInterval"]
+			start_str = interval.get("start")
+			end_str = interval.get("end")
+			if start_str and end_str:
+				start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+				end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+				total_seconds += (end_dt - start_dt).total_seconds()
+	return total_seconds
+
+
+def fetch_clockify_workspace_users(api_key, workspace_ids, active_employees):
+	"""
+	Loops over each workspace ID and calls the Clockify API to fetch users.
+	Returns a dictionary with workspace ID as key and list of users as value.
+	"""
+	employee_records = {}
+	headers = {"X-Api-Key": api_key}
+	# Convert active_employees list into dictionaries for quick lookups
+	active_employee_map = {emp["user_id"].lower(): emp for emp in active_employees}
+	clockify_id_map = {
+		emp["custom_clockify_user_id"]: emp for emp in active_employees if emp.get("custom_clockify_user_id")
+	}
+	for ws in workspace_ids:
+		url = f"https://api.clockify.me/api/v1/workspaces/{ws}/users?page-size=500"
+		try:
+			response = requests.get(url, headers=headers)
+			response.raise_for_status()
+			users = response.json()
+			for user in users:
+				# Prefer the Clockify user ID stored on the Employee, fall back to email
+				employee = clockify_id_map.get(user.get("id"))
+				if not employee:
+					email = (user.get("email") or "").lower()
+					employee = active_employee_map.get(email) if email else None
+					# Employees with a stored Clockify ID are matched only by that ID
+					if employee and employee.get("custom_clockify_user_id"):
+						employee = None
+				if not employee:
+					continue
+				# Use the ERPNext user_id as the key so downstream lookups match the User record
+				email = employee["user_id"]
+				if email in employee_records:
+					if ws not in employee_records[email]["workspace_ids"]:
+						employee_records[email]["workspace_ids"].append(ws)
+				else:
+					# create a new record
+					employee_records[email] = {
+						"workspace_ids": [ws],
+						"user_id": user.get("id"),
+						"employee_name": user.get("name"),
+						"employee": employee["name"]
+					}
+		except Exception as e:
+			frappe.log_error(
+				f"Error fetching Clockify users for workspace {ws} as clockify key {api_key} not in workspace",
+				"Clockify Task")
+			continue
+
+	return employee_records
+
+def is_public_holiday(date):
+	"""
+	:param date: string YYYY-MM-DD
+	:returns: True if `date` is in this year's Holiday List, False otherwise
+	"""
+	# 1) get all Holiday List names whose from_date is in "this year"
+	holiday_lists = frappe.db.get_list(
+		"Holiday List",
+		filters = {
+			"from_date": ["timespan", "this year"]
+		},
+		pluck = "name"
+	) 
+
+	if not holiday_lists:
+		return False
+
+	# 2) pick the first matching Holiday List
+	holiday_list = holiday_lists[0]
+
+	# 3) check if `date` appears in its Holiday child table
+	return frappe.db.exists(
+		"Holiday",
+		{"parent": holiday_list, "holiday_date": date}
+	)
+
+
+# send compliance report to operations channel
+def send_daily_compliance_report():
+	"""
+	Daily Compliance Report for the PREVIOUS DAY (e.g., to be run at 8 AM next day):
+	- Checks employee check-ins and Clockify logs for the PREVIOUS day to determine compliance.
+	- Creates Employee Compliance Report documents in ERPNext.
+	- Note: Sending this report to Slack is handled by 'send_yesterday_compliance_report_to_slack'.
+	"""
+	# Calculate for the previous day
+	report_date_str = frappe.utils.add_days(frappe.utils.nowdate(), -1) # Yesterday's date as string
+	report_date_obj = frappe.utils.getdate(report_date_str) # Yesterday's date as datetime.date object
+
+	# Define start and end datetime for the report_date_str
+	report_start_dt_str = f"{report_date_str} 00:00:00"
+	report_end_dt_str = f"{report_date_str} 23:59:59"
+	report_start_dt = get_datetime(report_start_dt_str)
+	report_end_dt = get_datetime(report_end_dt_str)
+
+	# Get system-level Clockify settings (API Key and comma-separated workspace IDs)
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+	if not custom_api_key or not workspace_ids:
+		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
+		return
+
+	# Fetch active employees from ERPNext
+	active_employees = get_all_active_employees()
+	# fetch users across all workspaces
+	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
+
+	# Include active employees without a Clockify account so they are still checked on check-ins
+	for emp in active_employees:
+		if emp["user_id"] not in workspace_users:
+			workspace_users[emp["user_id"]] = {
+				"workspace_ids": [],
+				"user_id": None,
+				"employee_name": emp.get("employee_name") or emp["name"],
+				"employee": emp["name"],
+			}
+
+	report_data = []
+	is_holiday = is_public_holiday(report_date_obj) or report_date_obj.weekday() in (5, 6)
+
+	for email, emp_data in workspace_users.items():
+		try:
+			compliance_info = check_non_compliance(email, emp_data, custom_api_key, report_start_dt, report_end_dt)
+		except Exception:
+			frappe.log_error(
+				message=f"Error checking compliance for {email}\n{frappe.get_traceback()}",
+				title="Clockify Compliance Check",
+			)
+			continue
+		if not compliance_info:
+			continue
+
+		if is_holiday:
+			# skip on holidays if employee has no hours (or, without Clockify, no check-in); otherwise add to doctype
+			if compliance_info["is_clockify_active"]:
+				if not compliance_info["total_hours"]:
+					continue
+			elif not compliance_info["checkin_time"]:
+				continue
+
+		report_data.append({
+			"employee_id": emp_data["employee"],
+			"employee": emp_data["employee_name"],
+			"checkin": compliance_info["checkin_time"],
+			"checkout": compliance_info["checkout_time"],
+			"is_compliant": compliance_info["is_compliant"],
+			"reason": compliance_info["reason"],
+			"total_hours": compliance_info["total_hours"],
+			"expected_hours": compliance_info["expected_hours"],
+			"leave_type": compliance_info["leave_type"],
+			"is_late_entry": compliance_info["is_late_entry"],
+			"is_wfh": compliance_info["is_wfh"]
+			})
+	
+	# send to erp
+	create_employee_compliance_reports(report_data, report_date=report_date_str)
+	# Send to channel at 9am
+
+def send_yesterday_compliance_report_to_slack():
+	from datetime import datetime, timedelta
+	today = datetime.today().date() # 2025-04-25
+	if is_public_holiday(today) or today.weekday() in (5, 6):
+		return
+	
+	# Start from yesterday and go backwards to find last valid working day
+	yesterday_date = today - timedelta(days=1)
+	while yesterday_date.weekday() in (5, 6) or is_public_holiday(yesterday_date):
+		yesterday_date -= timedelta(days=1)
+
+	# Convert to string to keep your variable consistent
+	yesterday = yesterday_date.strftime("%Y-%m-%d")
+
+	# Pull non-compliant data from your DocType for yesterday
+	records = frappe.get_all("Employee Compliance Report", 
+		filters={
+			"report_date": yesterday,
+			"compliant": 0,
+		},
+		fields=["employee", "employee_name", "checkin", "checkout", "reason"],
+		limit_page_length=0 
+	)
+
+	# Format the data like original non_compliant list
+	non_compliant = [{
+		"employee_id": r.employee,
+		"employee": r.employee_name,
+		"checkin": format_time_string(r.checkin),
+		"checkout": format_time_string(r.checkout),
+		"reason": r.reason
+	} for r in records]
+
+	send_compliance_report(non_compliant, yesterday)
+
+def format_time_string(value):
+	if value and value.upper() != "N/A":
+		try:
+			# If it's a full datetime string
+			dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+			return dt.strftime("%I:%M %p")
+		except (ValueError, AttributeError):
+			return value  # fallback in case of unexpected format
+	return "N/A"
+
+
+def get_employee_checkin(emp_email, start_dt, end_dt):
+	"""
+	Fetches the check-in and check-out records for a specific employee within the given time range.
+	Returns a dictionary with keys "checkin" and "checkout". If no records are found, returns an empty dict.
+
+	Parameters:
+		emp_email (str): The employee's email (used as user_id in ERPNext).
+		start_dt (datetime): The start of the time range.
+		end_dt (datetime): The end of the time range.
+	"""
+	# Lookup the ERPNext Employee using the email stored as user_id
+	employee = frappe.db.get_value("Employee", {"user_id": emp_email}, "name")
+
+	if not employee:
+		print("Employee not found in ERPNext for email:", emp_email)
+		return {}  # Employee not found in ERPNext
+
+	# Fetch all check-in and check-out records for this employee within the time range
+	checkin_records = frappe.get_all(
+		"Employee Checkin",
+		filters={
+			"employee": employee,
+			"time": ["between", [start_dt, end_dt]]
+		},
+		fields=["time", "log_type"],
+		order_by="time asc"
+	)
+
+	emp_checkins = {}
+	# Assuming the earliest "IN" is the check-in and the latest "OUT" is the checkout
+	for record in checkin_records:
+		if record.get("log_type") == "IN" and "checkin" not in emp_checkins:
+			emp_checkins["checkin"] = record.get("time")
+		elif record.get("log_type") == "OUT":
+			# Continuously update checkout so the last record remains as the latest checkout
+			emp_checkins["checkout"] = record.get("time")
+
+	return emp_checkins
+
+def get_employee_shift_type(employee_id):
+	"""
+	Fetches the shift type for an employee by filtering for only the Submitted shifts.
+	Returns the shift type of the first assignment found.
+	"""
+	# Query for the employee's shift assignment, filtering for only "Submitted" shifts
+	shift_assignments = frappe.get_all("Shift Assignment", filters={
+		"employee": employee_id,  # Use employee ID field from emp_data["employee"]
+		"docstatus": 1,  # Ensure we're only fetching submitted shifts
+		"status": "Active"  # Ensure we're only fetching active shifts
+	}, fields=["shift_type"], limit=1)  # Limit to the first assignment
+
+	# If no active submitted shift assignment found, return None
+	if not shift_assignments:
+		return None
+	# Return the shift type of the first valid submitted assignment
+	return shift_assignments[0]["shift_type"]
+
+def check_non_compliance(emp_email, emp_data, api_key, start_dt, end_dt):
+	"""
+	Determines the reason for an employee's non-compliance based on ERPNext check-ins and Clockify logs.
+	Returns a tuple: (checkin_time, checkout_time, non_compliance_reason)
+
+	- If an active timer is running, we consider the employee compliant (i.e. return no reason).
+	- If there is no check-in but Clockify logs exist, returns "Clockify logs present but no check-in recorded".
+	- If no check-in and no logs, returns "No check-in, No Clockify logs, No leave recorded" (unless on leave).
+	- If total logged time is below required hours, returns the underworked message.
+	"""
+	employee_id = emp_data.get("employee")
+	# Initialize compliance data
+	compliance_data = {
+		"checkin_time": None,
+		"checkout_time": None,
+		"is_compliant": True,
+		"reason": None,
+		"total_hours": 0,
+		"expected_hours": 0,
+		"leave_type": None,
+		"is_late_entry": False,
+		"is_wfh": False,
+		"is_clockify_active": False
+	}
+
+	user_doc = frappe.get_doc("User", emp_email)
+	is_clockify_active = user_doc.get("is_clockify_active")
+	compliance_data["is_clockify_active"] = bool(is_clockify_active)
+
+	# Fetch employee check-ins (from ERPNext) using the unique identifier (email here)
+	emp_checkins = get_employee_checkin(emp_email, start_dt, end_dt)
+	compliance_data["checkin_time"] = emp_checkins.get("checkin")
+	compliance_data["checkout_time"] = emp_checkins.get("checkout")
+
+	# Get leave status from ERPNext (e.g., "On Leave", "Half Day", etc.)
+	leave_status = get_employee_leave_status(emp_data["employee"], start_dt.date(), status=["Open", "Approved"])
+	compliance_data["leave_type"] = leave_status if leave_status in ["On Leave", "Half Day"] else None
+	
+	#  if employee is on full day leave, skip the compliance check
+	if leave_status == "On Leave":
+		return compliance_data
+	
+	#  Check WFH status
+	wfh_status = frappe.db.exists(
+		"Work From Home",
+		{
+			"employee": employee_id,
+			"from_date": ["<=", start_dt.date()],
+			"to_date": [">=", start_dt.date()],
+			"status": "Approved",
+			"docstatus": 1
+		}
+	)
+	compliance_data["is_wfh"] = bool(wfh_status)
+
+	# Fetch Shift Type linked to the employee (using the first shift found)
+	shift_type = get_employee_shift_type(employee_id)
+	if not shift_type:
+		# If no shift assigned or no valid shift found, skip the compliance check
+		return None
+
+	# Fetch shift type thresholds
+	try:
+		shift_type_doc = frappe.get_doc("Shift Type", shift_type)
+		# Fetching full and half day hours assigned to shift
+		working_hours_full_day = shift_type_doc.working_hours_threshold_for_full_day
+		working_hours_half_day = shift_type_doc.working_hours_threshold_for_half_day
+	except Exception as e:
+		frappe.log_error(f"Error fetching Shift Type data for {employee_id}", "Shift Type Fetch Error")
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"]= "Error fetching Shift Type data"
+		return compliance_data
+	
+	FULL_DAY_SECONDS = working_hours_full_day * 3600  # Convert full day hours to seconds
+	HALF_DAY_SECONDS = working_hours_half_day * 3600      # Convert half day hours to seconds
+
+	min_seconds = HALF_DAY_SECONDS if leave_status == "Half Day" else FULL_DAY_SECONDS
+	compliance_data["expected_hours"] = working_hours_half_day if leave_status == "Half Day" else working_hours_full_day
+	half_day_message = " (Half Day)" if min_seconds == HALF_DAY_SECONDS else ""
+
+	#  Check for late entry if there's a checkin time
+	if compliance_data["checkin_time"]:
+		if shift_type_doc.start_time and shift_type_doc.late_entry_grace_period:
+			shift_start = shift_type_doc.start_time
+			checkin_time_obj = compliance_data["checkin_time"].time()
+			
+			# Get grace period in minutes (default to 0 if not set)
+			grace_period = shift_type_doc.late_entry_grace_period or 0
+			
+			# Create a datetime object for shift start and add grace period
+			shift_start_time = (datetime.min + shift_start).time()
+		
+			# Create a datetime object for shift start and add grace period
+			shift_start_dt = datetime.combine(start_dt.date(), shift_start_time)
+			grace_end_dt = shift_start_dt + timedelta(minutes=grace_period)
+			
+			# Compare checkin time with grace period end time
+			if checkin_time_obj > grace_end_dt.time():
+				compliance_data["is_late_entry"] = True
+
+	# If clockify is not active for this user, skip all Clockify-based compliance checks
+	if not is_clockify_active:
+		if not compliance_data["checkin_time"]:
+			compliance_data["is_compliant"] = False
+			compliance_data["reason"] = "Absent"
+		return compliance_data
+
+	# Validate required Clockify details
+	if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"] = "Missing Clockify API User ID or Workspace ID"
+		return compliance_data
+
+	user_id = emp_data["user_id"]
+	workspaces = emp_data["workspace_ids"]
+
+	# Check if an active timer is running in any workspace
+	try:
+		if any(is_clockify_timer_active(api_key, ws, user_id, raise_on_error=True) for ws in workspaces):
+			# If there's an active timer, we assume the employee is compliant for now.
+			return compliance_data
+	except Exception as e:
+		frappe.log_error(
+			message=f"Error checking active timer for {emp_email}\n{frappe.get_traceback()}",
+			title="Clockify Compliance Check",
+		)
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"] = "Clockify API error - could not verify logs"
+		return compliance_data
+
+	# Fetch Clockify logs (total logged time across all workspaces)
+	try:
+		total_logged_seconds = sum(
+			sum_clockify_durations(
+				get_clockify_time_entries(api_key, ws, user_id, start_dt, end_dt, raise_on_error=True)
+			)
+			for ws in workspaces
+		)
+		compliance_data["total_hours"] = round(total_logged_seconds / 3600, 2)
+		hours, minutes = divmod(total_logged_seconds // 60, 60)
+	except Exception as e:
+		frappe.log_error(
+			message=f"Clockify API error for {emp_email}\n{frappe.get_traceback()}",
+			title="Clockify Compliance Check",
+		)
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"] = "Clockify API error - could not verify logs"
+		return compliance_data
+
+
+	# Compliance Checks
+	if not compliance_data["checkin_time"]:
+		if total_logged_seconds > 0:
+			compliance_data["is_compliant"] = False
+			compliance_data["reason"] = f"No check-in recorded. {hours} hr {minutes} mins logged{half_day_message}"
+			return compliance_data
+		else:
+			compliance_data["is_compliant"] = False
+			compliance_data["reason"] = "Absent"
+			return compliance_data
+
+	if total_logged_seconds == 0:
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"] = "No Clockify logs recorded"
+		return compliance_data
+
+	if total_logged_seconds < min_seconds:
+		compliance_data["is_compliant"] = False
+		compliance_data["reason"] = f"Only {hours} hr {minutes} mins logged{half_day_message}"
+		return compliance_data
+
+	# If all checks pass, the employee is compliant
+	return compliance_data
+
+
+def get_employee_leave_status(emp_id, date, status="Approved"):
+	"""
+	Fetches the leave status for an employee on a given date.
+
+	:param emp_id: Employee ID
+	:param date: The date to check leave status (YYYY-MM-DD or date object)
+	:param status: Leave status or list of statuses (default: 'Approved')
+	:return: "On Leave", "Half Day"  or None if not on leave.
+	"""
+	# Ensure date is a string in YYYY-MM-DD format
+	if not isinstance(date, str):
+		date_str = date.strftime("%Y-%m-%d")
+	else:
+		date_str = date
+
+	# Prepare status filter for frappe.db.get_value
+	if isinstance(status, list):
+		status_filter = ["in", status]
+	else:
+		status_filter = status
+
+	leave = frappe.db.get_value(
+		"Leave Application",
+		{
+			"employee": emp_id,
+			"status": status_filter,
+			"from_date": ["<=", date_str],
+			"to_date": [">=", date_str],
+			"docstatus": ["!=", 2],
+		},
+		["half_day", "half_day_date", "from_date", "to_date"],
+		order_by="modified desc"
+	)
+	if leave:
+		half_day, half_day_date, from_date, to_date = leave
+		if half_day:
+			# Single day leave (from_date == to_date)
+			if str(from_date) == str(to_date) and str(from_date) == date_str:
+				return "Half Day"
+			# Multi-day leave, half_day_date matches
+			elif half_day_date and str(half_day_date) == date_str:
+				return "Half Day"
+		# If not half day for this date, but still in range, it's a full day leave
+		if not half_day or (half_day and (
+			(str(from_date) == str(to_date) and str(from_date) != date_str) or
+			(half_day_date and str(half_day_date) != date_str)
+		)):
+			return "On Leave"
+		# If half_day is set but doesn't match, treat as full day leave
+		if half_day and (not half_day_date and str(from_date) != str(to_date)):
+			return "On Leave"
+		# Defensive: if logic above doesn't match, but still in range, treat as full day leave
+		if str(from_date) <= date_str <= str(to_date):
+			return "On Leave"
+
+	# Not on leave
+	return None
+
+def create_employee_compliance_reports(entries, report_date=None):
+	"""
+	entries: list of dicts with keys:
+	  - employee    (Link to Employee)
+	  - checkin     (Time string, e.g. "09:00")
+	  - checkout    (Time string, e.g. "17:00")
+	  - reason      (str)
+	report_date: date string "YYYY-MM-DD";
+	"""
+	for e in entries:
+		# build the new document
+		doc = frappe.get_doc({
+			"doctype": "Employee Compliance Report",
+			"employee": e["employee_id"],
+			"report_date": report_date,
+			"checkin": e["checkin"],
+			"checkout": e["checkout"],
+			"reason": e["reason"],
+			"compliant": e["is_compliant"],
+			"total_hours": timedelta(hours=e.get("total_hours", 0)),
+			"expected_hours": timedelta(hours=e.get("expected_hours", 0)),
+			"leave_type": e["leave_type"],
+			"late_entry": e["is_late_entry"],
+			"wfh": e["is_wfh"]
+		})
+		# insert into the database
+		doc.insert(ignore_permissions=True)
+
+	# commit once after all inserts
+	frappe.db.commit()
+
+
+def send_late_report_to_HR():
+	"""
+	Sends the weekly late report to HR via email.
+	Fetches data directly from the 'Weekly Late Report' query.
+	Sends a 'no late entries' message if the report is empty.
+	"""
+	try:
+		today = frappe.utils.get_datetime(frappe.utils.get_datetime()).strftime("%d %b %Y")
+		report_name = "Weekly Late Report"
+		report = frappe.get_doc("Report", report_name)
+		if report.report_type != "Query Report":
+			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
+			return
+		sql_query = report.query.replace("%%","%")
+		report_data = frappe.db.sql(sql_query, as_dict=True)
+		email_message_html = f"<h3>Weekly Late Report ({today})</h3>"
+		if not report_data:
+			email_message_html += "<p>No late entries found for the week.</p>"
+
+		else:
+			email_message_html += "<p>The following employees were late this week:</p>"
+			email_message_html += "<table border='1'>"
+			email_message_html += "<tr><th>Employee</th><th>Number of Late Entries</th><th>Attendance Dates</th></tr>"
+			for record in report_data:
+				employee_name = record.get('employee_name', '')
+				late_count = record.get('late_count', '')
+				late_dates = record.get('late_dates', '')
+				dates = [date.strip() for date in late_dates.split(',')]	
+				email_message_html += f"<tr><td style='text-align: center;'>{employee_name}</td><td style='text-align: center;'>{late_count}</td><td>"
+				email_message_html += "<table style='border-collapse: collapse; width: 100%;'><tr>"
+				for i, date in enumerate(dates):
+					border_left = "border-left: 1px solid gray;" if i > 0 else ""
+					email_message_html += (
+						f"<td style='text-align: center; {border_left}'>{date}</td>"
+					)
+				email_message_html += "</tr></table></td></tr>"
+			email_message_html += "</table>"
+	
+		target_emails = get_hr_manager()
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly Late Report",
+			message=email_message_html,
+			now=True
+		)
+
+	except frappe.DoesNotExistError:
+		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
+	except Exception as e:
+		frappe.log_error(f"Error sending Weekly Late Report to HR: {str(e)}", "Email Notification")
+
+def send_leave_report_to_HR():
+	"""
+	Sends the weekly leave report to HR via email.
+	Fetches data directly from the 'Weekly Leave Report' query.
+	Sends a 'no leave entries' message if the report is empty.
+	"""
+	try:
+		today = frappe.utils.get_datetime(frappe.utils.get_datetime()).strftime("%d %b %Y")
+		report_name = "Weekly Leave Report"
+		report = frappe.get_doc("Report", report_name)
+		if report.report_type != "Query Report":
+			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
+			return
+		sql_query = report.query.replace("%%","%")
+		report_data = frappe.db.sql(sql_query, as_dict=True)
+		email_message_html = f"<h3>Weekly Leave Report ({today})</h3>"
+		if not report_data:
+			email_message_html += "<p>No leave entries found for the week.</p>"
+		else:
+			email_message_html += "<p>The following employees were on leave this week:</p>"
+			email_message_html += "<table border='1'>"
+			email_message_html += "<tr><th>Employee</th><th>Number of Leaves</th><th>Attendance Dates</th></tr>"
+			for record in report_data:
+				employee_name = record.get('employee_name', '')
+				leave_count = record.get('leave_count', '')
+				leave_dates = record.get('leave_dates', '')
+				dates = [date.strip() for date in leave_dates.split(',')]	
+				email_message_html += f"<tr><td style='text-align: center;'>{employee_name}</td><td style='text-align: center;'>{leave_count}</td><td>"
+				email_message_html += "<table style='border-collapse: collapse; width: 100%;'><tr>"
+				for i, date in enumerate(dates):
+					border_left = "border-left: 1px solid gray;" if i > 0 else ""
+					email_message_html += (
+						f"<td style='text-align: center; {border_left}'>{date}</td>"
+					)
+				email_message_html += "</tr></table></td></tr>"
+			email_message_html += "</table>"
+	
+		target_emails = get_hr_manager()
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly Leave Report",
+			message=email_message_html,
+			now=True
+		)
+
+	except frappe.DoesNotExistError:
+		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
+	except Exception as e:
+		frappe.log_error(f"Error sending Weekly Leave Report to HR: {str(e)}", "Email Notification")
+
+
+def send_wfh_report_to_HR():
+	"""
+	Sends the weekly WFH report to HR via email.
+	Fetches data directly from the 'Weekly WFH Report' query.
+	Sends a 'no WFH entries' message if the report is empty.
+	"""	
+	try:
+		today = frappe.utils.get_datetime(frappe.utils.get_datetime()).strftime("%d %b %Y")
+		report_name = "Weekly WFH Report"
+		report = frappe.get_doc("Report", report_name)
+		if report.report_type != "Query Report":
+			frappe.log_error(f"Report '{report_name}' is not a Query Report.", "Email Notification")
+			return
+		sql_query = report.query.replace("%%","%")
+		report_data = frappe.db.sql(sql_query, as_dict=True)
+		email_message_html = f"<h3>Weekly WFH Report ({today})</h3>"
+		if not report_data:
+			email_message_html += "<p>No WFH entries found for the week.</p>"
+		else:
+			email_message_html += "<p>The following employees were on WFH this week:</p>"	
+			email_message_html += "<table border='1'>"
+			email_message_html += "<tr><th>Employee</th><th>Number of WFH Days</th><th>Attendance Dates</th></tr>"
+
+			for record in report_data:
+				employee_name = record.get('employee_name', '')
+				wfh_count = record.get('total_days', '')
+				wfh_date_ranges = record.get('wfh_date_ranges', '')
+
+				dates = [date.strip() for date in wfh_date_ranges.split(',')]
+
+				email_message_html += f"<tr><td style='text-align: center;'>{employee_name}</td><td style='text-align: center;'>{wfh_count}</td><td>"
+				email_message_html += "<table style='border-collapse: collapse; width: 100%;'><tr>"
+
+				for i, date in enumerate(dates):
+					border_left = "border-left: 1px solid gray;" if i > 0 else ""
+					email_message_html += (
+						f"<td style='text-align: center; {border_left}'>{date}</td>"
+					)
+
+				email_message_html += "</tr></table></td></tr>"
+
+			email_message_html += "</table>"
+	
+		target_emails = get_hr_manager()
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly WFH Report",
+			message=email_message_html,
+			now=True
+		)
+
+	except frappe.DoesNotExistError:
+		frappe.log_error(f"Report '{report_name}' not found.", "Email Notification")
+	except Exception as e:
+		frappe.log_error(f"Error sending Weekly WFH Report to HR: {str(e)}", "Email Notification")
+	
+def get_hr_manager():
+	"""
+	Returns a list of email addresses of users with the 'HR Manager' role.
+	"""
+	# First, find all users who have the 'HR Manager' role assigned
+	users_with_role = frappe.get_all(
+		"Has Role",
+		filters={"role": "HR Manager", "parenttype": "User"},
+		fields=["parent"]
+	)
+
+	# Extract user IDs
+	user_ids = [u["parent"] for u in users_with_role]
+
+	if not user_ids:
+		return []
+
+	# Now get their emails
+	users = frappe.get_all(
+		"User",
+		filters={"name": ["in", user_ids], "enabled": 1},
+		fields=["email"]
+	)
+
+	# Return email addresses
+	return [user["email"] for user in users if user.get("email")]
+
+# weekly employee clockify summary report
+def send_weekly_time_report():
+	"""
+	Generates and sends a weekly time tracking report for all employees.
+	The report includes daily time logged, breakdown by task category, missing days,
+	and total vs expected hours.
+	"""
+	# Get system-level Clockify settings
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+	if not custom_api_key or not workspace_ids:
+		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
+		return
+
+	# Calculate date range for last week
+	end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+	start_date = end_date - timedelta(days=7)
+	# Get all active employees
+	active_employees = get_all_active_employees()
+	# Fetch users across all workspaces
+	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
+	public_holidays_in_week = get_public_holidays_in_week(start_date, end_date)
+
+	# Count public holidays
+	public_holidays_in_week_count = sum(1 for v in public_holidays_in_week.values() if v)
+	# Calculate working days by excluding weekends and public holidays
+	working_days_in_week = 7 - public_holidays_in_week_count
+
+	# Process each employee's time entries in all workspaces
+	employee_reports = collect_employee_reports(
+		workspace_users,
+		start_date,
+		end_date,
+		custom_api_key,
+		public_holidays_in_week,
+		working_days_in_week
+	)
+
+	# Send reports via email and Slack
+	for report in employee_reports:
+		# Format email content
+		email_content = generate_email_content(report)
+		recipients = [report['email']]
+		if report.get('team_lead'):
+			recipients.append(report['team_lead'])
+		# Send email as HTML
+		frappe.sendmail(
+			recipients=recipients,
+			subject=f"Weekly HR Summary Report for {report['employee_name']}",
+			message=email_content,
+			now=True,
+		)
+
+		# Send Slack message
+		slack_message = html_to_slack_plaintext(email_content)
+
+		# Create Notification Log
+		hr_notf = frappe.get_doc(
+			{
+				"doctype": "HR Notifications",
+				"subject": f"Weekly HR Summary Report for {report['employee_name']}",
+				"message": slack_message,
+				"user": [{"user": report["email"]}],
+				"send_push": 0,
+				"send_slack": 1,
+				"send_email": 0
+			}
+		).insert(ignore_permissions=True)
+
+
+
+def process_employee_workspaces(emp_data, start_date, end_date, custom_api_key, public_holidays_in_week, working_days_in_week):
+	"""
+	Process all workspaces for a single employee and generate their reports.
+	
+	Args:
+		emp_data (dict): Employee data containing user_id, workspace_ids, etc.
+		start_date (datetime): Start date for the report
+		end_date (datetime): End date for the report
+		custom_api_key (str): Clockify API key
+		public_holidays_in_week (dict): Dictionary of public holidays
+		working_days_in_week (int): Number of working days in the week
+		
+	Returns:
+		tuple: (employee_weekly_reports, late_entries_count, wfh_days_count)
+	"""
+	if not emp_data.get("user_id") or not emp_data.get("workspace_ids"):
+		return None, None, None
+
+	user_id = emp_data["user_id"]
+	workspaces = emp_data["workspace_ids"]
+	shift_type = get_employee_shift_type(emp_data["employee"])
+	if not shift_type:
+		return None, None, None
+	# Subtract leave days from working days in week
+	leave_count = get_leave_count(emp_data["employee"], start_date, end_date, status="Approved")
+	working_days_in_week = working_days_in_week - leave_count
+	if working_days_in_week < 0:
+		working_days_in_week = 0
+	
+	hr_settings = frappe.get_single("HR Settings")
+	expected_hours = hr_settings.standard_working_hours
+
+	# Initialize the employees weekly report for each workspace
+	employee_weekly_reports = []
+
+	# Fetch and process Late Entries in a week
+	late_entries_count = get_late_entries_count(emp_data["employee"], start_date, end_date - timedelta(days=1))
+
+	# Fetch and process Work From Home in a week
+	wfh_days_count = get_wfh_days_count(emp_data["employee"], start_date, end_date - timedelta(days=1), status="Approved")
+
+	user_doc = frappe.get_doc("User", user_id)
+	is_clockify_active = user_doc.get("is_clockify_active")
+
+	if not is_clockify_active:
+		return employee_weekly_reports, late_entries_count, wfh_days_count
+
+	# Process each workspace
+	for workspace_id in workspaces:
+		task_id = get_clockify_report_task_id(workspace_id, start_date, end_date - timedelta(days=1), user_id, custom_api_key)
+		if task_id:
+			report_data = get_clockify_report_result(workspace_id, task_id, custom_api_key)
+			if report_data:
+				totals = report_data.get("totals", {})
+				chart = report_data.get("chart", {})
+				group_one = report_data.get("groupOne", {})
+				weekly_report = generate_weekly_report(
+					start_date, 
+					end_date - timedelta(days=1), 
+					emp_data["employee"], 
+					user_id, 
+					totals, 
+					chart, 
+					group_one, 
+					expected_hours, 
+					public_holidays_in_week, 
+					working_days_in_week
+				)
+				employee_weekly_reports.append({
+					"workspace_id": workspace_id,
+					"weekly_report": weekly_report
+				})
+	
+	return employee_weekly_reports, late_entries_count, wfh_days_count
+
+def collect_employee_reports(workspace_users, start_date, end_date, custom_api_key, public_holidays_in_week, working_days_in_week):
+	"""
+	Collect reports for all employees from their respective workspaces.
+	
+	Args:
+		workspace_users (dict): Dictionary of workspace users
+		start_date (datetime): Start date for the report
+		end_date (datetime): End date for the report
+		custom_api_key (str): Clockify API key
+		public_holidays_in_week (dict): Dictionary of public holidays
+		working_days_in_week (int): Number of working days in the week
+		
+	Returns:
+		list: List of employee reports
+	"""
+	employee_reports = []
+	
+	for email, emp_data in workspace_users.items():
+		employee_weekly_reports, late_entries_count, wfh_days_count = process_employee_workspaces(
+			emp_data, 
+			start_date, 
+			end_date, 
+			custom_api_key, 
+			public_holidays_in_week, 
+			working_days_in_week
+		)
+		team_lead = frappe.db.get_value("Employee", {"user_id": email}, "team_lead")
+		if employee_weekly_reports:
+			employee_reports.append({
+				"employee": emp_data["employee"],
+				"employee_name": emp_data["employee_name"],
+				"email": email,
+				"team_lead": team_lead,
+				"weekly_reports": employee_weekly_reports,
+				"late_entries_count": late_entries_count,
+				"wfh_days_count": wfh_days_count
+			})
+	
+	return employee_reports
+
+def generate_summary_section(weekly_report, report):
+	"""Generate the summary section of the report (hours, late entries, leaves, WFH)"""
+	content = ""
+	content += f"<strong>Total Hours:</strong> {format_hours_to_hhmm(weekly_report['total_hours'])}<br>"
+	content += f"<strong>Expected Hours:</strong> {format_hours_to_hhmm(weekly_report['expected_hours'])}<br>"
+	content += f"<strong>Total Late Entries:</strong> {report['late_entries_count'] if report['late_entries_count'] else 0}<br>"
+	
+	# Calculate leaves
+	leave_count = sum(1 if day.get("leave_status") == "On Leave" else 0.5 if day.get("leave_status") == "Half Day" else 0 
+					for day in weekly_report.get("week_breakdown", []))
+	content += f"<strong>Total Leaves Taken:</strong> {leave_count:.1f}<br>"
+	if weekly_report.get('total_unapproved_leaves'):
+		content += f"<strong>Total Unapproved Leaves:</strong> {weekly_report.get('total_unapproved_leaves')}<br>"
+	content += f"<strong>Total WFH Days:</strong> {report['wfh_days_count'] if report['wfh_days_count'] else 0}<br>"
+	return content
+
+def generate_daily_breakdown_section(weekly_report):
+	"""Generate the daily breakdown section of the report"""
+	content = "<br><strong>Daily Breakdown:</strong><br>"
+	for day in weekly_report.get("week_breakdown", []):
+		date = day["date"]
+		total_time = day["total_time"]
+		formatted_date = date.strftime("%A, %B %d, %Y")
+		leave = f" ({day['leave_status']})" if day['leave_status'] in ["On Leave", "Half Day"] else ""
+		public_holiday = f" (Public Holiday)" if day['is_public_holiday'] else ""
+		content += f"<strong>{formatted_date}</strong>: {format_hours_to_hhmm(total_time)} {leave}{public_holiday}<br>"
+
+		for project in day.get("projects", []):
+			content += f"- Project: <strong>{project['project_name']}</strong> — Time Spent: {format_hours_to_hhmm(project['time_spent'])}<br>"
+	return content
+
+def generate_missing_days_section(weekly_report):
+	"""Generate the missing days section of the report"""
+	content = ""
+	if weekly_report.get("missing_days"):
+		content += "<br><strong>Missing Days:</strong><br>"
+		for missing_date in weekly_report["missing_days"]:
+			formatted_date = missing_date.strftime("%A, %B %d, %Y")
+			content += f"{formatted_date}<br>"
+	return content
+
+def generate_project_breakdown_section(weekly_report):
+	"""Generate the project breakdown section of the report"""
+	content = "<br><strong>Project Breakdown:</strong><br>"
+	for project in weekly_report.get("project_breakdown", []):
+		content += f"<strong>Project:</strong> {project['project_name']} — <strong>Total Duration:</strong> {format_hours_to_hhmm(project['total_duration'])}<br>"
+		for task in project.get("tasks", []):
+			content += f"— Task: {task['task_name']} — Duration: {format_hours_to_hhmm(task['task_duration'])}<br>"
+	return content
+
+def generate_email_content(report):
+	"""Generate the complete email content for a report"""
+	email_content = f"<h3>Weekly HR Summary Report for {report['employee_name']}</h3><br>"
+
+	for workspace_report in report.get("weekly_reports", []):
+		weekly_report = workspace_report["weekly_report"]
+		
+		# Generate each section
+		email_content += generate_summary_section(weekly_report, report)
+		email_content += generate_daily_breakdown_section(weekly_report)
+		email_content += generate_missing_days_section(weekly_report)
+		email_content += generate_project_breakdown_section(weekly_report)
+
+	return email_content
+
+def generate_weekly_report(start_date, end_date, employee_id, user_id, totals, chart, group_one, expected_hours, public_holidays_in_week, working_days_in_week):
+	"""
+	Generate the weekly report by processing totals, chart, and other data for each employee.
+	"""
+	weekly_report = {
+		"total_hours": totals[0]["totalTime"] / 3600,  # Convert seconds to hours
+		"expected_hours": expected_hours * working_days_in_week,
+		"total_unapproved_leaves": get_leave_count(employee_id, start_date, end_date, status="Open"),
+		"week_breakdown": [],
+		"project_breakdown": [],
+		"missing_days": [],
+	}
+
+	# Process the daily breakdown from the chart
+	week_breakdown, missing_days = process_daily_breakdown(
+		start_date, end_date, employee_id, chart, public_holidays_in_week
+	)
+	weekly_report["week_breakdown"] = week_breakdown
+	weekly_report["missing_days"] = missing_days
+
+	# Process the project breakdown
+	weekly_report["project_breakdown"] = process_project_breakdown(group_one, user_id)
+
+	return weekly_report
+
+def process_project_breakdown(group_one, user_id):
+	"""
+	Process project breakdown from Clockify data.
+	
+	Args:
+		group_one (list): List of projects from Clockify
+		user_id (str): Clockify user ID
+		
+	Returns:
+		list: List of project information with tasks
+	"""
+	project_breakdown = []
+	
+	for project in group_one:
+		project_info = {
+			"project_name": project["name"],
+			"total_duration": flt(project["duration"] / 3600,2),
+			"tasks": []
+		}
+
+		for task in project.get("children", []):
+			task_duration = flt(task["duration"] / 3600,2)
+			task_info = {
+				"task_name": task.get("name", "Unnamed"),
+				"task_duration": task_duration
+			}
+			project_info["tasks"].append(task_info)
+
+		project_breakdown.append(project_info)
+		
+	return project_breakdown
+
+def process_daily_breakdown(start_date, end_date, employee_id, chart, public_holidays_in_week):
+	"""
+	Process daily breakdown for the week.
+	
+	Args:
+		start_date (datetime): Start date of the week
+		end_date (datetime): End date of the week
+		employee_id (str): Employee ID
+		chart (dict): Clockify chart data
+		public_holidays_in_week (dict): Dictionary of public holidays
+		
+	Returns:
+		tuple: (week_breakdown list, missing_days list)
+	"""
+	week_breakdown = []
+	missing_days = []
+	current_date = start_date
+	
+	while current_date <= end_date:
+		# Only consider approved leaves for compliance
+		leave_status = get_employee_leave_status(employee_id, current_date.date(), status="Approved")
+		date_str = current_date.strftime("%Y-%m-%d")
+		daily_entries = chart.get(date_str, [])
+		day_total_time = sum(entry["totalTime"] for entry in daily_entries) / 3600  # in hours
+
+		is_public_holiday = public_holidays_in_week.get(current_date.date())
+		# Mark as missing if < 1 hour and not a public holiday and no leave applied
+		if day_total_time < 1 and is_public_holiday is None and current_date.weekday() < 5 and leave_status not in ["On Leave", "Half Day"]:
+			missing_days.append(current_date)
+
+		# Build daily report (0-hour days included)
+		daily_report = {
+			"date": current_date,
+			"total_time": day_total_time,
+			"leave_status": leave_status,
+			"is_public_holiday": True if is_public_holiday is not None and current_date.weekday() < 5 else False,
+			"projects": [],
+		}
+
+		for entry in daily_entries:
+			daily_report["projects"].append({
+				"project_name": entry["projectName"],
+				"time_spent": entry["totalTime"] / 3600
+			})
+
+		# Only add weekends if hours > 0
+		if day_total_time > 0 or (current_date.weekday() < 5):  
+			week_breakdown.append(daily_report)
+
+		current_date += timedelta(days=1)
+		
+	return week_breakdown, missing_days
+
+def html_to_slack_plaintext(html):
+	# Replace <br> with newline
+	text = html.replace("<br>", "\n")
+
+	# Replace <strong> and other tags with nothing
+	text = re.sub(r"<[^>]+>", "", text)
+
+	# Remove multiple consecutive blank lines
+	text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
+
+	return text
+
+def get_public_holidays_in_week(start_date, end_date):
+	"""
+	Returns a dictionary with dates as keys and whether they are public holidays as values.
+	"""
+	public_holidays = {}
+	current_date = start_date
+	while current_date < end_date:
+		public_holidays[current_date.date()] = is_public_holiday(str(current_date))
+
+		current_date += timedelta(days=1)
+	return public_holidays
+
+def get_clockify_report_task_id(workspace_id, start_date, end_date, user_id, api_key):
+	url = f"https://app.clockify.me/report/workspaces/{workspace_id}/async/reports/summary"
+	
+	headers = {
+		"Content-Type": "application/json",
+		"X-Api-Key": api_key
+	}
+	payload = {
+		"dateRangeStart": start_date.strftime("%Y-%m-%dT00:00:00.000Z"),
+		"dateRangeEnd": end_date.strftime("%Y-%m-%dT23:59:59.999Z"),
+		"sortOrder": "DESCENDING",
+		"description": "",
+		"rounding": False,
+		"withoutDescription": False,
+		"amounts": [],
+		"amountShown": "HIDE_AMOUNT",
+		"zoomLevel": "WEEK",
+		"userLocale": "en-US",
+		"customFields": None,
+		"userCustomFields": None,
+		"kioskIds": [],
+		"users": {
+			"contains": "CONTAINS",
+			"ids": [user_id],
+			"status": "ACTIVE_WITH_PENDING",
+			"numberOfDeleted": 0
+		},
+		"userGroups": {
+			"contains": "CONTAINS",
+			"ids": [],
+			"status": "ACTIVE_WITH_PENDING",
+			"numberOfDeleted": 0
+		},
+		"summaryFilter": {
+			"sortColumn": "DURATION",
+			"groups": ["PROJECT", "TASK", "TIMEENTRY"],
+			"summaryChartType": "PROJECT"
+		}
+	}
+
+	response = requests.post(url, headers=headers, json=payload)
+	if response.status_code == 202:
+		return response.json().get("reportTaskId")
+	else:
+		error_message = f"Error: {response.status_code} - {response.text}"
+		frappe.log_error(message=error_message, title="Clockify Report Task ID Fetch Error for Clockify Summary Report")
+		return None
+	
+
+def get_clockify_report_result(workspace_id, report_task_id, api_key, max_retries=3, delay=1.5):
+	url = f"https://app.clockify.me/report/workspaces/{workspace_id}/async/reports/summary/{report_task_id}"
+	
+	headers = {
+		"X-Api-Key": api_key
+	}
+
+	for attempt in range(max_retries):
+		try:
+			response = requests.get(url, headers=headers)
+
+			if response.status_code == 200:
+				return response.json()
+			elif response.status_code == 202:
+				time.sleep(delay)
+			else:
+				error_message = f"Error: {response.status_code} - {response.text}"
+				frappe.log_error(message=error_message, title="Clockify Report Fetch Error for Clockify Summary Report")
+				return None
+		except requests.exceptions.RequestException as e:
+			error_message = f"Request failed: {e}"
+			frappe.log_error(message=error_message, title="Clockify Report Fetch Error for Clockify Summary Report")
+			time.sleep(delay)
+
+	error_message = "Max retries reached. Report is still not ready."
+	frappe.log_error(message=error_message, title="Clockify Report Fetch Error for Clockify Summary Report")
+	return None
+
+def get_late_entries_count(employee_id, start_date, end_date):
+	late_entries = frappe.get_all(
+		"Attendance",
+		filters={
+			"employee": employee_id,
+			"late_entry": 1,
+			"docstatus": ["!=", 2],
+			"attendance_date": ["between", [start_date.date(), end_date.date()]]
+		},
+		fields=["name"]
+	)
+	return len(late_entries)
+
+def get_wfh_days_count(employee_id, start_date, end_date, status = "Approved"):
+	# status can be Approved, Requested, Approved , ["Approved", "Requested"]
+
+	# Prepare status filter for frappe.db.get_value
+	if isinstance(status, list):
+		status_filter = ["in", status]
+	else:
+		status_filter = status
+
+	wfh_days = frappe.get_all(
+		"Work From Home",
+		filters={
+			"employee": employee_id,
+			"docstatus": ["!=", 2],
+			"status": status_filter,
+			"from_date": ["between", [start_date.date(), end_date.date()]]
+		},
+		fields=["total_days"]
+	)
+	return sum(day["total_days"] for day in wfh_days)
+	
+
+def generate_weekly_compliance_report_content(report_data, start_date, end_date):
+	"""
+	Generate plain text content for the weekly time tracking report, suitable for Slack.
+	
+	Args:
+		report_data (list): List of employee report dictionaries
+		start_date (datetime): Start date of the report period
+		end_date (datetime): End date of the report period
+		
+	Returns:
+		str: Plain text formatted report content
+	"""
+	report_content = f"Weekly HR Non-Compliance Report\n"
+	report_content += f"Report Period: {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}\n\n"
+
+	# Add summary table
+	header = (
+		f"{'Employee Name':<20} | {'Working Days':<12} | {'Leave Requests':<15} | {'Expected Hours':<15} | " 
+		f"{'Daily Clockify Logged Hours':<20} | {'EOW Clockify Hours':<15} | {'Hours Difference':<15} | {'Status':<15}\n"
+	)
+	report_content += header
+	report_content += "-" * 158 + "\n"
+
+	for employee in report_data:
+		# Calculate hours difference (logged - expected)
+		hours_diff = employee["logged_hours"] - employee["expected_hours"]
+
+		# Since this report is for non-compliant employees, status is always "Non-Compliant"
+		status = "Non-Compliant"
+		hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
+
+
+		row = (
+			f"{employee['name']:<20} | {str(employee['working_days_in_week']):<12} | "
+			f"{str(employee['open_leave_requests']):<15} | "
+			f"{format_hours_to_hhmm(employee['expected_hours']):<15} | "
+			f"{format_hours_to_hhmm(employee['logged_hours_daily_sum']):<27} | "
+			f"{format_hours_to_hhmm(employee['logged_hours']):<15} | "
+			f"{hours_diff_display:<15} | {status:<15}\n"
+		)
+		report_content += row
+	report_content += "\n\nNote: \n"
+	report_content += "Daily Clockify Logged Hours mean the total hours an employee logs each day saved in Employee Compliance Reports.\n"
+	report_content += "EOW Clockify Hours are the total hours recorded in Clockify at the end of the week.\n"
+	report_content += "Hours Difference is the difference between Expected Hours and EOW Clockify Hours.\n"
+	report_content += "If the Hours Difference is more than 10%, the employee is marked as Non-Compliant.\n"
+	return report_content
+
+
+
+def process_weekly_employee_compliance_data(emp_data, start_date, end_date, custom_api_key, working_days_in_week):
+	"""
+	Process time data for a single employee.
+	
+	Args:
+		emp_data (dict): Employee data containing name, user_id, workspaces, etc.
+		start_date (datetime): Start date of the report period
+		end_date (datetime): End date of the report period
+		custom_api_key (str): Clockify API key
+		working_days_in_week (int): Number of working days in the period
+		
+	Returns:
+		dict: Employee report data or None if processing fails
+	"""
+	employee_name = emp_data["employee_name"]
+	user_id = emp_data["user_id"]
+	workspaces = emp_data["workspace_ids"]
+	shift_type = get_employee_shift_type(emp_data["employee"])
+	if not shift_type:
+		return None
+	leave_count = get_leave_count(emp_data["employee"], start_date, end_date, status="Approved")
+	working_days_in_week = working_days_in_week - leave_count
+	hr_settings = frappe.get_single("HR Settings")
+	standard_working_hours = hr_settings.standard_working_hours
+	expected_hours = standard_working_hours * working_days_in_week
+	
+	# Get total logged hours from Clockify
+	total_logged_hours = 0
+	for workspace_id in workspaces:
+		task_id = get_clockify_report_task_id(workspace_id, start_date, end_date, user_id, custom_api_key)
+		if task_id:
+			report_data = get_clockify_report_result(workspace_id, task_id, custom_api_key)
+			if report_data and report_data.get("totals"):
+				total_logged_hours += report_data["totals"][0]["totalTime"] / 3600  # Convert seconds to hours
+
+	# Calculate hours difference
+	hours_difference = expected_hours - total_logged_hours
+
+	# Get daily sum from Employee Compliance Report
+	daily_sum_in_seconds = frappe.db.sql("""
+		SELECT SUM(total_hours) as daily_sum
+		FROM `tabEmployee Compliance Report`
+		WHERE employee = %s
+		AND report_date BETWEEN %s AND %s
+	""", (emp_data["employee"], start_date.date(), end_date.date()), as_dict=True)[0].get('daily_sum') or 0
+	
+	daily_sum = (daily_sum_in_seconds or 0) / 3600
+	
+	# Calculate difference between logged hours and daily sum
+	daily_weekly_difference = total_logged_hours - daily_sum
+	
+	# Create employee report
+	employee_report = {
+		"name": employee_name,
+		"working_days_in_week": working_days_in_week,
+		"open_leave_requests": get_leave_count(emp_data["employee"], start_date, end_date, status="Open"),
+		"logged_hours": round(total_logged_hours, 2),
+		"expected_hours": round(expected_hours, 2),
+		"hours_difference": round(hours_difference, 2),
+		"logged_hours_daily_sum": round(daily_sum, 2),
+		"daily_weekly_difference": round(daily_weekly_difference, 2)
+	}
+
+	return employee_report
+
+def send_weekly_compliance_report_to_HR():
+	"""
+	Generates and sends a weekly time tracking report for all employees to HR email.
+	The report includes employee name, total vs expected hours, hours difference, compliance check.
+	"""
+	# Get system-level Clockify settings
+	custom_api_key, workspace_ids = get_system_clockify_settings()
+	if not custom_api_key or not workspace_ids:
+		frappe.log_error("Missing Clockify API Key or Workspace IDs in System Settings", "Clockify Task")
+		return
+
+	# Calculate date range for last week
+	end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+	start_date = end_date - timedelta(days=7)
+	# Get all active employees
+	active_employees = get_all_active_employees()
+	
+	# Fetch users across all workspaces
+	workspace_users = fetch_clockify_workspace_users(custom_api_key, workspace_ids, active_employees)
+	public_holidays_in_week = get_public_holidays_in_week(start_date, end_date)
+
+	# Count public holidays
+	public_holidays_in_week_count = sum(1 for v in public_holidays_in_week.values() if v)
+	# Calculate working days by excluding weekends and public holidays
+	working_days_in_week = 7 - public_holidays_in_week_count
+
+	# Initialize report data
+	report_data = []
+
+	# Process each employee
+	for email, emp_data in workspace_users.items():
+		employee_report = process_weekly_employee_compliance_data(
+			emp_data,
+			start_date,
+			end_date - timedelta(days=1),
+			custom_api_key,
+			working_days_in_week
+		)
+		
+		if employee_report:
+			report_data.append(employee_report)
+
+	# Generate slack content for non-compliant employees only
+	non_compliant_employees = [
+		employee for employee in report_data 
+		if employee["logged_hours"] < (employee["expected_hours"] * 0.9)
+	]
+
+	if non_compliant_employees:
+		report_content = generate_weekly_compliance_report_content(
+			non_compliant_employees,
+			start_date,
+			end_date - timedelta(days=1),
+		)
+		compliance_channel = get_compliance_channel()
+		messages = split_long_message(report_content)
+		for message in messages:
+			send_slack_message_for_employee([compliance_channel], message)
+
+	# Send email to HR
+	email_content = generate_weekly_compliance_email_content(
+		report_data,
+		start_date,
+		end_date - timedelta(days=1),
+	)
+	target_emails = get_hr_manager()
+	if target_emails:
+		frappe.sendmail(
+			recipients=target_emails,
+			subject="Weekly HR Compliance Report",
+			message=email_content,
+			now=True
+		)
+
+def get_leave_count(employee, start_date, end_date, status="Approved"):
+	"""
+	Calculate total leave days for an employee within a date range.
+	Full day leave counts as 1, half day leave counts as 0.5.
+	
+	Args:
+		employee (str): Employee ID
+		start_date (datetime): Start date of the period
+		end_date (datetime): End date of the period
+		
+	Returns:
+		float: Total leave days
+	"""
+	leave_count = 0
+	current_date = start_date
+	
+	while current_date < end_date:
+		leave_status = get_employee_leave_status(employee, current_date.date(), status)
+		if leave_status == "On Leave":
+			leave_count += 1
+		elif leave_status == "Half Day":
+			leave_count += 0.5
+		current_date += timedelta(days=1)
+		
+	return leave_count
+
+def format_hours_to_hhmm(hours_float):
+	"""Converts a float representing hours into an 'Xh Ym' string, omitting zero values."""
+	if not isinstance(hours_float, (int, float)):
+		return "0h"
+	hours = int(hours_float)
+	minutes = int((hours_float * 60) % 60)
+	parts = []
+	if hours > 0:
+		parts.append(f"{hours}h")
+	if minutes > 0:
+		parts.append(f"{minutes}m")
+	if not parts:
+		return "0h"
+	return " ".join(parts)
+
+def generate_weekly_compliance_email_content(report_data, start_date, end_date):
+	"""
+	Generate HTML content for the weekly compliance report email.
+	
+	Args:
+		report_data (list): List of employee report dictionaries
+		start_date (datetime): Start date of the report period
+		end_date (datetime): End date of the report period
+		
+	Returns:
+		str: HTML formatted report content
+	"""
+	report_content = f"<h3>Weekly HR Compliance Report</h3>"
+	report_content += f"<p><strong>Report Period:</strong> {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}</p>"
+	
+	report_content += "<table border='1' style='border-collapse: collapse; width: 100%;'>"
+	report_content += "<tr style='background-color: #f2f2f2;'>"
+	report_content += "<th>Employee Name</th><th>Working Days</th><th>Open Leave Requests</th><th>Expected Hours</th><th>Daily Clockify Logged Hours</th><th>EOW Clockify Hours</th><th>Hours Difference</th><th>Status</th>"
+	report_content += "</tr>"
+
+	for employee in report_data:
+		hours_diff = employee["logged_hours"] - employee["expected_hours"]
+		
+		if hours_diff >= 0:
+			status = "Compliant"
+			hours_diff_display = f"+{format_hours_to_hhmm(hours_diff)}"
+			row_color = "#e6ffe6"  # Light green background
+			text_color = "#006600"  # Dark green text
+		else:
+			if employee["logged_hours"] < (employee["expected_hours"] * 0.9):
+				status = "Non-Compliant"
+				row_color = "#ffe6e6"  # Light red background
+				text_color = "#cc0000"  # Dark red text
+			else:
+				status = "Compliant"
+				row_color = "#e6ffe6"  # Light green background
+				text_color = "#006600"  # Dark green text
+			hours_diff_display = f"-{format_hours_to_hhmm(abs(hours_diff))}"
+		
+		report_content += f"<tr style='background-color: {row_color}; color: {text_color};'>"
+		report_content += f"<td>{employee['name']}</td>"
+		report_content += f"<td>{employee['working_days_in_week']}</td>"
+		report_content += f"<td>{employee['open_leave_requests']}</td>"
+		report_content += f"<td>{format_hours_to_hhmm(employee['expected_hours'])}</td>"
+		report_content += f"<td>{format_hours_to_hhmm(employee['logged_hours_daily_sum'])}</td>"
+		report_content += f"<td>{format_hours_to_hhmm(employee['logged_hours'])}</td>"
+		report_content += f"<td>{hours_diff_display}</td>"
+		report_content += f"<td>{status}</td>"
+		report_content += "</tr>"
+	report_content += "</table>"
+	report_content += "<br><br><strong>Note: </strong><br>"
+	report_content += "<strong>Daily Clockify Logged Hours</strong> mean the total hours an employee logs each day saved in <strong>Employee Compliance Reports</strong><br>"
+	report_content += "<strong>EOW Clockify Hours</strong> are the total hours recorded in <strong>Clockify</strong> at the end of the week.<br>"
+	report_content += "<strong>Hours Difference</strong> is the difference between <strong>Expected Hours</strong> and <strong>EOW Clockify Hours</strong>.<br>"
+	report_content += "If the <strong>Hours Difference</strong> is more than <strong>10%</strong>, the employee is marked as <strong>Non-Compliant</strong>.<br>"
+
+
+	return report_content
+

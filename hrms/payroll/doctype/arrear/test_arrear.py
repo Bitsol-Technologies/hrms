@@ -62,6 +62,7 @@ class TestArrear(HRMSTestSuite):
 				"doctype": "Leave Application",
 				"employee": emp,
 				"leave_type": "Leave Without Pay",
+				"description": "_Test Reason",
 				"from_date": new_payroll_period.start_date,
 				"to_date": new_payroll_period.start_date,
 				"company": "_Test Company",

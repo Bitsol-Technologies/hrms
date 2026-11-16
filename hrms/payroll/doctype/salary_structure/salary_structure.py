@@ -366,6 +366,14 @@ def _make_salary_slip(
 			if posting_date:
 				target.posting_date = posting_date
 
+		# Bitsol: get_mapped_doc copies Salary Structure.hour_rate onto the slip; the
+		# employee's own rate (Employee.hourly_rate, Bitsol erpnext fork) takes precedence.
+		from hrms.payroll.doctype.salary_slip.salary_slip import get_employee_hourly_rate
+
+		employee_hour_rate = get_employee_hourly_rate(target.employee)
+		if employee_hour_rate:
+			target.hour_rate = employee_hour_rate
+
 		target.run_method(
 			"process_salary_structure", for_preview=for_preview, lwp_days_corrected=lwp_days_corrected
 		)

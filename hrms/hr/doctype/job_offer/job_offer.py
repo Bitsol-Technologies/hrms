@@ -69,8 +69,12 @@ class JobOffer(Document):
 
 
 def update_job_applicant(status, job_applicant):
-	if job_applicant and status in ("Accepted", "Rejected"):
-		frappe.set_value("Job Applicant", job_applicant, "status", status)
+	# Bitsol: Job Applicant.status is the hidden "Employment Status"; an accepted offer makes the
+	# applicant "Active" (Employee Onboarding only lists Active / Probation / Intern applicants).
+	# The hiring pipeline itself is tracked in Job Applicant.applicant_status.
+	status_map = {"Accepted": "Active", "Rejected": "Rejected"}
+	if job_applicant and status in status_map:
+		frappe.db.set_value("Job Applicant", job_applicant, "status", status_map[status])
 
 
 def get_staffing_plan_detail(designation, company, offer_date):

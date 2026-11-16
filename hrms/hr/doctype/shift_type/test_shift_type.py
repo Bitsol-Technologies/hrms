@@ -25,6 +25,10 @@ from hrms.tests.utils import HRMSTestSuite
 
 class TestShiftType(HRMSTestSuite):
 	def setUp(self):
+		# Bitsol: upstream tests create check-ins for arbitrary dates and log sequences
+		from hrms.hr.doctype.employee_checkin.test_employee_checkin import disable_bitsol_checkin_rules
+
+		disable_bitsol_checkin_rules(self)
 		from_date = get_year_start(getdate())
 		to_date = get_year_ending(getdate())
 		self.holiday_list = make_holiday_list(from_date=from_date, to_date=to_date)

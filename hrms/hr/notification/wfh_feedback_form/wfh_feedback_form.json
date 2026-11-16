@@ -1,0 +1,33 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "doc.status==\"Apprroved\"\n",
+ "creation": "2024-03-26 11:41:37.588656",
+ "date_changed": "to_date",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Work From Home",
+ "enabled": 1,
+ "event": "Days After",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "Work From Home Feedback Required:\n\nDetails:\nEmployee\n{{employee_name}}\nFrom Date\n{{from_date}}\nTo Date\n{{to_date}}\n\n\nClick the Following link to Submit your WFH Feedback form https://docs.google.com/forms/d/e/1FAIpQLSeahNxC4HBTgRn2w732uBbWhTFoJYD3JM1-2B79sTudRAO4hQ/viewform",
+ "modified": "2024-03-26 12:00:59.838302",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "WFH Feedback form",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "cc": "hr@bitsol.tech",
+   "receiver_by_document_field": "team_lead_id",
+   "receiver_by_role": "Team Lead"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "{{doc.employee_name}} Work from home feedback form"
+}

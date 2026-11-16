@@ -11,7 +11,10 @@ sudo apt install libcups2-dev redis-server mariadb-client libmariadb-dev
 pip install frappe-bench
 
 githubbranch=${GITHUB_BASE_REF:-${GITHUB_REF##*/}}
-frappeuser=${FRAPPE_USER:-"frappe"}
+# Bitsol: frappe and erpnext are cloned from Bitsol's forks (a branch with the same
+# name as the hrms base branch must exist there); payments and lending stay upstream.
+frappeuser=${FRAPPE_USER:-"Bitsol-Technologies"}
+upstreamuser="frappe"
 frappebranch=${FRAPPE_BRANCH:-$githubbranch}
 erpnextbranch=${ERPNEXT_BRANCH:-$githubbranch}
 paymentsbranch="develop"
@@ -47,12 +50,15 @@ sed -i 's/schedule:/# schedule:/g' Procfile
 sed -i 's/socketio:/# socketio:/g' Procfile
 sed -i 's/redis_socketio:/# redis_socketio:/g' Procfile
 
-bench get-app "https://github.com/${frappeuser}/payments" --branch "$paymentsbranch"
+bench get-app "https://github.com/${upstreamuser}/payments" --branch "$paymentsbranch"
 bench get-app "https://github.com/${frappeuser}/erpnext" --branch "$erpnextbranch" --resolve-deps
-bench get-app "https://github.com/${frappeuser}/lending" --branch "$lendingbranch"
+bench get-app "https://github.com/${upstreamuser}/lending" --branch "$lendingbranch"
 bench get-app hrms "${GITHUB_WORKSPACE}"
 bench setup requirements --dev
 
+# Bitsol: packages imported by Bitsol code (interview Google Meet, push notifications)
+bench pip install firebase_admin
+bench pip install google-auth google-auth-oauthlib google-api-python-client google-apps-meet
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &
 bench --site test_site reinstall --yes

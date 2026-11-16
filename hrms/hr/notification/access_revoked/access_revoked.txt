@@ -1,0 +1,1 @@
+Access for {{ doc.tool_name}} has been revoked for {{doc.employee_name }}. Please Review.

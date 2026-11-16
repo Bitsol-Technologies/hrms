@@ -1,0 +1,74 @@
+{
+ "add_total_row": 1,
+ "columns": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "width": 0
+  },
+  {
+   "fieldname": "employe_name",
+   "fieldtype": "Data",
+   "label": "Employee",
+   "width": 0
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "From Date",
+   "width": 0
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "To Date",
+   "width": 0
+  },
+  {
+   "fieldname": "total_days",
+   "fieldtype": "Int",
+   "label": "Total Days",
+   "width": 0
+  }
+ ],
+ "creation": "2023-08-10 12:13:10.668889",
+ "disable_prepared_report": 0,
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "label": "from_date",
+   "mandatory": 0,
+   "wildcard_filter": 0
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "label": "to_date",
+   "mandatory": 0,
+   "wildcard_filter": 0
+  }
+ ],
+ "idx": 0,
+ "is_standard": "Yes",
+ "modified": "2024-07-11 12:56:42.279267",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Employee Work From Homes",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Attendance Request",
+ "report_name": "Employee Work From Homes",
+ "report_script": "if from_date and to_date:\n    result = frappe.db.sql(\"\"\"\n        SELECT employee, employee_name, from_date, to_date,\n            SUM(CASE WHEN DATEDIFF(to_date, from_date) = 0 THEN 1 ELSE DATEDIFF(to_date, from_date) END) AS total_days\n        FROM `tabWork From Home`\n        WHERE from_date >= %s AND to_date <= %s GROUP BY employee, employee_name, from_date, to_date\n    \"\"\", (from_date, to_date))\nelse:\n    result = frappe.db.sql(\"SELECT employee, employee_name, from_date, to_date, SUM(CASE WHEN DATEDIFF(to_date, from_date) = 0 THEN 1 ELSE DATEDIFF(to_date, from_date) END) AS total_days from `tabWork From Home` GROUP BY employee, employee_name, from_date, to_date\")",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Employee"
+  }
+ ]
+}

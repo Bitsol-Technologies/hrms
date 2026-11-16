@@ -8,7 +8,10 @@ from frappe.utils import add_days, get_datetime, getdate, now_datetime, nowdate
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
-from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
+from hrms.hr.doctype.employee_checkin.test_employee_checkin import (
+	disable_bitsol_checkin_rules,
+	make_checkin,
+)
 from hrms.hr.doctype.overtime_type.test_overtime_type import create_overtime_type
 from hrms.hr.doctype.shift_assignment.shift_assignment import (
 	MultipleShiftError,
@@ -23,6 +26,10 @@ from hrms.tests.utils import HRMSTestSuite
 
 
 class TestShiftAssignment(HRMSTestSuite):
+	def setUp(self):
+		# Bitsol: the fixtures create check-ins at fixed times of the day (possibly in the future)
+		disable_bitsol_checkin_rules(self)
+
 	def test_overlapping_for_ongoing_shift(self):
 		shift = "Day Shift"
 		employee = "_T-Employee-00001"

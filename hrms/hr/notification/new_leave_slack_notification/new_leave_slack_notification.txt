@@ -1,0 +1,17 @@
+
+{% set slack_2 = frappe.db.get_value("Employee", {"user_id": "fiza.mahmood@bitsol.tech"}, "custom_slack_user_id") %}
+
+{% set slack_mentions = "" %}
+
+{% if slack_2 %}{% set slack_mentions = slack_mentions + " <@" + slack_2 + ">" %}{% endif %}
+
+{% set team_lead_slack_id = frappe.db.get_value("Employee", {"user_id": doc.team_lead}, "custom_slack_user_id") %}
+{% set cc_line = team_lead_slack_id and ("\nCC: <@" + team_lead_slack_id + ">") or "" %}
+
+{% if doc.half_day and doc.from_date == doc.to_date %}
+  {% set leave_type = "Half Leave" %}
+{% else %}
+  {% set leave_type = "Leave" %}
+{% endif %}
+
+{{ slack_mentions }} *{{ doc.employee_name }}* has applied for *{{ leave_type }}* from *{{ doc.from_date }}* to *{{ doc.to_date }}*.{{ cc_line }}

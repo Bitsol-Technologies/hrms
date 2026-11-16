@@ -25,6 +25,18 @@ frappe.ui.form.on("Employee Checkin", {
 		hrms.fetch_geolocation(frm);
 	},
 
+	onload: function (frm) {
+		// Bitsol: pre-fill the employee of the logged-in user
+		if (!frm.doc.employee) {
+			// frappe.db.get_value does not raise an error dialog when the user has no Employee record
+			frappe.db.get_value("Employee", { user_id: frappe.session.user }, "name").then((r) => {
+				if (r.message?.name && !frm.doc.employee) {
+					frm.set_value("employee", r.message.name);
+				}
+			});
+		}
+	},
+
 	add_fetch_shift_button(frm) {
 		if (frm.doc.attendance) return;
 		frm.add_custom_button(__("Fetch Shift"), function () {

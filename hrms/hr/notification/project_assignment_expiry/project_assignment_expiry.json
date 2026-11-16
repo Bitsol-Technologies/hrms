@@ -1,0 +1,31 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "creation": "2024-10-21 11:42:41.876903",
+ "date_changed": "end_date",
+ "days_in_advance": 3,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Project Assignment",
+ "enabled": 1,
+ "event": "Days Before",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "<p>Your assignment to the Project {{doc.project_name}} for {{doc.employee_name}} will expire in 3 days</p>\n",
+ "message_type": "Markdown",
+ "modified": "2025-01-27 14:17:50.457243",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Project Assignment Expiry",
+ "owner": "Administrator",
+ "recipients": [
+  {
+   "receiver_by_document_field": "owner"
+  }
+ ],
+ "send_system_notification": 1,
+ "send_to_all_assignees": 0,
+ "sender": "no-reply@bitsol.tech",
+ "sender_email": "no-reply@bitsol.tech",
+ "subject": "Assignment of {{doc.employee_name}} for {{doc.project_name}} is going to expire in 7 days"
+}

@@ -32,7 +32,7 @@ def create_employee_separation():
 	separation.employee = employee
 	separation.boarding_begins_on = getdate()
 	separation.company = "_Test Company"
-	separation.append("activities", {"activity_name": "Deactivate Employee", "role": "HR User"})
+	separation.append("activities", {"activity_name": "Deactivate Employee", "role": "HR User", "activity_type": "Other"})
 	separation.boarding_status = "Pending"
 	separation.insert()
 	separation.submit()

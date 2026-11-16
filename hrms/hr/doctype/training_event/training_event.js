@@ -21,6 +21,7 @@ frappe.ui.form.on("Training Event", {
 			});
 		}
 		frm.events.set_employee_query(frm);
+		frm.events.set_bitsol_attendees(frm);
 	},
 
 	set_employee_query: function (frm) {
@@ -37,6 +38,41 @@ frappe.ui.form.on("Training Event", {
 					status: "Active",
 				},
 			};
+		});
+	},
+	// Bitsol: add all active employees having one of the selected role profiles and all
+	// employees assigned (ToDo) to the Training Program as attendees
+	set_bitsol_attendees: function (frm) {
+		if (frm.doc.docstatus === 2 || !frm.has_perm("write")) return;
+
+		const role_profiles = (frm.doc.role_profile || []).map((rp) => rp.role_profile).filter(Boolean);
+		if (!role_profiles.length && !frm.doc.training_program) return;
+
+		frappe.call({
+			method: "hrms.hr.doctype.training_event.training_event_attendees.get_attendees",
+			args: {
+				role_profiles: role_profiles,
+				training_program: frm.doc.training_program || null,
+			},
+			callback: function (r) {
+				const existing_employees = (frm.doc.employees || []).map((row) => row.employee);
+				let added = false;
+
+				(r.message || []).forEach((attendee) => {
+					if (existing_employees.includes(attendee.employee)) return;
+
+					const row = frm.add_child("employees");
+					row.employee = attendee.employee;
+					row.employee_name = attendee.employee_name;
+					existing_employees.push(attendee.employee);
+					added = true;
+				});
+
+				if (added) {
+					frm.refresh_field("employees");
+					frm.events.set_employee_query(frm);
+				}
+			},
 		});
 	},
 });

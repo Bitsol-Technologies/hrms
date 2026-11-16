@@ -24,6 +24,7 @@ def after_install():
 	create_default_role_profiles()
 	run_post_install_patches()
 	add_default_hr_permissions()
+	setup_bitsol_defaults()
 
 	if is_new_hr_site():
 		set_hrms_as_default_app()
@@ -906,3 +907,53 @@ def setup_repost_defaults():
 	for x in frappe.get_hooks("repost_allowed_doctypes"):
 		accounts_settings.append("repost_allowed_types", {"document_type": x})
 	accounts_settings.save()
+
+
+# Bitsol customisations
+# ---------------------
+
+BITSOL_ROLES = (
+	# hrms.permissions: limits Training Events to the ones the user attends
+	"Restricted Training Events",
+	# report "Training Events"
+	"Developer",
+	# report "Applicant Count by Status"; Job Opening CV reviewers
+	"CV Reviewer",
+	"Recruiter",
+	# workspace role restrictions (HR Setup, Tenure, Recruitment, Expenses) and several reports
+	"HR",
+	"HR Executive",
+	"Talent and Growth Manager",
+)
+
+
+def get_bitsol_employee_custom_fields():
+	"""Employee fields used by the monthly fuel allowance job
+	(hrms.hr.employee_allowances_data.allowances_calculation).
+	They started as site Custom Fields on Bitsol's v15 site, so keep the same fieldnames."""
+	return {
+		"Employee": [
+			{
+				"fieldname": "custom_distancekm",
+				"fieldtype": "Float",
+				"label": _("Distance (KM)"),
+				"insert_after": "permanent_accommodation_type",
+			},
+			{
+				"fieldname": "custom_transport_type",
+				"fieldtype": "Select",
+				"label": _("Transport Type"),
+				"options": "\nCar\nBike",
+				"insert_after": "custom_distancekm",
+			},
+		]
+	}
+
+
+def setup_bitsol_defaults():
+	"""Runs after install and after every migrate; idempotent.
+	Existing records (roles, custom fields already created on the site) are left untouched."""
+	for role in BITSOL_ROLES:
+		create_custom_role({"role": role})
+
+	create_custom_fields(get_bitsol_employee_custom_fields(), ignore_validate=True, update=False)

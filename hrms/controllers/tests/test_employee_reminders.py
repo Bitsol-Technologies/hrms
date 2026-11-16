@@ -21,6 +21,16 @@ class TestEmployeeReminders(HRMSTestSuite):
 	def setUp(self):
 		from erpnext.setup.doctype.holiday_list.test_holiday_list import make_holiday_list
 
+		# Bitsol: Email Templates used for the personal wish mails
+		self.create_email_template(
+			"Birthday Wish Template",
+			"Happy Birthday, {{ birthday_person.name }} ?",
+		)
+		self.create_email_template(
+			"Anniversary Wish Email",
+			"Happy Work Anniversary, {{ anniversary_person.name }} ?",
+		)
+
 		# Create a test holiday list
 		test_holiday_dates = self.get_test_holiday_dates()
 		test_holiday_list1 = make_holiday_list(
@@ -65,6 +75,21 @@ class TestEmployeeReminders(HRMSTestSuite):
 		# Clear Email Queue
 		frappe.qb.from_("Email Queue").delete().run()
 		frappe.qb.from_("Email Queue Recipient").delete().run()
+
+	@staticmethod
+	def create_email_template(template_name, template_content):
+		"""Ensure an Email Template exists or create one if it doesn't."""
+		if not frappe.db.exists("Email Template", template_name):
+			email_template = frappe.get_doc(
+				{
+					"doctype": "Email Template",
+					"name": template_name,
+					"subject": template_content,
+					"response": template_content,
+					"use_html": 0,
+				}
+			)
+			email_template.insert(ignore_permissions=True)
 
 	@classmethod
 	def get_test_holiday_dates(cls):
@@ -120,7 +145,9 @@ class TestEmployeeReminders(HRMSTestSuite):
 		send_birthday_reminders()
 
 		email_queue = frappe.qb.from_("Email Queue").select("*").run(as_dict=True)
-		self.assertTrue("Subject: Birthday Reminder" in email_queue[0].message)
+
+		# Bitsol: the wish mail is queued along with the reminder, so the order is not fixed
+		self.assertTrue(any("Subject: Birthday Reminder" in email.message for email in email_queue))
 
 	def test_work_anniversary_reminders(self):
 		from hrms.controllers.employee_reminders import (
@@ -129,7 +156,7 @@ class TestEmployeeReminders(HRMSTestSuite):
 		)
 
 		make_employee(
-			"test_emp_work_anniversary@gmail.com",
+			"test_emp_work_anniversary101@gmail.com",
 			company="_Test Company",
 			date_of_joining=frappe.utils.add_years(getdate(), -2),
 		)
@@ -140,7 +167,7 @@ class TestEmployeeReminders(HRMSTestSuite):
 		for entry in employees:
 			user_ids.append(entry.user_id)
 
-		self.assertTrue("test_emp_work_anniversary@gmail.com" in user_ids)
+		self.assertTrue("test_emp_work_anniversary101@gmail.com" in user_ids)
 
 		hr_settings = frappe.get_doc("HR Settings", "HR Settings")
 		hr_settings.send_work_anniversary_reminders = 1
@@ -149,7 +176,16 @@ class TestEmployeeReminders(HRMSTestSuite):
 		send_work_anniversary_reminders()
 
 		email_queue = frappe.qb.from_("Email Queue").select("*").run(as_dict=True)
-		self.assertTrue("Subject: Work Anniversary Reminder" in email_queue[0].message)
+
+		# Bitsol: colleagues who opted in get the reminder ...
+		self.assertTrue(any("Subject: Work Anniversary Reminder" in email.message for email in email_queue))
+
+		# ... and the anniversary person gets the wish Email Template
+		expected_subject = "Happy Work Anniversary, test_emp_work_anniversary101@gmail.com ?"
+		self.assertTrue(
+			any(expected_subject in email.message for email in email_queue),
+			"Anniversary wish email not found in Email Queue",
+		)
 
 	def test_work_anniversary_reminder_not_sent_for_0_years(self):
 		make_employee(

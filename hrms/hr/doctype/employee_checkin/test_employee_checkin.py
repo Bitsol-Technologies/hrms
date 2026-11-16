@@ -2,6 +2,7 @@
 # See license.txt
 
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import frappe
 from frappe.utils import (
@@ -31,8 +32,101 @@ from hrms.tests.test_utils import get_non_holiday_date
 from hrms.tests.utils import HRMSTestSuite
 
 
+# Bitsol check-in discipline rules (only today, not in the future, IN before OUT, no consecutive
+# logs of the same type, no check-in on an approved leave day). The upstream tests create logs for
+# arbitrary dates and log sequences, so they run with these rules switched off; the rules are
+# covered by TestBitsolCheckinRules below.
+BITSOL_CHECKIN_RULES = (
+	"validate_previous_date_logs",
+	"validate_date_time",
+	"validate_check_leave_on_same_day",
+	"validate_current_day_checkin",
+	"validate_same_consecutive_logs",
+)
+
+
+def disable_bitsol_checkin_rules(test_case, rules=BITSOL_CHECKIN_RULES):
+	"""Switch off the given Bitsol Employee Checkin validators for the duration of a test."""
+	for rule in rules:
+		patcher = patch(
+			f"hrms.hr.doctype.employee_checkin.employee_checkin.EmployeeCheckin.{rule}",
+			lambda self: None,
+		)
+		patcher.start()
+		test_case.addCleanup(patcher.stop)
+
+
+class TestBitsolCheckinRules(HRMSTestSuite):
+	def setUp(self):
+		frappe.db.delete("Shift Type")
+		frappe.db.delete("Shift Assignment")
+		frappe.db.delete("Employee Checkin")
+		frappe.db.set_single_value("HR Settings", "allow_geolocation_tracking", 0)
+		self.employee = make_employee("test_bitsol_checkin_rules@example.com", company="_Test Company")
+
+	def disable_date_rules(self):
+		# the date rules compare against the server clock / Asia/Karachi, not the test site's time zone
+		disable_bitsol_checkin_rules(self, ("validate_previous_date_logs", "validate_date_time"))
+
+	def test_past_date_checkin_is_rejected(self):
+		self.assertRaises(
+			frappe.ValidationError, make_checkin, self.employee, now_datetime() - timedelta(days=2)
+		)
+
+	def test_future_checkin_is_rejected(self):
+		self.assertRaises(
+			frappe.ValidationError, make_checkin, self.employee, now_datetime() + timedelta(days=2)
+		)
+
+	def test_check_out_requires_check_in_on_the_same_day(self):
+		self.disable_date_rules()
+		self.assertRaises(
+			frappe.ValidationError, make_checkin, self.employee, now_datetime(), log_type="OUT"
+		)
+
+	def test_consecutive_logs_of_same_type_are_rejected(self):
+		self.disable_date_rules()
+		now = now_datetime()
+		make_checkin(self.employee, now - timedelta(seconds=30), log_type="IN")
+		self.assertRaises(
+			frappe.ValidationError,
+			make_checkin,
+			self.employee,
+			now - timedelta(seconds=20),
+			log_type="IN",
+		)
+
+		make_checkin(self.employee, now - timedelta(seconds=10), log_type="OUT")
+		self.assertRaises(frappe.ValidationError, make_checkin, self.employee, now, log_type="OUT")
+
+	def test_log_earlier_than_previous_log_is_rejected(self):
+		self.disable_date_rules()
+		now = now_datetime()
+		make_checkin(self.employee, now - timedelta(seconds=10), log_type="IN")
+		self.assertRaises(
+			frappe.ValidationError,
+			make_checkin,
+			self.employee,
+			now - timedelta(seconds=30),
+			log_type="OUT",
+		)
+
+	def test_check_in_without_check_out_uses_shift_end(self):
+		shift_start = datetime.combine(getdate(), get_time("09:00:00"))
+		shift_end = datetime.combine(getdate(), get_time("17:00:00"))
+		logs = [frappe._dict(log_type="IN", time=shift_start, shift_end=shift_end)]
+
+		working_hours = calculate_working_hours(
+			logs,
+			"Strictly based on Log Type in Employee Checkin",
+			"Every Valid Check-in and Check-out",
+		)
+		self.assertEqual(working_hours, (8.0, shift_start, shift_end))
+
+
 class TestEmployeeCheckin(HRMSTestSuite):
 	def setUp(self):
+		disable_bitsol_checkin_rules(self)
 		frappe.db.delete("Shift Type")
 		frappe.db.delete("Shift Assignment")
 		frappe.db.delete("Employee Checkin")

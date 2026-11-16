@@ -6,7 +6,10 @@ from frappe.utils import add_days, flt, get_first_day, getdate, nowdate, today
 
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
-from hrms.hr.doctype.employee_checkin.test_employee_checkin import make_checkin
+from hrms.hr.doctype.employee_checkin.test_employee_checkin import (
+	disable_bitsol_checkin_rules,
+	make_checkin,
+)
 from hrms.hr.doctype.overtime_type.test_overtime_type import create_overtime_type
 from hrms.hr.doctype.shift_type.test_shift_type import make_shift_assignment, setup_shift_type
 from hrms.payroll.doctype.salary_slip.test_salary_slip import make_earning_salary_component
@@ -15,6 +18,10 @@ from hrms.tests.utils import HRMSTestSuite
 
 
 class TestOvertimeSlip(HRMSTestSuite):
+	def setUp(self):
+		# Bitsol: the fixtures are back-dated check-ins (start of the month)
+		disable_bitsol_checkin_rules(self)
+
 	def test_overtime_calculation_and_additional_salary_creation(self):
 		from hrms.payroll.doctype.salary_structure.salary_structure import make_salary_slip
 

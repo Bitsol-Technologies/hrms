@@ -1,0 +1,50 @@
+{
+ "chart_name": "Leaves Balance Chart",
+ "chart_type": "Report",
+ "creation": "2026-11-16 00:00:00.000000",
+ "custom_options": "{\"x_field\": \"leave_type\", \"chart_type\": \"Bar\", \"y_fields\": [\"leaves_allocated\", \"leaves_taken\", \"closing_balance\"], \"colors\": [null, null, null]}",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "dynamic_filters_json": "{\"company\":\"frappe.defaults.get_user_default(\\\"Company\\\")\",\"from_date\":\"frappe.datetime.year_start()\",\"to_date\":\"frappe.datetime.year_end()\"}",
+ "filters_json": "{\"employee_status\":\"Active\",\"consolidate_leave_types\":1}",
+ "group_by_type": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "modified": "2026-11-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Leaves Balance Chart",
+ "number_of_groups": 0,
+ "owner": "Administrator",
+ "report_name": "Employee Leave Balance",
+ "roles": [
+  {
+   "role": "Employee"
+  },
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "HR User"
+  }
+ ],
+ "show_values_over_chart": 0,
+ "time_interval": "Yearly",
+ "timeseries": 0,
+ "timespan": "Last Year",
+ "type": "Bar",
+ "use_report_chart": 0,
+ "x_field": "leave_type",
+ "y_axis": [
+  {
+   "y_field": "leaves_allocated"
+  },
+  {
+   "y_field": "leaves_taken"
+  },
+  {
+   "y_field": "closing_balance"
+  }
+ ]
+}

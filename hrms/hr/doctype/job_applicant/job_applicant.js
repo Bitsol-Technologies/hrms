@@ -28,10 +28,56 @@ frappe.ui.form.on("Job Applicant", {
 		frm.events.show_resume(frm);
 		frm.events.create_custom_buttons(frm);
 		frm.events.get_interview_for_dashboard(frm);
+		frm.events.set_telephonic_interviewers_query(frm);
+		frm.events.load_feedback(frm);
 
 		if (!frm.toolbar.page.wrapper.find(".prev-doc").length) {
 			frm.toolbar.make_navigation();
 		}
+	},
+
+	// Bitsol: "Interview Feedback" tab - all submitted feedback grouped by interview
+	load_feedback: function (frm) {
+		if (frm.is_new()) return;
+
+		frappe
+			.call({
+				method: "hrms.hr.doctype.job_applicant.job_applicant.get_feedback_by_round",
+				args: { applicant: frm.doc.name },
+			})
+			.then((r) => {
+				frm.feedback = r.message || [];
+				frm.events.render_feedback(frm);
+			});
+	},
+
+	render_feedback: function (frm) {
+		const field = frm.fields_dict.custom_interview_feedback_html;
+		if (!field) return;
+
+		frappe.require("interview.bundle.js", () => {
+			const wrapper = $(field.wrapper);
+			const feedback_html = frappe.render_template("grouped_feedback_history", {
+				feedback_history: frm.feedback,
+			});
+			wrapper.empty();
+			$(feedback_html).appendTo(wrapper);
+		});
+	},
+
+	// Bitsol: an employee can be picked only once as telephonic screening interviewer
+	set_telephonic_interviewers_query: function (frm) {
+		frm.set_query("employee_id", "telephonic_interviewers", function () {
+			const selected = (frm.doc.telephonic_interviewers || [])
+				.map((row) => row.employee_id)
+				.filter(Boolean);
+			return {
+				filters: {
+					name: ["not in", selected],
+					status: "Active",
+				},
+			};
+		});
 	},
 
 	show_resume: function (frm) {
@@ -114,6 +160,30 @@ frappe.ui.form.on("Job Applicant", {
 				});
 			}
 		}
+
+		// Add Employee Onboarding button if applicant_status is 'Joined'
+		if (!frm.doc.__islocal && frm.doc.applicant_status === "Joined") {
+			frappe.call({
+				method: "hrms.hr.doctype.employee_onboarding.employee_onboarding.check_employee_onboarding_exists",
+				args: { job_applicant: frm.doc.name },
+				callback: function(r) {
+					if (!r.message.exists) {
+						frm.add_custom_button(
+							__("Employee Onboarding"),
+							function () {
+								// Double-check status before showing dialog
+								if (frm.doc.applicant_status === "Joined") {
+									show_onboarding_dialog(frm);
+								} else {
+									frappe.msgprint(__("Applicant status must be 'Joined' to start onboarding."));
+								}
+							},
+							__("Create")
+						);
+					}
+				}
+			});
+		}
 	},
 
 	get_interview_for_dashboard: function (frm) {
@@ -144,10 +214,28 @@ frappe.ui.form.on("Job Applicant", {
 	},
 
 	show_schedule_interview_dialog: function (frm) {
-		frappe.model.with_doctype("Interview Detail", () => frm.events.show_schedule_dialog(frm));
+		// Interview meta is needed for the Bitsol "Location" field of the dialog
+		frappe.model.with_doctype("Interview Detail", () =>
+			frappe.model.with_doctype("Interview", () => frm.events.show_schedule_dialog(frm)),
+		);
 	},
 
 	show_schedule_dialog: function (frm) {
+		// Bitsol: Interview.location (Onsite / Remote) is mandatory and drives the meeting link,
+		// so it has to be asked here because the dialog inserts the Interview directly.
+		const location_df = frappe.meta.get_docfield("Interview", "location");
+		const location_fields = location_df
+			? [
+					{
+						label: __(location_df.label || "Location"),
+						fieldname: "location",
+						fieldtype: "Select",
+						options: location_df.options,
+						reqd: location_df.reqd,
+					},
+			  ]
+			: [];
+
 		let d = new frappe.ui.Dialog({
 			title: __("Schedule Interview"),
 			fields: [
@@ -197,6 +285,7 @@ frappe.ui.form.on("Job Applicant", {
 					fieldtype: "Time",
 					reqd: 1,
 				},
+				...location_fields,
 				{
 					fieldtype: "Section Break",
 					label: __("Interviewers"),
@@ -218,6 +307,7 @@ frappe.ui.form.on("Job Applicant", {
 						from_time: values.from_time || null,
 						to_time: values.to_time || null,
 						interviewers: values.interviewers || [],
+						location: values.location || null,
 					},
 					callback(r) {
 						if (r.message) {
@@ -233,5 +323,53 @@ frappe.ui.form.on("Job Applicant", {
 			},
 		});
 		d.show();
+	},
+
+	on_update: function(frm) {
+		if (frm.doc.applicant_status === "Joined" && !frm.doc.__islocal) {
+			frappe.call({
+				method: "hrms.hr.doctype.employee_onboarding.employee_onboarding.check_employee_onboarding_exists",
+				args: { job_applicant: frm.doc.name },
+				callback: function(r) {
+					if (!r.message.exists) {
+						show_onboarding_dialog(frm);
+					}
+				}
+			});
+		}
+	},
+});
+
+function show_onboarding_dialog(frm) {
+	let d = new frappe.ui.Dialog({
+		title: __("Start Employee Onboarding"),
+		fields: [
+			{ label: "Job Applicant", fieldname: "job_applicant", fieldtype: "Link", options: "Job Applicant", reqd: 1, default: frm.doc.name, read_only: 1 },
+			{ label: "Company", fieldname: "company", fieldtype: "Link", options: "Company", reqd: 1 },
+			{ label: "Date of Joining", fieldname: "date_of_joining", fieldtype: "Date", reqd: 1 },
+			{ label: "Holiday List", fieldname: "holiday_list", fieldtype: "Link", options: "Holiday List", reqd: 1 },
+			{ label: "Employee Onboarding Template", fieldname: "employee_onboarding_template", fieldtype: "Link", options: "Employee Onboarding Template", reqd: 1 },
+		],
+		primary_action_label: __("Create Onboarding"),
+		primary_action(values) {
+			frappe.call({
+				method: "hrms.hr.doctype.employee_onboarding.employee_onboarding.create_employee_onboarding_from_applicant",
+				args: values,
+				callback: function(r) {
+					if (r.message) {
+						frappe.msgprint(__("Employee Onboarding created: ") + r.message);
+						d.hide();
+						frappe.set_route("Form", "Employee Onboarding", r.message);
+					}
+				}
+			});
+		}
+	});
+	d.show();
+}
+
+frappe.ui.form.on("CV Reviewer", {
+	employee_id: function (frm) {
+		frm.events.set_telephonic_interviewers_query(frm);
 	},
 });

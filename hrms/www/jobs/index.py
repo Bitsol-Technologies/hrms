@@ -44,7 +44,6 @@ def get_job_openings(filters=None, txt=None, sort=None, limit=20, offset=0):
 			jo.salary_per,
 			jo.route,
 			jo.location,
-			jo.department,
 			jo.employment_type,
 			jo.company,
 			jo.posted_on,
@@ -95,7 +94,7 @@ def get_all_filters(filters=None):
 	job_openings = frappe.get_all(
 		"Job Opening",
 		filters={"publish": 1, "status": "Open"},
-		fields=["company", "department", "employment_type", "location"],
+		fields=["company", "employment_type", "location"],
 	)
 
 	companies = filters.get("company", [])
@@ -115,7 +114,7 @@ def get_filters_txt_sort_offset(page_len=20):
 	txt = ""
 	sort = None
 	offset = 0
-	allowed_filters = ["company", "department", "employment_type", "location"]
+	allowed_filters = ["company", "employment_type", "location"]
 
 	for d in args:
 		if d in allowed_filters:

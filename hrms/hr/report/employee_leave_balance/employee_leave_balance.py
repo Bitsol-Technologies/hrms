@@ -180,6 +180,9 @@ def get_employees(filters: Filters) -> list[dict]:
 	if filters.get("employee"):
 		conditions["name"] = filters.get("employee")
 
+	if filters.get("user_id"):
+		conditions["user_id"] = filters.get("user_id")
+
 	if filters.get("employee_status"):
 		conditions["status"] = filters.get("employee_status")
 

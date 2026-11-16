@@ -1,0 +1,23 @@
+{
+ "creation": "2024-07-03 15:50:41.856522",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "dynamic_filters_json": "{\"employee\":\"frappe.session.user\"}",
+ "filters_json": "{\"from_date\":\"2025-01-01\",\"to_date\":\"2025-12-31\",\"company\":\"Bitsol Technologies\",\"department\":\"Engineering - B\",\"employee_status\":\"Active\",\"consolidate_leave_types\":0}",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 0,
+ "is_standard": 1,
+ "label": "Allocated Leaves 2",
+ "modified": "2025-01-23 16:13:47.882257",
+ "modified_by": "Administrator",
+ "module": "HR",
+ "name": "Allocated Leaves 2",
+ "owner": "Administrator",
+ "report_field": "leaves_allocated",
+ "report_function": "Sum",
+ "report_name": "Employee Leave Balance",
+ "show_percentage_stats": 1,
+ "stats_time_interval": "Daily",
+ "type": "Report"
+}
